@@ -1,0 +1,146 @@
+Tôi muốn xây dựng một hệ thống AI Chatbot nội bộ cho doanh nghiệp, phục vụ nhu cầu hỏi đáp dữ liệu, thống kê, báo cáo, phân tích và dự báo số liệu từ nhiều nguồn dữ liệu khác nhau.
+
+Bối cảnh hệ thống:
+
+* Doanh nghiệp có nhiều phòng ban, mỗi phòng ban có nhu cầu tra cứu, xem báo cáo và phân tích dữ liệu khác nhau.
+* Nguồn dữ liệu chính đến từ nhiều hệ thống DB Oracle khác nhau.
+* Mỗi nguồn dữ liệu có thể nằm ở DB khác nhau, schema khác nhau, cấu trúc bảng khác nhau.
+* Ngoài ra thì mỗi phòng ban có những loại tài lieu khác nhau, có thể bổ sung, upload thường xuyên
+* Mỗi phòng ban/người dùng có role và phạm vi dữ liệu được phép xem khác nhau.
+* Hệ thống cần đảm bảo bảo mật cao, phân quyền chặt chẽ, audit đầy đủ và hạn chế tối đa rò rỉ dữ liệu.
+
+Mục tiêu chatbot:
+
+* Cho phép người dùng hỏi bằng ngôn ngữ tự nhiên.
+* Trả lời được các câu hỏi thống kê, tổng hợp báo cáo, phân tích dữ liệu.
+* Hỗ trợ dự đoán số liệu, phân tích xu hướng, phát hiện bất thường.
+* Hỗ trợ truy xuất dữ liệu từ nhiều nguồn DB/schema khác nhau và trong các document
+* Có thể lưu session, nhớ ngữ cảnh hội thoại, lưu lịch sử câu hỏi cũ và tái sử dụng ngữ cảnh khi cần.
+* Có thể giải thích kết quả, nguồn dữ liệu sử dụng, logic tính toán và công thức KPI.
+* Có thể xuất kết quả dưới dạng bảng, biểu đồ, file Excel/PDF hoặc báo cáo định kỳ.
+
+Yêu cầu quan trọng:
+
+1. Phân quyền và bảo mật
+
+* Mỗi người dùng/phòng ban chỉ được xem đúng dữ liệu thuộc quyền của họ.
+* Cần thiết kế RBAC hoặc ABAC phù hợp.
+* Cần hỗ trợ row-level security, column-level security, data masking với dữ liệu nhạy cảm.
+* Không để chatbot hay LLM truy cập tự do toàn bộ database.
+* Cần có cơ chế kiểm soát truy vấn trước khi chạy và kiểm duyệt kết quả trước khi trả về.
+* Cần audit log đầy đủ: ai hỏi gì, khi nào, dùng nguồn nào, sinh SQL gì, trả kết quả gì.
+* Quản lý user/role riêng nhưng cũng có thể tích hợp LDAP
+
+2. An toàn AI và chống tấn công
+   Hãy tư vấn đầy đủ các rủi ro và biện pháp phòng vệ cho:
+
+* Prompt injection
+* SQL injection
+* Jailbreak prompt
+* Data exfiltration
+* Multi-turn privilege escalation
+* Tool/function calling abuse
+* Hallucination làm sai báo cáo
+* Metadata/schema poisoning
+* Rò rỉ dữ liệu chéo giữa các phòng ban
+* Truy vấn quá nặng gây ảnh hưởng hệ thống
+* Lộ dữ liệu nhạy cảm/PII
+* Xuất file hoặc gửi báo cáo sai người nhận
+* Log chứa dữ liệu nhạy cảm
+* Model suy luận ra dữ liệu không được phép xem từ nhiều nguồn kết hợp
+
+3. Kiến trúc hệ thống
+   Hãy đề xuất kiến trúc tổng thể end-to-end, bao gồm:
+
+* Giao diện người dung: admin: cấu hình, phân quyền, upload, edit dữ liệu,.... user: login và sử dụng 
+* API gateway
+* Authentication/Authorization
+* AI orchestration layer / agent layer
+* RAG layer
+* Semantic layer / metric layer
+* Metadata catalog / business glossary
+* Query planner
+* Text-to-SQL layer
+* Data connectors tới Oracle và các nguồn dữ liệu khác
+* Cache layer
+* Session memory / conversation memory
+* Logging / monitoring / alerting
+* Audit / governance
+* Forecasting / analytics engine
+* Export/reporting service
+
+4. Session memory và lịch sử hội thoại
+   Tôi muốn chatbot có thể:
+
+* Nhớ ngữ cảnh cuộc hội thoại hiện tại
+* Ghi nhớ câu hỏi cũ, bộ lọc cũ, báo cáo hay dùng
+* Tìm lại lịch sử câu hỏi của người dùng
+* Tái sử dụng ngữ cảnh phù hợp khi người dùng hỏi tiếp
+
+Hãy tư vấn:
+
+* Có nên lưu toàn bộ hội thoại hay chỉ lưu tóm tắt?
+* Nên phân biệt short-term memory, long-term memory, user preference, audit log như thế nào?
+* Thiết kế nào để không làm nặng hệ thống, không tăng chi phí quá nhiều?
+* Khi nào nên đưa lịch sử vào context, khi nào không?
+* Làm sao để memory không làm lộ dữ liệu giữa các user/role khác nhau?
+
+5. Thiết kế truy vấn dữ liệu
+   Hãy tư vấn cách thiết kế để chatbot có thể truy vấn nhiều DB Oracle/schema khác nhau một cách an toàn:
+
+* Có nên dùng text-to-SQL trực tiếp hay qua semantic layer?
+* Có nên giới hạn bằng template SQL, whitelist table/view, stored procedure, query builder?
+* Cách tổ chức metadata/data dictionary/business definitions cho từng schema
+* Cách map câu hỏi tự nhiên sang KPI/bảng/cột/điều kiện lọc
+* Cách xử lý join nhiều nguồn dữ liệu
+* Cách tối ưu hiệu năng truy vấn
+* Cách cache kết quả cho các câu hỏi phổ biến
+* Cách chống query quá nặng hoặc full scan
+
+6. Dự báo và phân tích nâng cao
+   Hãy tư vấn:
+
+* Các bài toán dự báo số liệu nào phù hợp
+* Khi nào nên dùng rule/statistics model, khi nào nên dùng ML/DL
+* Cách giải thích kết quả dự báo cho người dùng nghiệp vụ
+* Cách phát hiện bất thường và cảnh báo
+* Cách so sánh số liệu theo ngày/tuần/tháng/quý/năm
+* Cách drill-down theo phòng ban, sản phẩm, khu vực, kênh bán
+
+7. Yêu cầu phi chức năng
+   Hãy đề xuất chi tiết:
+
+* Hiệu năng, độ trễ mong muốn
+* Khả năng mở rộng
+* HA/DR/backup
+* Bảo mật dữ liệu at-rest và in-transit
+* Giám sát chi phí model/token
+* Monitoring cho lỗi, latency, query DB
+* Rate limit/quota theo user/phòng ban
+* Cơ chế approval với truy vấn hoặc báo cáo nhạy cảm
+
+8. Đầu ra mong muốn từ bạn
+   Hãy trả lời theo cấu trúc sau:
+
+* Phân tích bài toán
+* Kiến trúc đề xuất tổng thể
+* Thành phần bắt buộc và thành phần nên có
+* Luồng xử lý một câu hỏi từ người dùng đến kết quả cuối
+* Thiết kế phân quyền và bảo mật
+* Thiết kế session memory và lịch sử hội thoại
+* Thiết kế truy vấn Oracle đa nguồn đa schema
+* Guardrails/AI safety cần có
+* So sánh các phương án kiến trúc khả thi
+* Đề xuất stack công nghệ cụ thể
+* Lộ trình triển khai theo giai đoạn MVP -> Pilot -> Production
+* Checklist rủi ro
+* Ví dụ use case thực tế cho từng phòng ban
+* Ví dụ câu hỏi người dùng và cách hệ thống xử lý
+* Best practices và những sai lầm cần tránh
+
+Yêu cầu thêm:
+
+* Ưu tiên thiết kế thực tế, có thể triển khai trong doanh nghiệp lớn.
+* Không trả lời chung chung; hãy đi vào mức kỹ thuật và kiến trúc đủ chi tiết để đội ngũ kỹ thuật có thể bắt đầu thiết kế.
+* Nếu có nhiều phương án, hãy so sánh ưu/nhược điểm rõ ràng.
+* Hãy đặc biệt nhấn mạnh phần bảo mật, phân quyền dữ liệu, audit, hiệu năng, và chống prompt injection/jailbreak/data leakage.

@@ -1,0 +1,4 @@
+# Ignore Codex agents for Gemini CLI
+.agents/
+.agents/**/*
+**/.agents/**
