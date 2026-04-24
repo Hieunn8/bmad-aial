@@ -16,8 +16,6 @@ yarn-error.log*
 Thumbs.db
 
 # Project-specific
-_bmad-output/
 dist/
 build/
-*.tmp
 *.log
