@@ -1,5 +1,6 @@
 ---
-stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8]
+stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+lastStep: 14
 inputDocuments:
   - _bmad-output/planning-artifacts/prd.md
   - _bmad-output/planning-artifacts/architecture.md
@@ -1375,3 +1376,850 @@ Placeholder theo role + real-time intent hint. **First query phải thành công
 - Lần đầu follow-up → confirmation context được nhớ
 - Lần đầu ambiguous → Intent Confirmation + giải thích tại sao AI hỏi lại
 - **Earn the right to teach.**
+
+---
+
+## Design Direction Decision
+
+### Design Directions Explored
+
+Chúng tôi đã khám phá 6 hướng thiết kế thị giác cho AIAL, tất cả đều bám theo visual foundation đã khóa: bảng màu "Controlled Boldness" với deep teal làm anchor, neutral warm gray để giữ cảm giác đáng tin cậy, typography Inter + Noto Sans Vietnamese, và tinh thần "Intelligent Clarity" kết hợp tốc độ của Linear với sự điềm tĩnh của Notion.
+
+Các hướng được khám phá gồm:
+
+1. **Calm Desk** — workspace dịu, dễ tiếp cận, thiên về ownership và onboarding cho business user mới.
+2. **Command Canvas** — canvas cân bằng giữa câu hỏi, tiến trình xử lý, bằng chứng dữ liệu và hành động tiếp theo.
+3. **Verified Ledger** — câu trả lời được trình bày như một briefing paper có dấu vân tay dữ liệu rõ ràng.
+4. **Analyst Stream** — power-user mode cho các phiên phân tích lặp, density cao hơn và tối ưu thao tác nhanh.
+5. **Approval Cockpit** — giao diện phê duyệt theo kiểu cockpit ra quyết định, ưu tiên context, risk và auditability.
+6. **Ambient Briefing** — thẻ briefing sống, nhẹ, phù hợp với nhịp làm việc multitasking và báo cáo định kỳ.
+
+Qua Party Mode review, ba rủi ro chính đã được làm rõ:
+- Nếu trộn trust, approval và chat trên cùng một màn hình mặc định, UI sẽ tăng tải nhận thức và làm user chậm hiểu điều gì đang xảy ra.
+- Nếu trust cues xuất hiện quá mạnh hoặc quá sớm, hệ thống có thể tạo ra **ảo giác chắc chắn** khi AI vẫn đang suy luận hoặc dữ liệu chưa đủ.
+- Nếu đưa density cao hoặc recurring-card patterns vào MVP mặc định, sản phẩm sẽ loãng mục tiêu học tập ban đầu: giúp user hỏi, hiểu và tin được câu trả lời ngay.
+
+### Chosen Direction
+
+**Direction được chọn làm nền tảng MVP:** `Direction 2 — Command Canvas`
+
+**Cách kết hợp chính thức được khuyến nghị:**
+- `Command Canvas` làm shell mặc định cho chat app.
+- `Verified Ledger` không làm shell chính; chỉ đóng vai trò **trust layer theo ngữ cảnh**.
+- `Approval Cockpit` không làm shell chính; chỉ đóng vai trò **approval layer on-demand**.
+- `Analyst Stream` và `Ambient Briefing` không nằm trong MVP mặc định.
+
+**Công thức khóa cho spec:**
+- **MVP là Command Canvas với trust by default và approval on demand**
+- **Chat-first, action-aware, evidence-on-demand**
+- **Command Canvas là khung, Verified Ledger là bằng chứng, Approval Cockpit là chốt an toàn**
+
+### Design Rationale
+
+`Command Canvas` phù hợp nhất với defining interaction của AIAL: *"Hỏi bằng tiếng Việt → nhận câu trả lời từ dữ liệu thật kèm nguồn → hành động ngay."* Đây là direction duy nhất giữ được cùng lúc ba yêu cầu cốt lõi của MVP:
+
+- **Chat-first:** user vẫn cảm thấy mình đang nói chuyện với một trợ lý thông minh, không phải đang vận hành BI tool.
+- **Progress clarity:** hệ thống thể hiện rõ đang hiểu gì, đang kiểm tra gì, và đang chuẩn bị trả về gì.
+- **Action readiness:** sau khi nhận câu trả lời, user có thể export, save query, hoặc chuyển sang bước tiếp theo mà không đổi mental model.
+
+Lý do không chọn các direction khác làm base:
+- `Verified Ledger` rất mạnh về trust, nhưng nếu làm shell mặc định sẽ kéo sản phẩm về “báo cáo” hơn là “trợ lý”.
+- `Approval Cockpit` tối ưu cho phê duyệt, không tối ưu cho discovery flow ban đầu.
+- `Analyst Stream` quá dày cho MVP và làm tăng learning cost.
+- `Ambient Briefing` phù hợp cho retention hơn là core loop.
+- `Calm Desk` tốt cho onboarding nhưng không cân bằng mạnh bằng `Command Canvas`.
+
+Party review cũng làm rõ hai nguyên tắc phải khóa trong rationale:
+- **Không để trust phá nhịp chat.**
+- **Không để UI tạo over-trust bằng cách khiến mọi thứ trông “đã được xác nhận hoàn toàn” khi thực tế vẫn là kết quả AI có điều kiện.**
+
+### Implementation Approach
+
+Trong implementation phase, AIAL nên triển khai theo mô hình nhiều lớp nhưng chỉ một shell mặc định:
+
+- **Base shell:** `Command Canvas`
+  - prompt
+  - progress narration
+  - result summary
+  - next actions
+- **Trust layer từ Verified Ledger:**
+  - citation strip
+  - source confidence indicator
+  - provenance panel/drawer
+  - chỉ hiện khi câu trả lời có số liệu, có rủi ro, hoặc user mở rộng xem nguồn
+- **Approval layer từ Approval Cockpit:**
+  - approval briefing card
+  - risk summary
+  - policy context
+  - chỉ hiện khi có hành động thật sự cần xác nhận, không chen vào mọi lượt chat
+- **Deferred khỏi MVP mặc định:**
+  - Analyst Stream density mode
+  - Ambient Briefing recurring cards như shell chính
+
+Điều này tạo ra một nhịp đúng cho MVP:
+- user luôn thấy luồng hỏi đáp chính
+- user luôn có thể kiểm tra nguồn khi cần
+- user chỉ bị ngắt nhịp khi approval là bắt buộc
+- hệ thống tránh cả hai lỗi: **quá tải nhận thức** và **ảo giác chắc chắn**
+
+Về component strategy, hướng này map tốt với kiến trúc đã có:
+- `StreamingMessage`, `ProgressiveDataTable`, `CitationBadge`, `ChartReveal` phục vụ `Command Canvas`
+- `provenance drawer` và `source confidence cues` mượn logic từ `Verified Ledger`
+- `ApprovalBriefingCard` và các risk/policy summaries mượn logic từ `Approval Cockpit`
+
+Đây là cách tiếp cận gọn nhất để MVP vừa học được hành vi người dùng, vừa giữ được enterprise trust.
+
+---
+
+## User Journey Flows
+
+### Journey 1 — Minh: Ask → Understand → Follow-up → Export
+
+**Goal:** Minh tự trả lời câu hỏi doanh thu trước họp giao ban mà không cần ping IT.
+
+**Flow design notes:**
+- Entry point là chat canvas với placeholder theo role Sales.
+- Kết quả đầu tiên phải có `tl;dr`, bảng số, trust cues và next actions trong cùng viewport.
+- Follow-up “Vì sao giảm?” phải giữ context mà không bắt Minh viết lại toàn bộ câu hỏi.
+- Export là inline action, không đẩy Minh sang một flow mới trừ khi có approval hoặc cần xác nhận cuối.
+
+```mermaid
+flowchart TD
+    A[Minh mở AIAL] --> B[SSO + load Sales scope]
+    B --> C[Chat canvas hiển thị gợi ý theo role]
+    C --> D[Minh nhập câu hỏi doanh thu]
+    D --> E[Intent classification: SQL mode]
+    E --> F[Semantic layer + policy check]
+    F --> G[Query Oracle Sales DB]
+    G --> H[Render kết quả đầu tiên]
+    H --> H1[TLDR summary]
+    H --> H2[Table + chart]
+    H --> H3[Citation strip + source freshness]
+    H --> I{Minh hỏi follow-up?}
+    I -->|Có| J[Follow-up: Vì sao giảm?]
+    J --> K[Hybrid mode: SQL + RAG]
+    K --> L[Render explanation + source references]
+    I -->|Không| M{Minh cần export?}
+    L --> M
+    M -->|Có| N[Inline export confirmation]
+    N --> O[Generate PDF]
+    O --> P[Download ready + audit log]
+    M -->|Không| Q[Save query / end session]
+```
+
+### Journey 3 — Tuấn: Cross-domain Comparison → Conflict Detection → Confidence → Async Export
+
+**Goal:** Tuấn có báo cáo chi phí vs ngân sách đủ tin cậy để dùng trong họp HĐQT.
+
+**Flow design notes:**
+- Cross-domain query phải được hệ thống “dịch” thành một experience mượt, không lộ phức tạp kỹ thuật.
+- UI phải làm rõ đâu là actual, đâu là budget, merge logic nào đang được áp dụng, và có conflict hay không.
+- So sánh xong chưa đủ; nếu dữ liệu lệch hoặc confidence thấp, user phải thấy đường xử lý trước khi export.
+- Export không block chat; trả về async job với trạng thái rõ ràng.
+
+```mermaid
+flowchart TD
+    A[Tuấn mở AIAL] --> B[SSO + load Finance scope]
+    B --> C[Nhập câu hỏi chi phí vs ngân sách]
+    C --> D[Intent classification]
+    D --> E[Detect cross-domain query]
+    E --> F[Query FINANCE_ANALYTICS]
+    E --> G[Query BUDGET_DB]
+    F --> H[Merge at application layer]
+    G --> H
+    H --> I{Có conflict hoặc confidence thấp?}
+    I -->|Không| J[Render comparison answer]
+    J --> J1[Summary variance]
+    J --> J2[Breakdown table]
+    J --> J3[Confidence + source provenance]
+    I -->|Có| K[Render discrepancy state]
+    K --> K1[Chỉ ra nguồn lệch nhau]
+    K --> K2[Hiển thị confidence level]
+    K --> K3[Đề xuất refine hoặc loại trừ nguồn]
+    K --> L{User chọn hướng xử lý}
+    L -->|Refine query| C
+    L -->|Loại trừ nguồn| J
+    L -->|Escalate / approval| M[Create approval or review path]
+    J --> N{Tuấn yêu cầu export Excel?}
+    N -->|Có| O[ExportQueued]
+    O --> P[ExportRunning]
+    P --> Q{Export result}
+    Q -->|Ready| R[ExportReady + download link + audit log]
+    Q -->|Failed| S[ExportFailed + retry path]
+    N -->|Không| T[Continue analysis / follow-up]
+```
+
+### Journey 6 — Hùng: Approval Trigger → Review Context → Decision → Return Path
+
+**Goal:** Hùng hiểu đủ context để approve hoặc reject trong dưới 4 giờ mà không phải tự giải mã SQL thô.
+
+**Flow design notes:**
+- Đây là flow dùng `Approval Cockpit` pattern, không dùng chat shell mặc định.
+- Approval là một nhánh trạng thái, không phải một màn hình.
+- Approval card phải tách rõ requester, business justification, data scope, risk signal, confidence, provenance và action.
+- Nếu reject hoặc expired, requester phải quay lại cùng thread với lý do rõ ràng và next action.
+
+**Approval request state model**
+- `ApprovalRequested -> PendingReview -> Approved | Rejected | Expired`
+- `Rejected -> ReturnToCommandCanvas`
+- `Expired -> ReopenOrResubmit`
+
+```mermaid
+flowchart TD
+    A[Finance Analyst gửi sensitive query] --> B[System detects sensitivity tier >= 2]
+    B --> C[ApprovalRequested]
+    C --> D[Requester sees waiting state in Command Canvas]
+    C --> E[Hùng receives email + Admin notification]
+    E --> F[Open Approval Cockpit]
+    F --> F1[Requester context]
+    F --> F2[Business justification]
+    F --> F3[Data scope + sensitivity]
+    F --> F4[Risk summary + policy context]
+    F --> F5[Confidence + provenance evidence]
+    F --> G[PendingReview]
+    G --> H{Decision}
+    H -->|Approve| I[Approved]
+    I --> J[Execute query]
+    J --> K[Return result to requester thread]
+    K --> L[Write audit event]
+    H -->|Reject| M[Rejected]
+    M --> N[Capture rejection reason]
+    N --> O[Return to original thread with reason + suggested fix]
+    O --> L
+    H -->|No action in SLA| P[Expired]
+    P --> Q[Notify requester + reopen or resubmit path]
+    Q --> L
+```
+
+### Journey 7 — Confidence Breakdown / Data Conflict Resolution
+
+**Goal:** Khi hệ thống không thể đưa ra một câu trả lời đủ chắc, user vẫn có đường đi rõ ràng thay vì bị bỏ lại với một cảnh báo mơ hồ.
+
+**Flow design notes:**
+- Đây là journey bắt buộc để Step 10 không chỉ mô tả happy path.
+- Hệ thống phải phân biệt rõ: `partial data`, `stale data`, `permission-limited data`, `cross-source discrepancy`, `low confidence`.
+- User phải có quyền refine, loại trừ nguồn, xin quyền, hoặc escalate.
+
+```mermaid
+flowchart TD
+    A[User asks a question] --> B[System collects sources and computes answer]
+    B --> C{Confidence or source issue?}
+    C -->|No issue| D[Render normal answer]
+    C -->|Issue detected| E[Render confidence breakdown state]
+    E --> E1[Show confidence level]
+    E --> E2[Show source freshness]
+    E --> E3[Explain discrepancy or missing scope]
+    E --> F{User chooses next action}
+    F -->|Refine query| G[Return to Command Canvas with suggestion]
+    F -->|Exclude source| H[Recompute answer]
+    F -->|Request access| I[Launch permission request path]
+    F -->|Escalate| J[Open review / approval path]
+    H --> K[Render updated answer]
+    I --> L[Pending access state]
+    J --> M[Pending review state]
+```
+
+### Journey Patterns
+
+**Navigation Patterns**
+- Chat app dùng một shell mặc định: prompt → progress → answer → next action.
+- Approval không chen vào vùng chat mặc định; nó mở thành một briefing state riêng khi cần.
+- Export và save query là inline actions, không ép người dùng đổi context sớm.
+- Khi có breakdown về confidence hoặc data conflict, user vẫn ở trong cùng logic flow, không bị quăng sang dead-end screen.
+
+**Decision Patterns**
+- Ambiguous query → Intent Confirmation trước khi execute.
+- Sensitive query → Approval gate trước khi execute.
+- Cross-domain discrepancy → Confidence breakdown state trước khi export.
+- Export consequential data → Human confirmation trước khi file được tạo.
+
+**Feedback Patterns**
+- Progress narration theo 3 phase: hiểu yêu cầu, đối chiếu nguồn, tạo câu trả lời.
+- Trust cues hiển thị theo ngữ cảnh: citation strip, freshness, confidence, provenance drawer.
+- Async states phải có status rõ: pending, running, ready, failed, expired, resumed.
+- Error states luôn có 2-3 exits rõ ràng thay vì dead-end message.
+
+### Flow Optimization Principles
+
+- **Minimize steps to first credible answer:** user phải thấy câu trả lời có thể tin trong cùng viewport đầu tiên.
+- **Keep context alive across turns:** follow-up không bắt user nhắc lại phạm vi, thời gian hay KPI.
+- **Separate proof from interruption:** trust luôn hiện diện, nhưng approval chỉ xuất hiện khi thật sự bắt buộc.
+- **Prefer inline continuation over modal detours:** export, save query, retry và follow-up nên ở gần kết quả.
+- **Design for recovery, not just success:** timeout, permission denied, no data, stale data, approval reject và export fail đều cần đường thoát rõ ràng.
+- **Support async continuity:** approval, export và permission request phải quay lại đúng thread hoặc đúng context làm việc.
+- **Make auditability visible but not heavy:** user biết hệ thống có kiểm soát, nhưng không bị đè bởi cảm giác bị giám sát.
+- **Cover reality, not just happy paths:** Step 10 phải bao phủ cả confidence breakdown, conflict resolution và continuation states.
+
+---
+
+## Component Strategy
+
+### Design System Components
+
+**Chosen base system:** `shadcn/ui + Tailwind CSS + Radix UI`
+
+**Foundation components available from the design system**
+- `Button`
+- `Card`
+- `Badge`
+- `Tooltip`
+- `Dialog`
+- `Drawer/Sheet`
+- `Tabs`
+- `Table`
+- `Input`
+- `Textarea`
+- `Select`
+- `Popover`
+- `DropdownMenu`
+- `Toast`
+- `Alert`
+- `Progress`
+- `Skeleton`
+- `Accordion`
+- `ScrollArea`
+- `Avatar`
+- `Form primitives`
+
+**What the design system already solves well**
+- Accessible primitives with keyboard support and ARIA baselines
+- Layout shells for cards, panels, forms and modal interactions
+- Standard enterprise interactions like dropdowns, toasts, tabs and tables
+- Consistent token-driven styling across chat app and admin portal
+
+**Gap analysis from AIAL journeys**
+
+The design system covers generic UI structure well, but it does **not** cover the domain-specific interaction patterns required by AIAL:
+
+- Streaming answer states with progress narration
+- Trust-rich answer presentation with provenance and confidence
+- Approval state branches with business context and policy context
+- Async continuation states for export, access request and approval
+- Confidence breakdown and discrepancy handling for cross-domain answers
+
+These gaps require custom components built on top of the design system primitives.
+
+### Custom Components
+
+### StreamingMessage
+
+**Purpose:** Render the primary AI answer loop in Command Canvas, from thinking state through final response.
+**Usage:** Default answer container for SQL, hybrid and forecast responses in the chat app.
+**Anatomy:** Header, progress narration rail, summary block, body content, next actions, trust strip.
+**States:** `idle`, `thinking`, `streaming`, `complete`, `partial`, `error`, `aborted`.
+**Variants:** `sql`, `hybrid`, `forecast`, `fallback`.
+**Accessibility:** Live region for streamed content, pause-safe updates, keyboard reachable actions.
+**Content Guidelines:** First line must be `tl;dr`; details progressively disclosed below.
+**Interaction Behavior:** Stream response in phases; preserve layout stability while content fills in.
+
+### ProgressiveDataTable
+
+**Purpose:** Show structured data results without forcing users into a BI mental model.
+**Usage:** SQL answers, comparison results, discrepancy review and approval evidence.
+**Anatomy:** Sticky header, rows, inline sort/filter affordances, empty/error overlays, export hooks.
+**States:** `loading`, `streaming`, `ready`, `empty`, `partial`, `error`.
+**Variants:** `compact`, `comfortable`, `evidence-mode`.
+**Accessibility:** Semantic table markup, keyboard row traversal, announced sort state.
+**Content Guidelines:** Default to high-signal columns first; avoid over-wide initial layouts.
+**Interaction Behavior:** Can accept rows incrementally; preserves scroll position while streaming.
+
+### CitationBadge
+
+**Purpose:** Make source attribution visible without overwhelming the main answer.
+**Usage:** Attached to answer summaries, charts and evidence sections.
+**Anatomy:** Index marker, source label, freshness hint, optional confidence/status dot.
+**States:** `default`, `hover`, `active`, `stale`, `restricted`.
+**Variants:** `inline`, `chip`, `stacked`.
+**Accessibility:** Click target with descriptive label, tooltip/flyout keyboard support.
+**Content Guidelines:** Keep label human-readable; avoid raw schema names as the primary surface.
+**Interaction Behavior:** Opens source details or provenance drawer without disrupting main flow.
+
+### ProvenanceDrawer
+
+**Purpose:** Let users inspect where an answer came from, how fresh it is and what logic was applied.
+**Usage:** Triggered from citation badges, confidence breakdown states and approval reviews.
+**Anatomy:** Source list, freshness, metric definition, filters applied, optional SQL explanation.
+**States:** `closed`, `open`, `loading`, `restricted`, `error`.
+**Variants:** `answer-mode`, `approval-mode`, `comparison-mode`.
+**Accessibility:** Drawer focus trap, escape close, heading structure, screen-reader labels.
+**Content Guidelines:** Human-readable summary first; raw SQL only as progressive disclosure.
+**Interaction Behavior:** Opens side panel over current context; does not navigate away from thread.
+
+### ConfidenceBreakdownCard
+
+**Purpose:** Handle low-confidence, stale-data or conflicting-data scenarios without dead ends.
+**Usage:** Journey 3 and Journey 7 when cross-domain or partial data issues occur.
+**Anatomy:** Confidence label, issue explanation, source conflict summary, recommended next actions.
+**States:** `low-confidence`, `partial-data`, `stale-data`, `permission-limited`, `cross-source-conflict`.
+**Variants:** `inline`, `full-width`, `approval-escalation`.
+**Accessibility:** Clear status language, action buttons reachable by keyboard, non-color-dependent signaling.
+**Content Guidelines:** Explain the problem in business language; always provide 2-3 exits.
+**Interaction Behavior:** Lets user refine, exclude source, request access or escalate.
+
+### ApprovalBriefingCard
+
+**Purpose:** Present approval decisions as a context-rich briefing, not a raw system form.
+**Usage:** Approval Cockpit and approval summaries shown back in Command Canvas.
+**Anatomy:** Requester info, business justification, data scope, sensitivity, risk summary, provenance, decision controls.
+**States:** `requested`, `pending`, `approved`, `rejected`, `expired`.
+**Variants:** `cockpit`, `inline-summary`, `history`.
+**Accessibility:** Full keyboard support, explicit button labels, structured headings for scanability.
+**Content Guidelines:** Prioritize business meaning before technical detail.
+**Interaction Behavior:** Writes decision with required reason where applicable; returns status to original thread.
+
+### ExportJobStatus
+
+**Purpose:** Make async export progress legible inside the same workflow.
+**Usage:** Journey 1 and Journey 3 after export request.
+**Anatomy:** Job label, status text, progress indicator, timestamp, retry/download action.
+**States:** `queued`, `running`, `ready`, `failed`, `expired`.
+**Variants:** `inline`, `toast`, `history-row`.
+**Accessibility:** Status announcements, clear downloadable target, retry controls.
+**Content Guidelines:** Always name file type and business scope.
+**Interaction Behavior:** Updates without taking user out of current thread.
+
+### IntentConfirmationDialog
+
+**Purpose:** Confirm ambiguous or business-sensitive interpretations before execution.
+**Usage:** Ambiguous terms, overloaded business definitions, risky filters.
+**Anatomy:** System interpretation, highlighted assumptions, confirm/edit actions.
+**States:** `open`, `confirming`, `edited`, `cancelled`.
+**Variants:** `inline-card`, `modal-dialog`.
+**Accessibility:** Focus order, edit path keyboard support, readable contrast for highlighted terms.
+**Content Guidelines:** Phrase interpretation in natural Vietnamese, not SQL terminology.
+**Interaction Behavior:** Either confirms execution or returns user to edited prompt flow.
+
+### PermissionRequestState
+
+**Purpose:** Turn permission failure into a recoverable workflow instead of a dead-end denial.
+**Usage:** Permission-limited answers, hidden sources, restricted exports.
+**Anatomy:** Scope explanation, what is blocked, request access CTA, what remains visible.
+**States:** `informational`, `requestable`, `pending`, `granted`, `denied`.
+**Variants:** `inline`, `drawer`, `approval-bridge`.
+**Accessibility:** Clear labels, status updates, action confirmation.
+**Content Guidelines:** Explain what user can still do, not only what is blocked.
+**Interaction Behavior:** Launches access request without discarding current question context.
+
+### Component Implementation Strategy
+
+**Foundation components**
+- Use `shadcn/ui` primitives directly for buttons, forms, dialogs, drawers, tables, tabs, badges and toasts.
+- Keep all spacing, radius, color and type decisions token-driven from the shared design system.
+- Prefer composition over one-off component forks.
+
+**Custom component strategy**
+- Build all AIAL-specific components in `packages/ui/src/components/custom/`
+- Separate state orchestration from visual rendering where possible.
+- Make `StreamingMessage`, `ProgressiveDataTable`, `CitationBadge`, `ProvenanceDrawer`, `ConfidenceBreakdownCard`, `ApprovalBriefingCard`, and `ExportJobStatus` reusable across both chat and admin contexts.
+- Keep domain-specific policy logic out of presentation components; pass in already-evaluated view models.
+
+**App ownership strategy**
+- `packages/ui`: reusable primitives and AIAL custom components that are domain-agnostic
+- `apps/chat`: chat-specific orchestration components like `IntentConfirmationDialog`
+- `apps/admin`: admin-specific wrappers, approval page compositions, audit dashboard compositions
+
+**State strategy**
+- Components must support async and resumable states explicitly.
+- No component should rely on hidden implicit loading assumptions.
+- Approval, export and permission request flows should map cleanly to named states that are visible in UI.
+
+**Accessibility strategy**
+- Every custom component must define keyboard behavior and screen-reader semantics up front.
+- Trust indicators and confidence levels cannot rely on color alone.
+- Streaming content must preserve readable focus order and avoid disorienting screen-reader spam.
+
+### Implementation Roadmap
+
+**Phase 1 — Core components**
+- `StreamingMessage` — required for core chat response loop
+- `ProgressiveDataTable` — required for structured SQL answers
+- `CitationBadge` — required for trust by default
+- `IntentConfirmationDialog` — required for ambiguity handling
+
+**Phase 2 — Trust and async continuity**
+- `ProvenanceDrawer` — required for evidence-on-demand
+- `ExportJobStatus` — required for async export flows
+- `ConfidenceBreakdownCard` — required for conflict and low-confidence paths
+- `PermissionRequestState` — required for recoverable permission errors
+
+**Phase 3 — Approval and enterprise control**
+- `ApprovalBriefingCard` — required for Approval Cockpit and approval return path
+- Admin compositions for approval queues, risk summaries and audit evidence views
+
+**Phase 4 — Enhancement components**
+- Saved-query and recurring briefing wrappers
+- Additional chart reveal variants
+- Comparison/evidence layouts for deeper analytical use cases
+
+**Build priority logic**
+- Build first what supports `Journey 1` and the default Command Canvas loop.
+- Next, build what preserves trust and async continuity in `Journey 3`.
+- Then build the approval-specific branch required by `Journey 6`.
+- Finally, extend for retention and advanced analyst modes after MVP validation.
+
+---
+
+## UX Consistency Patterns
+
+### Consistency Contract
+
+AIAL dùng một nguyên tắc nhất quán xuyên suốt:
+
+- Cùng một trạng thái phải có cùng vị trí, cùng ngôn ngữ, cùng trọng lượng thị giác trên toàn hệ thống.
+- Nếu một hành vi chưa được mô tả ở đây, thiết kế phải mặc định theo pattern gần nhất có trust rõ ràng hơn, không theo pattern tối giản nhất.
+- Mọi component phải expose đúng bộ state chuẩn; không được tự đặt tên trạng thái cục bộ.
+- Approval actions không được hòa lẫn với query actions.
+- Trust cues không được làm gián đoạn core query flow, nhưng cũng không được biến mất ở các trạng thái rủi ro.
+
+### Component Behavior Matrix
+
+| Surface | Trigger | Default State | Loading / Pending | Error / Blocked | Success / Complete | Trust Treatment |
+|---------|---------|---------------|-------------------|-----------------|--------------------|-----------------|
+| **Button** | User initiates action | Idle | Loading label + disabled repeat click | Inline reason or linked error state | Short confirmation or state advance | Action labels must describe outcome |
+| **Field** | User types / edits | Pristine | Validating | Inline validation or helper correction | Valid state optional, not celebratory | Sensitive fields show scope/help if relevant |
+| **Form** | User submits | Ready | Submitting | Field-level first, form-level if cross-field/system | Submitted or next step state | Confidence/approval requirements shown before commit |
+| **Page / View** | Query / state transition | Context visible | Skeleton, streaming or pending state | Error, blocked, discrepancy, empty | Stable resolved state | Provenance and confidence appear contextually |
+| **Toast / Banner** | System event | Hidden | N/A | Banner for persistent issues, toast for transient feedback | Toast for lightweight success | Must not be sole carrier of critical trust info |
+| **Navigation** | User moves between surfaces | Current context held | Pending if async transition | Blocked if permissions prevent move | Restored target state | Trust state preserved across movement |
+
+### Button Hierarchy
+
+### Action Hierarchy Rules
+
+**Primary actions**
+- Mỗi màn chỉ có **một** primary action.
+- Primary action luôn đại diện cho bước tiến quan trọng nhất trong flow hiện tại.
+- Trong Command Canvas, primary action thường là `Ask`, `Compare`, `Export`, hoặc `Request approval` tùy ngữ cảnh.
+
+**Secondary actions**
+- Dùng cho các đường tiếp theo nhưng không phải bước chính: `Save query`, `View source`, `Retry`, `Refine`.
+- Secondary actions không được cạnh tranh thị giác với primary action.
+
+**Destructive actions**
+- Luôn tách khỏi primary cluster.
+- Cần copy rõ kết quả: `Reject request`, `Discard draft`, `Cancel export`.
+- Không dùng destructive styling cho hành động chỉ là `back` hay `close`.
+
+**Quiet / Inline actions**
+- Dùng cho provenance, confidence drill-down, row-level actions, dismissals.
+- Không được dùng cho hành động có hậu quả nghiệp vụ.
+
+**Rule bắt buộc**
+- Label của nút phải mô tả **kết quả** chứ không mô tả trạng thái giao diện.
+- Ví dụ: `Request approval` tốt hơn `Submit`; `Compare domains` tốt hơn `Run`.
+
+### Feedback Patterns
+
+### Feedback Taxonomy
+
+**Feedback escalation rules**
+- `Inline first`: dùng inline status cho phần lớn feedback liên quan trực tiếp tới nơi user đang thao tác.
+- `Toast only for transient events`: dùng toast cho success nhẹ, export queued, saved query, copy done.
+- `Banner for persistent issues`: dùng banner cho stale data, degraded service, permission scope issues, approval pending lâu.
+- `Modal only for blocking states`: chỉ dùng modal cho xác nhận hậu quả lớn hoặc approval-gated blocking moments.
+
+**Async response rule**
+- Mọi tương tác bất đồng bộ phải hiển thị đúng một trạng thái chuẩn trong vòng `300ms`.
+
+**Standard async states**
+- **Pending:** button đổi sang loading và khóa lặp thao tác.
+- **Blocked:** hiển thị lý do ngay tại chỗ, không chỉ disable mơ hồ.
+- **Empty:** giải thích vì sao trống và gợi ý hành động tiếp theo.
+- **Error:** nêu lỗi theo ngữ cảnh, kèm retry hoặc chuyển hướng rõ ràng.
+- **Success:** phản hồi ngắn, xác nhận kết quả đã được ghi nhận.
+
+**State precedence**
+- `blocked > error > retryable error > loading/skeleton > empty > success/info`
+
+**Trust-state mapping**
+- `unverified`: chưa đủ bằng chứng để khẳng định, cần nêu rõ là preliminary
+- `partially verified`: có nguồn nhưng còn thiếu hoặc bị giới hạn
+- `verified`: đủ nguồn và scope để tin cậy
+- `conflicted`: có mâu thuẫn giữa nguồn hoặc confidence thấp
+- `approval required`: chưa được phép trả kết quả cuối cùng dù logic đã sẵn sàng
+
+### Form Patterns
+
+### Form Validation Rules
+
+**Field states**
+- `pristine`
+- `dirty`
+- `validating`
+- `invalid`
+
+**Form states**
+- `ready`
+- `submitting`
+- `submitted`
+- `failed`
+
+**Validation timing**
+- Lỗi định dạng cơ bản: hiện khi rời field hoặc khi pattern rõ ràng sai.
+- Lỗi nghiệp vụ/cross-field: hiện khi submit.
+- Lỗi hệ thống: hiện ở form-level, không đổ nhầm xuống field-level.
+
+**Copy rules**
+- Error copy phải nói user cần sửa gì, không chỉ nói đã sai.
+- Tránh technical jargon như `validation failed`, `request error`.
+- Nếu có giới hạn quyền hoặc approval requirement, nói rõ trước khi user commit hành động.
+
+**Interaction rules**
+- Sau submit fail, focus tự động vào lỗi đầu tiên.
+- Không reset dữ liệu người dùng đã nhập nếu lỗi là hệ thống hoặc permission-related.
+- Approval reason, request access, và refine query forms đều dùng cùng nguyên tắc validation.
+
+### Navigation Patterns
+
+### Navigation Persistence Rules
+
+**Navigation states**
+- `active`
+- `current`
+- `selected`
+- `disabled`
+- `pending`
+- `read-only`
+
+**Persistence rules**
+- Khi user đi từ Command Canvas sang Provenance Drawer rồi quay lại, query context phải giữ nguyên.
+- Khi user đi từ query sang Approval Cockpit, thread gốc phải còn nguyên để trả kết quả hoặc rejection về đúng chỗ.
+- Khi export, approval hoặc access request chạy async, user không bị đẩy ra khỏi ngữ cảnh đang làm việc.
+- Deep-link vào trust layer chỉ được phép nếu vẫn còn đủ context để hiểu câu trả lời gốc.
+
+**Navigation hierarchy**
+- Query flow là xương sống.
+- Trust views là lớp phụ, mở ra rồi quay lại.
+- Approval là state branch, không phải điều hướng mặc định.
+- Admin views có thể độc lập, nhưng approval return path phải nối lại với thread ban đầu.
+
+### Additional Patterns
+
+### Empty, Loading, and Error Patterns
+
+### Loading State Taxonomy
+
+- `skeleton`: dùng khi layout đã biết nhưng dữ liệu chưa có
+- `spinner`: chỉ dùng cho vùng nhỏ, không dùng làm trạng thái chính toàn trang
+- `streaming placeholder`: dùng cho AI answer đang hình thành
+- `partial render`: dùng khi có một phần dữ liệu trước, phần còn lại đang tiếp tục tải
+- `background refresh`: dùng khi cập nhật không làm gián đoạn thao tác hiện tại
+
+### Empty State Rules
+
+- Empty state phải giải thích vì sao trống:
+  - không có dữ liệu
+  - bị giới hạn quyền
+  - bộ lọc quá hẹp
+  - dữ liệu chưa sẵn sàng
+- Mỗi empty state phải có ít nhất 1 next action rõ ràng.
+- Không dùng một câu generic kiểu `No results found` cho mọi trường hợp.
+
+### Error State Rules
+
+**Field-level errors**
+- Chỉ dùng cho lỗi cục bộ của input.
+
+**Form-level errors**
+- Dùng cho lỗi submit, lỗi liên trường, lỗi approval reason, lỗi access request.
+
+**Page/view-level errors**
+- Dùng cho query fail, source unavailable, export fail, stale hoặc conflicted data states.
+
+**Retry rules**
+- Retry chỉ xuất hiện nếu action thực sự retryable.
+- Nếu không thể retry, phải có next best action như `Refine query`, `Request access`, `Ask approver`, `Export partial`, hoặc `Return to thread`.
+
+### Do Not List
+
+- Không dùng modal cho mọi xác nhận nhỏ.
+- Không disable action mà không nói lý do.
+- Không dùng toast làm nơi duy nhất chứa thông tin trust-critical.
+- Không reset query hoặc form khi lỗi là do hệ thống.
+- Không trộn approval actions với query actions trong cùng action cluster.
+- Không hiển thị confidence hoặc provenance theo kiểu trang trí; chúng phải map với state thật.
+- Không dùng một label mơ hồ như `Run`, `Submit`, `Process` cho các hành động có meaning nghiệp vụ.
+
+### Query → Verify → Compare → Approve Pattern
+
+AIAL cần một consistency spine cho flow dễ vỡ nhất:
+
+1. User hỏi trong Command Canvas
+2. Hệ thống trả kết quả đầu tiên với trust cues cơ bản
+3. Nếu có cross-source compare hoặc confidence issue, chuyển sang breakdown state thay vì giả vờ chắc chắn
+4. Nếu cần approval, chuyển sang approval branch mà không mất thread gốc
+5. Kết quả cuối hoặc rejection luôn quay lại cùng context ban đầu
+
+### Examples
+
+**Normal case**
+- User hỏi doanh thu HCM tháng này.
+- Hệ thống stream kết quả, hiện citation strip, cho export inline.
+- Export queued hiện toast + inline status, không điều hướng away.
+
+**Edge case**
+- User hỏi chi phí vs ngân sách nhưng 2 nguồn lệch nhau.
+- Hệ thống không trả lời như thể đã chắc chắn; thay vào đó hiện confidence breakdown card.
+- User chọn refine hoặc escalate, và mọi trạng thái vẫn giữ trong cùng logic flow.
+
+---
+
+## Responsive Design & Accessibility
+
+### Objective
+
+AIAL là một sản phẩm **desktop-first cho MVP**, nhưng không được phép trở thành một giao diện desktop bị ép nhỏ khi xuống tablet/mobile. Responsive strategy phải giữ được ba điều trên mọi viewport:
+
+- Command Canvas luôn là trục chính của trải nghiệm
+- Trust-critical information luôn truy cập được rõ ràng
+- Approval và async states không làm user mất ngữ cảnh
+
+### Responsive Strategy
+
+**Desktop-first principle**
+- Desktop-first chỉ áp dụng cho MVP shell và mật độ thông tin mặc định.
+- Khi xuống màn hình hẹp hơn, hệ thống không co nhỏ layout desktop theo tỷ lệ; thay vào đó chuyển sang **single-column progressive disclosure**.
+- Chat luôn là ưu tiên hiển thị số 1.
+- Provenance, confidence và approval evidence phải chuyển thành drawer, accordion hoặc full-screen review surfaces theo ngữ cảnh.
+
+**Desktop strategy**
+- Dùng layout đầy đủ với Command Canvas làm vùng chính.
+- Secondary rails có thể hiển thị provenance, confidence, quick actions hoặc status summaries.
+- Approval Cockpit có thể dùng multi-panel layout nếu còn đủ chiều rộng để scan nội dung mà không vỡ nhịp.
+
+**Tablet strategy**
+- Tablet và narrow desktop ưu tiên giảm chiều ngang bằng cách collapse secondary rail.
+- Tối đa hai cột; không giữ 3 vùng thông tin đồng thời.
+- Provenance và confidence nên chuyển sang drawer hoặc accordion, không giữ side panel cố định nếu làm chật answer flow.
+
+**Mobile strategy**
+- Mobile luôn là single-column.
+- Command Canvas phải giữ vùng nhập và answer flow là trung tâm.
+- Verified Ledger và Approval Cockpit chỉ được mở theo kiểu full-screen drawer/modal page.
+- Không render side panel cố định trên mobile.
+- Không được yêu cầu cuộn ngang để đọc bảng, approval context hoặc trust information quan trọng.
+
+### Breakpoint Strategy
+
+### Breakpoint Matrix
+
+| Range | Device Class | Layout Rule | Trust / Approval Behavior |
+|------|---------------|-------------|---------------------------|
+| `>= 1440px` | Wide desktop | Full desktop shell, spacious density | Side rails allowed, multi-panel evidence allowed |
+| `1024–1439px` | Standard desktop | Full desktop shell | Secondary rail allowed, but must not compress Command Canvas below readable width |
+| `768–1023px` | Tablet / narrow desktop | Max 2 columns | Secondary rail collapses; provenance/confidence move to drawer/accordion |
+| `320–767px` | Mobile | Single-column only | Verified Ledger and Approval Cockpit open as full-screen drawer/modal; no fixed side panel |
+| `< 320px` | Unsupported edge | Graceful fallback only | Preserve core content, no layout overflow |
+
+### Component Behavior by Breakpoint
+
+**AC-13-R1**
+- `320–767`: single-column only
+- `768–1023`: two-column maximum
+- `>=1024`: full desktop shell allowed
+- `<=767`: `Verified Ledger` và `Approval Cockpit` chỉ mở dạng full-screen drawer/modal, không render side panel cố định
+
+**AC-13-R2**
+- `Command Canvas` giữ vai trò primary trên mọi viewport
+- Secondary rail auto-collapse ở `<1024`
+- Drawer phải trap focus, đóng bằng `Esc`, và restore focus về trigger sau khi đóng
+
+**Layout guardrails**
+- Không panel nào được buộc user cuộn ngang để hoàn thành task
+- Không collapse trust-critical content ở desktop nếu chưa có affordance truy cập rõ ràng
+- Metadata density có thể giảm khi xuống tablet/mobile, nhưng không được bỏ mất trạng thái confidence/provenance/approval
+
+### Accessibility Strategy
+
+**Target compliance:** `WCAG 2.2 AA`
+
+AIAL không chỉ cần “đạt chuẩn cơ bản” mà phải hỗ trợ tốt cho các trạng thái AI đặc thù như streaming, confidence breakdown, async approval và provenance inspection.
+
+### Accessibility Rules
+
+**Visual accessibility**
+- Contrast text thường `>= 4.5:1`
+- Contrast UI components, icons, borders và focus indicators `>= 3:1`
+- Focus visible trên mọi interactive control
+- Không dùng màu sắc đơn thuần để truyền trạng thái trust, confidence, pending, approved/rejected
+
+**Keyboard accessibility**
+- Hỗ trợ keyboard-only cho tất cả primary flows
+- Tab order theo DOM và theo task flow tự nhiên
+- Không đổi thứ tự DOM chỉ để phục vụ layout visual
+- Modal, drawer và Approval Cockpit phải có focus trap và escape close
+- Skip links phải có cho vùng chat/main content nếu shell đủ phức tạp
+
+**Assistive technology rules**
+- `StreamingMessage` updates dùng `aria-live="polite"`
+- Async states như export queued, approval pending, approval decided dùng `role="status"` hoặc `role="alert"` theo severity
+- Provenance drawer phải announce label mở/đóng và số lượng nguồn nếu có
+- Confidence, provenance, pending, approved/rejected đều phải có text equivalent rõ ràng
+- Không ẩn trust-critical information chỉ bằng icon hoặc tooltip
+
+**Motion accessibility**
+- `AC-13-R4`: nếu `prefers-reduced-motion: reduce`
+  - tắt shimmer
+  - tắt parallax
+  - tắt auto-animated panel transitions
+  - chỉ dùng fade tối đa `150ms`
+
+**Touch accessibility**
+- Minimum touch target `44x44px`
+- Drawer handles, close controls, provenance chips và inline actions phải đủ kích thước trên tablet/mobile
+- Không đặt các destructive/approval actions quá sát nhau trên touch surfaces
+
+### Testing Strategy
+
+### Testing Checklist
+
+**Responsive testing**
+- Validate tại các viewport: `320`, `375`, `768`, `1024`, `1440`
+- Test portrait và landscape cho tablet/mobile khi phù hợp
+- Kiểm tra long content, wrapping, truncation và overflow
+- Kiểm tra bảng dữ liệu, approval context và provenance surfaces không gây horizontal scroll bất khả dụng
+
+**Accessibility testing**
+- Keyboard-only navigation
+- `axe` automated scans
+- Screen reader smoke test
+- Contrast checks
+- Zoom / reflow test ở `200%` và nơi phù hợp thêm `400%`
+- Reduced motion behavior
+- Focus-trap và scroll-lock cho drawer/modal
+
+**Risk-specific testing for AIAL**
+- Chat streaming updates
+- Provenance chips và provenance drawer
+- Confidence breakdown card
+- Approval branch và return path
+- Async export states
+- Permission request states
+
+**AC-13-T1**
+- Validate ở `320, 375, 768, 1024, 1440`
+- Chạy keyboard-only
+- Chạy `axe`
+- Smoke test zoom `200%`
+- Test scroll-lock và focus-trap cho drawer/modal
+
+### Implementation Guidelines
+
+### Implementation Guardrails
+
+- Dùng relative units (`rem`, `%`, fluid sizing) thay vì hard-coded pixel widths cho layout chính
+- Không ẩn nội dung trust quan trọng chỉ bằng tooltip
+- Không dùng placeholder thay cho nhãn
+- Không để panel phải cuộn ngang ở bất kỳ breakpoint nào để hoàn thành nhiệm vụ chính
+- Các trạng thái async phải có skeleton/spinner và mô tả văn bản đồng thời
+- Luôn giữ thứ tự tab tự nhiên theo luồng task
+- Nếu một khối thông tin ảnh hưởng quyết định của người dùng, nó không được collapse mặc định ở desktop-first nếu chưa có cách truy cập rõ ràng
+- Approval return path phải đưa user về đúng thread/context gốc
+- Secondary content có thể collapse; primary answer flow không được collapse thành interaction nhiều bước không cần thiết
+
+### Open Questions / Exceptions
+
+- Mobile có nằm trong MVP production scope hay chỉ là “graceful fallback” cho phase đầu?
+- Approval Cockpit trên tablet nên là full-screen sheet hay route riêng?
+- Với bảng dữ liệu lớn trên mobile, ưu tiên column-priority hay card transformation?
+- Screen reader announcement frequency cho streaming nên giới hạn ở mức nào để không gây nhiễu?

@@ -1,0 +1,1873 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AIAL UX Design Directions</title>
+  <style>
+    :root {
+      --bg: #f8f7f5;
+      --surface: rgba(255, 255, 255, 0.78);
+      --surface-strong: #ffffff;
+      --surface-alt: #f0efed;
+      --border: rgba(26, 25, 23, 0.10);
+      --text: #1a1917;
+      --muted: #6b6866;
+      --primary: #0f7b6c;
+      --primary-light: #14a899;
+      --primary-dark: #0a5c51;
+      --live: #22c55e;
+      --cached: #eab308;
+      --stale: #ef4444;
+      --indigo: #6366f1;
+      --amber: #f59e0b;
+      --pink: #ec4899;
+      --cyan: #06b6d4;
+      --shadow-sm: 0 10px 30px rgba(20, 18, 15, 0.06);
+      --shadow-md: 0 18px 50px rgba(20, 18, 15, 0.10);
+      --radius-lg: 24px;
+      --radius-md: 16px;
+      --radius-sm: 10px;
+      --max: 1400px;
+      --font: 'Inter', 'Noto Sans', 'Noto Sans Vietnamese', sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(20, 168, 153, 0.12), transparent 30%),
+        radial-gradient(circle at top right, rgba(99, 102, 241, 0.10), transparent 26%),
+        linear-gradient(180deg, #fcfbfa 0%, var(--bg) 42%, #eeece8 100%);
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .shell {
+      width: min(var(--max), calc(100vw - 40px));
+      margin: 0 auto;
+      padding-bottom: 80px;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(20px);
+      background: rgba(248, 247, 245, 0.82);
+      border-bottom: 1px solid rgba(26, 25, 23, 0.08);
+    }
+
+    .topbar-inner {
+      width: min(var(--max), calc(100vw - 40px));
+      margin: 0 auto;
+      padding: 18px 0 14px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(15, 123, 108, 0.18);
+      background: rgba(15, 123, 108, 0.08);
+      color: var(--primary-dark);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .hero {
+      padding: 36px 0 24px;
+      display: grid;
+      gap: 20px;
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(34px, 6vw, 62px);
+      line-height: 0.96;
+      letter-spacing: -0.04em;
+      max-width: 11ch;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 72ch;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.7;
+    }
+
+    .hero-grid,
+    .filters,
+    .scorecard {
+      display: grid;
+      gap: 14px;
+    }
+
+    .hero-grid {
+      grid-template-columns: 1.35fr 0.95fr;
+      align-items: start;
+    }
+
+    .panel,
+    .direction,
+    .mock,
+    .mini-card,
+    .compare-card {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .panel {
+      border-radius: var(--radius-lg);
+      padding: 22px;
+    }
+
+    .criteria {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .criteria div {
+      padding: 14px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(26, 25, 23, 0.07);
+    }
+
+    .criteria strong,
+    .scorecard strong,
+    .meta strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+
+    .criteria span,
+    .scorecard span,
+    .meta span {
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+
+    .filters {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .filter {
+      border: 1px solid rgba(26, 25, 23, 0.08);
+      background: rgba(255, 255, 255, 0.7);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 10px 14px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 150ms ease-out;
+    }
+
+    .filter:hover,
+    .filter.active {
+      background: rgba(15, 123, 108, 0.12);
+      border-color: rgba(15, 123, 108, 0.28);
+      color: var(--primary-dark);
+      transform: translateY(-1px);
+    }
+
+    .scorecard {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .scorecard .compare-card {
+      padding: 16px;
+      border-radius: 18px;
+    }
+
+    .section-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      align-items: end;
+      margin: 44px 0 18px;
+    }
+
+    .section-title h2 {
+      margin: 0;
+      font-size: 28px;
+      letter-spacing: -0.03em;
+    }
+
+    .section-title p {
+      margin: 0;
+      max-width: 56ch;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .directions {
+      display: grid;
+      gap: 28px;
+    }
+
+    .direction {
+      border-radius: 30px;
+      overflow: hidden;
+      transition: transform 180ms ease-out, box-shadow 180ms ease-out, opacity 180ms ease-out;
+    }
+
+    .direction.hidden {
+      display: none;
+    }
+
+    .direction:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .direction-head {
+      padding: 24px 26px 16px;
+      display: grid;
+      gap: 12px;
+      background:
+        linear-gradient(135deg, rgba(15, 123, 108, 0.10), transparent 42%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.60));
+    }
+
+    .direction-id {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      width: fit-content;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid rgba(26, 25, 23, 0.08);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .direction-head h3 {
+      margin: 0;
+      font-size: 32px;
+      letter-spacing: -0.04em;
+    }
+
+    .direction-head p {
+      margin: 0;
+      color: var(--muted);
+      max-width: 72ch;
+      line-height: 1.7;
+      font-size: 15px;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .meta div {
+      padding: 14px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.78);
+      border: 1px solid rgba(26, 25, 23, 0.07);
+    }
+
+    .mock {
+      background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(250,248,246,0.92));
+      border-top: 1px solid rgba(26, 25, 23, 0.08);
+      border-left: 0;
+      border-right: 0;
+      border-bottom: 0;
+      padding: 24px;
+    }
+
+    .canvas {
+      min-height: 540px;
+      border-radius: 24px;
+      overflow: hidden;
+      border: 1px solid rgba(26, 25, 23, 0.08);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.65);
+      background: #fff;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 18px;
+      border-bottom: 1px solid rgba(26, 25, 23, 0.07);
+      background: rgba(248, 247, 245, 0.92);
+    }
+
+    .toolbar strong {
+      font-size: 14px;
+    }
+
+    .toolbar span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .status-row,
+    .badge-row,
+    .chip-row,
+    .mini-grid,
+    .stack {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .badge,
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .badge.live {
+      background: rgba(34, 197, 94, 0.10);
+      color: #166534;
+    }
+
+    .badge.cached {
+      background: rgba(234, 179, 8, 0.12);
+      color: #854d0e;
+    }
+
+    .badge.primary {
+      background: rgba(15, 123, 108, 0.10);
+      color: var(--primary-dark);
+    }
+
+    .chip {
+      background: rgba(26, 25, 23, 0.06);
+      color: var(--text);
+    }
+
+    .pill-num {
+      display: inline-grid;
+      place-items: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.82);
+      font-size: 11px;
+    }
+
+    .direction-notes {
+      padding: 18px 24px 26px;
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 16px;
+      background: rgba(248, 247, 245, 0.74);
+    }
+
+    .mini-card {
+      border-radius: 18px;
+      padding: 16px;
+      background: rgba(255,255,255,0.8);
+    }
+
+    .mini-card strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+
+    .mini-card p,
+    .mini-card li {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .mini-card ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .desktop-app,
+    .dense-app,
+    .stream-app,
+    .admin-app,
+    .briefing-app {
+      height: 100%;
+    }
+
+    .desktop-app {
+      display: grid;
+      grid-template-columns: 256px 1fr;
+      background:
+        radial-gradient(circle at top left, rgba(15, 123, 108, 0.09), transparent 30%),
+        #fbfbfa;
+    }
+
+    .sidebar {
+      padding: 18px;
+      border-right: 1px solid rgba(26, 25, 23, 0.07);
+      background: rgba(255,255,255,0.78);
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 18px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+    }
+
+    .logo-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 16px;
+      box-shadow: 0 10px 20px rgba(15, 123, 108, 0.18);
+    }
+
+    .nav-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .nav-item {
+      padding: 12px 14px;
+      border-radius: 14px;
+      color: var(--muted);
+      background: transparent;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .nav-item.active {
+      background: rgba(15, 123, 108, 0.10);
+      color: var(--primary-dark);
+    }
+
+    .workspace-card,
+    .insight-box,
+    .reply-card,
+    .citation-list,
+    .table-box,
+    .hero-stat,
+    .rail-card,
+    .approval-box,
+    .event-box,
+    .doc-box {
+      border-radius: 18px;
+      background: #fff;
+      border: 1px solid rgba(26, 25, 23, 0.08);
+      box-shadow: 0 8px 20px rgba(20, 18, 15, 0.05);
+    }
+
+    .workspace-card {
+      padding: 14px;
+      background: linear-gradient(180deg, rgba(15, 123, 108, 0.08), rgba(255, 255, 255, 0.92));
+    }
+
+    .workspace-card p,
+    .insight-box p,
+    .reply-card p,
+    .table-box p,
+    .rail-card p,
+    .approval-box p,
+    .event-box p,
+    .doc-box p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .content {
+      padding: 22px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .question-card {
+      padding: 18px 20px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #113b37, #0f7b6c);
+      color: #fff;
+      box-shadow: 0 16px 36px rgba(15, 123, 108, 0.24);
+    }
+
+    .question-card p {
+      margin: 10px 0 0;
+      font-size: 18px;
+      line-height: 1.5;
+      max-width: 42ch;
+    }
+
+    .question-card small {
+      display: block;
+      opacity: 0.8;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      font-size: 11px;
+    }
+
+    .glance-grid {
+      display: grid;
+      grid-template-columns: 1.3fr 0.9fr;
+      gap: 16px;
+    }
+
+    .reply-card {
+      padding: 18px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .reply-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .reply-title strong {
+      font-size: 24px;
+      letter-spacing: -0.03em;
+    }
+
+    .reply-body {
+      display: grid;
+      gap: 10px;
+    }
+
+    .tl-dr {
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(15, 123, 108, 0.07);
+      border: 1px solid rgba(15, 123, 108, 0.12);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .citation-list {
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .citation {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px dashed rgba(26, 25, 23, 0.12);
+    }
+
+    .citation:last-child {
+      padding-bottom: 0;
+      border-bottom: 0;
+    }
+
+    .citation strong {
+      font-size: 13px;
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    .table-box {
+      padding: 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      padding: 11px 10px;
+      text-align: left;
+      border-bottom: 1px solid rgba(26, 25, 23, 0.07);
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 700;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .bars {
+      display: flex;
+      align-items: end;
+      gap: 14px;
+      height: 120px;
+      padding-top: 10px;
+    }
+
+    .bar {
+      flex: 1;
+      border-radius: 12px 12px 4px 4px;
+      background: linear-gradient(180deg, var(--primary-light), var(--primary));
+      position: relative;
+      min-width: 26px;
+    }
+
+    .bar span {
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .stream-app {
+      background: linear-gradient(180deg, #fff, #f8fbfb);
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+    }
+
+    .stream-main {
+      padding: 24px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .headline {
+      padding: 18px 18px 10px;
+      border-bottom: 1px solid rgba(26, 25, 23, 0.07);
+    }
+
+    .headline h4 {
+      margin: 10px 0 6px;
+      font-size: 34px;
+      letter-spacing: -0.04em;
+    }
+
+    .headline p {
+      margin: 0;
+      color: var(--muted);
+      max-width: 52ch;
+      line-height: 1.7;
+    }
+
+    .progress-rail {
+      display: grid;
+      gap: 10px;
+    }
+
+    .phase {
+      display: grid;
+      grid-template-columns: 34px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.86);
+      border: 1px solid rgba(26, 25, 23, 0.08);
+    }
+
+    .phase-dot {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: rgba(15, 123, 108, 0.10);
+      color: var(--primary-dark);
+      font-weight: 800;
+      font-size: 13px;
+    }
+
+    .phase.live .phase-dot {
+      background: rgba(34, 197, 94, 0.12);
+      color: #166534;
+    }
+
+    .phase span {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .source-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .doc-box,
+    .event-box,
+    .rail-card,
+    .approval-box {
+      padding: 16px;
+    }
+
+    .doc-box strong,
+    .event-box strong,
+    .rail-card strong,
+    .approval-box strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .stream-side {
+      padding: 18px;
+      border-left: 1px solid rgba(26, 25, 23, 0.07);
+      background: rgba(246, 245, 243, 0.9);
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+
+    .dense-app {
+      background: linear-gradient(180deg, #f9fbfb, #f2f5f5);
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+    }
+
+    .dense-hero {
+      padding: 24px 24px 10px;
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .hero-copy h4,
+    .stack h4 {
+      margin: 8px 0 8px;
+      font-size: 30px;
+      letter-spacing: -0.04em;
+    }
+
+    .hero-copy p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .hero-stat {
+      padding: 16px;
+      min-height: 110px;
+    }
+
+    .hero-stat strong {
+      display: block;
+      margin-top: 10px;
+      font-size: 28px;
+      letter-spacing: -0.03em;
+    }
+
+    .hero-stat span {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .sticky-command {
+      margin: 0 24px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: rgba(15, 123, 108, 0.08);
+      border: 1px solid rgba(15, 123, 108, 0.14);
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .sticky-command strong {
+      font-size: 14px;
+    }
+
+    .sticky-command span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .data-floor {
+      padding: 16px 24px 24px;
+      display: grid;
+      grid-template-columns: 1.25fr 0.75fr;
+      gap: 16px;
+    }
+
+    .data-floor .table-box {
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .table-head {
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(26, 25, 23, 0.07);
+    }
+
+    .rail {
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+
+    .rail-card .bars {
+      height: 100px;
+    }
+
+    .briefing-app {
+      background:
+        linear-gradient(120deg, rgba(15, 123, 108, 0.12), transparent 30%),
+        linear-gradient(180deg, #fbf9f7, #f0efed);
+      display: grid;
+      grid-template-columns: 0.95fr 1.05fr;
+    }
+
+    .briefing-left {
+      padding: 26px;
+      border-right: 1px solid rgba(26, 25, 23, 0.07);
+      display: grid;
+      gap: 16px;
+      align-content: start;
+    }
+
+    .briefing-left h4 {
+      margin: 8px 0;
+      font-size: 34px;
+      letter-spacing: -0.05em;
+    }
+
+    .briefing-left p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 10px;
+    }
+
+    .timeline-item {
+      padding: 12px 14px;
+      border-left: 3px solid rgba(15, 123, 108, 0.18);
+      background: rgba(255, 255, 255, 0.82);
+      border-radius: 0 14px 14px 0;
+    }
+
+    .timeline-item strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 14px;
+    }
+
+    .briefing-right {
+      padding: 24px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .approval-box {
+      background: linear-gradient(180deg, #fff, #f9fbfa);
+    }
+
+    .approval-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .approval-grid .approval-box:last-child {
+      grid-column: 1 / -1;
+    }
+
+    .action-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 0 16px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      background: var(--primary);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: default;
+      transition: transform 150ms ease-out, box-shadow 150ms ease-out;
+      box-shadow: 0 10px 24px rgba(15, 123, 108, 0.18);
+    }
+
+    .button.alt {
+      background: #fff;
+      color: var(--text);
+      border-color: rgba(26, 25, 23, 0.10);
+      box-shadow: none;
+    }
+
+    .button:hover {
+      transform: translateY(-1px);
+    }
+
+    .admin-app {
+      display: grid;
+      grid-template-columns: 230px 1fr;
+      background: linear-gradient(180deg, #f5f6f8, #edf0f3);
+    }
+
+    .admin-aside {
+      padding: 18px;
+      background: linear-gradient(180deg, #1a1d27, #171922);
+      color: #e8eaed;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 18px;
+    }
+
+    .admin-aside .nav-item {
+      color: rgba(232, 234, 237, 0.72);
+    }
+
+    .admin-aside .nav-item.active {
+      color: #fff;
+      background: rgba(20, 168, 153, 0.18);
+    }
+
+    .admin-main {
+      padding: 22px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .headline-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .headline-row h4 {
+      margin: 8px 0 6px;
+      font-size: 28px;
+      letter-spacing: -0.04em;
+    }
+
+    .audit-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 16px;
+    }
+
+    .audit-grid .table-box,
+    .audit-grid .rail-card {
+      min-height: 240px;
+    }
+
+    .approval-stream {
+      display: grid;
+      gap: 12px;
+    }
+
+    .approval-item {
+      padding: 14px;
+      border-radius: 16px;
+      background: #fff;
+      border: 1px solid rgba(26, 25, 23, 0.08);
+      display: grid;
+      gap: 8px;
+    }
+
+    .approval-item strong {
+      font-size: 14px;
+    }
+
+    .approval-item p {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .comparison {
+      margin-top: 44px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .compare-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .compare-card {
+      border-radius: 20px;
+      padding: 18px;
+    }
+
+    .compare-card h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      letter-spacing: -0.03em;
+    }
+
+    .compare-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .compare-card ul {
+      margin: 12px 0 0;
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .footer-note {
+      margin-top: 34px;
+      padding: 22px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, rgba(15, 123, 108, 0.10), rgba(99, 102, 241, 0.08));
+      border: 1px solid rgba(15, 123, 108, 0.14);
+      display: grid;
+      gap: 10px;
+    }
+
+    .footer-note h3 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: -0.03em;
+    }
+
+    .footer-note p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    @media (max-width: 1100px) {
+      .hero-grid,
+      .glance-grid,
+      .stream-app,
+      .dense-hero,
+      .data-floor,
+      .briefing-app,
+      .audit-grid,
+      .compare-grid,
+      .direction-notes {
+        grid-template-columns: 1fr;
+      }
+
+      .desktop-app,
+      .admin-app {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar,
+      .admin-aside,
+      .stream-side,
+      .briefing-left {
+        border-right: 0;
+        border-bottom: 1px solid rgba(26, 25, 23, 0.07);
+      }
+
+      .meta,
+      .criteria,
+      .hero-stats,
+      .approval-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .filters {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      .shell,
+      .topbar-inner {
+        width: min(var(--max), calc(100vw - 24px));
+      }
+
+      .hero {
+        padding-top: 24px;
+      }
+
+      .hero h1 {
+        font-size: 34px;
+      }
+
+      .section-title {
+        display: grid;
+      }
+
+      .meta,
+      .criteria,
+      .scorecard,
+      .hero-stats,
+      .source-grid,
+      .compare-grid,
+      .approval-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .canvas {
+        min-height: auto;
+      }
+
+      .direction-head h3,
+      .headline h4,
+      .briefing-left h4,
+      .hero-copy h4 {
+        font-size: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="eyebrow">AIAL • Step 9 • Design Direction Mockups</div>
+      <div class="filters" aria-label="Direction filters">
+        <button class="filter active" data-filter="all">Tất cả directions</button>
+        <button class="filter" data-filter="chat">Thiên về Chat UX</button>
+        <button class="filter" data-filter="trust">Thiên về Trust/Proof</button>
+        <button class="filter" data-filter="admin">Thiên về Approval/Admin</button>
+      </div>
+    </div>
+  </div>
+
+  <main class="shell">
+    <section class="hero">
+      <div class="eyebrow">Ask in Vietnamese → Verified data answer → Act immediately</div>
+      <div class="hero-grid">
+        <div class="stack">
+          <h1>6 hướng thị giác cho AIAL, cùng một nền tảng nhưng khác logic trải nghiệm.</h1>
+          <p>Các direction bên dưới đều giữ nguyên hệ màu teal + warm gray, Inter/Noto Sans, và tinh thần “Intelligent Clarity”. Khác biệt nằm ở ưu tiên hiển thị: tốc độ hiểu, mức độ trust, mật độ thông tin, nhịp phê duyệt và cảm giác sở hữu cá nhân.</p>
+        </div>
+        <div class="panel">
+          <strong>Khuyến nghị nhanh</strong>
+          <p>Direction phù hợp nhất cho MVP hiện tại là <strong>D2 Command Canvas</strong> làm base, kết hợp trust module của <strong>D3 Verified Ledger</strong> và approval card của <strong>D5 Approval Cockpit</strong>.</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="section-title" style="margin:0 0 16px;">
+          <h2>Khung đánh giá</h2>
+          <p>Khi so sánh, hãy nhìn vào việc người dùng có hiểu trạng thái hệ thống trong 2-3 giây đầu không, có đủ tin vào số liệu để hành động không, và approval có giữ được momentum không.</p>
+        </div>
+        <div class="criteria">
+          <div><strong>Layout Intuitiveness</strong><span>Thứ tự đọc có bám mental model “hỏi đồng nghiệp thông minh” thay vì “dùng query tool” không.</span></div>
+          <div><strong>Trust Visibility</strong><span>Nguồn dữ liệu, độ mới và guardrails có đủ rõ trước khi user xuất báo cáo không.</span></div>
+          <div><strong>Action Momentum</strong><span>Từ câu trả lời đến export, save query hoặc gửi approval có ít ma sát không.</span></div>
+          <div><strong>Density Fit</strong><span>Minh và Tuấn đọc nhanh được, nhưng Hùng và Lan vẫn có đủ chi tiết vận hành.</span></div>
+          <div><strong>Emotional Match</strong><span>Direction có tạo “professional relief” rồi mới đến “empowered confidence” không.</span></div>
+          <div><strong>Scalability</strong><span>Có mở rộng được từ chat app sang admin portal mà không vỡ ngôn ngữ thiết kế không.</span></div>
+        </div>
+      </div>
+
+      <div class="scorecard">
+        <div class="compare-card">
+          <strong>Mạnh nhất cho MVP</strong>
+          <span>D2 đưa user vào câu trả lời nhanh nhất, cân bằng tốt giữa chat, data, trust và hành động.</span>
+        </div>
+        <div class="compare-card">
+          <strong>Mạnh nhất cho adoption enterprise</strong>
+          <span>D3 và D5 làm trust, provenance và approval trở nên hữu hình hơn, đặc biệt với Finance, HR và Data Steward.</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-title">
+      <h2>Directions</h2>
+      <p>Mỗi direction là một “toàn cảnh sản phẩm”, không chỉ là skin màu sắc. Chúng khác ở bố cục, nhịp streaming, trọng lượng thị giác và nơi đặt tín hiệu xác thực.</p>
+    </section>
+
+    <section class="directions">
+      <article class="direction" data-group="chat trust">
+        <div class="direction-head">
+          <div class="direction-id"><span class="pill-num">1</span> Direction 1 • Calm Desk</div>
+          <h3>Calm Desk</h3>
+          <p>Một workspace yên tĩnh, có sidebar cá nhân và vùng trả lời rộng rãi. Đây là hướng “ít đe doạ” nhất cho user mới, ưu tiên cảm giác kiểm soát và dễ tiếp cận hơn là density.</p>
+          <div class="meta">
+            <div><strong>Best For</strong><span>Onboarding, business users mới, role không dùng dashboard hàng ngày.</span></div>
+            <div><strong>Density</strong><span>Comfortable</span></div>
+            <div><strong>Trust Style</strong><span>Contextual, secondary</span></div>
+            <div><strong>Tradeoff</strong><span>Ít “power user” hơn cho Tuấn/Lan.</span></div>
+          </div>
+        </div>
+        <div class="mock">
+          <div class="canvas desktop-app">
+            <aside class="sidebar">
+              <div class="logo"><div class="logo-mark">A</div> AIAL Workspace</div>
+              <div class="workspace-card">
+                <strong>Không gian của Minh</strong>
+                <p>3 báo cáo đã lưu • 1 query đang chờ approval • Tỷ lệ thành công tuần này 92%</p>
+              </div>
+              <nav class="nav-list">
+                <div class="nav-item active">Hỏi dữ liệu</div>
+                <div class="nav-item">Những gì bạn đã hỏi</div>
+                <div class="nav-item">Báo cáo đã lưu</div>
+                <div class="nav-item">Nguồn dữ liệu của bạn</div>
+              </nav>
+              <div class="mini-card">
+                <strong>Gợi ý theo vai trò Sales</strong>
+                <p>“Doanh thu HCM tuần này?”<br>“Top 5 khách hàng giảm mua?”</p>
+              </div>
+            </aside>
+
+            <div class="content">
+              <div class="toolbar">
+                <div>
+                  <strong>Phiên làm việc hiện tại</strong>
+                  <span>Context: Chi nhánh HCM • Quý 1/2026 • Scope Sales</span>
+                </div>
+                <div class="badge-row">
+                  <div class="badge live">Live data</div>
+                  <div class="badge primary">Bạn + IT Admin thấy activity này</div>
+                </div>
+              </div>
+
+              <div class="question-card">
+                <small>Người dùng hỏi</small>
+                <p>Doanh thu chi nhánh HCM tháng này so với cùng kỳ năm ngoái thế nào?</p>
+              </div>
+
+              <div class="glance-grid">
+                <div class="reply-card">
+                  <div class="reply-title">
+                    <strong>+12.4% so với cùng kỳ</strong>
+                    <div class="badge cached">Cached 18 phút trước</div>
+                  </div>
+                  <div class="tl-dr">Tóm tắt nhanh: Tháng 4/2026 chi nhánh HCM đạt <strong>18.6 tỷ</strong>, tăng <strong>2.05 tỷ</strong> so với tháng 4/2025. Động lực chính đến từ nhóm khách hàng SME và kênh online.</div>
+                  <div class="reply-body">
+                    <p>Tôi đã đối chiếu cùng kỳ theo cùng phạm vi chi nhánh và loại trừ VAT/chiết khấu theo định nghĩa “doanh thu thuần” hiện hành.</p>
+                    <div class="table-box">
+                      <table>
+                        <thead><tr><th>Tháng</th><th>Doanh thu</th><th>So với LY</th></tr></thead>
+                        <tbody>
+                          <tr><td>04/2025</td><td>16.55 tỷ</td><td>Baseline</td></tr>
+                          <tr><td>04/2026</td><td>18.60 tỷ</td><td>+12.4%</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="citation-list">
+                  <div class="citation">
+                    <div><strong>[1] SALES_NORTH.DM_DOANH_THU</strong><p>Cập nhật 08:12 • Định nghĩa metric v3.2</p></div>
+                    <div class="badge live">Verified</div>
+                  </div>
+                  <div class="citation">
+                    <div><strong>[2] Glossary: Doanh thu thuần</strong><p>Đã loại VAT và chiết khấu thương mại</p></div>
+                    <div class="badge primary">Xem nguồn</div>
+                  </div>
+                  <div class="insight-box" style="padding:16px;">
+                    <strong>Biểu đồ nhìn nhanh</strong>
+                    <div class="bars">
+                      <div class="bar" style="height: 76px;"><span>16.55</span></div>
+                      <div class="bar" style="height: 104px;"><span>18.60</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="direction-notes">
+          <div class="mini-card">
+            <strong>Tại sao direction này hợp lý</strong>
+            <ul>
+              <li>Giảm stress cho user lần đầu nhờ bố cục quen thuộc kiểu workspace.</li>
+              <li>History, saved queries và permission scope nhìn thấy ngay nhưng không áp đảo.</li>
+              <li>Phù hợp với ngôn ngữ “tool của tôi”, hỗ trợ ownership design.</li>
+            </ul>
+          </div>
+          <div class="mini-card">
+            <strong>Rủi ro</strong>
+            <p>Nếu product nghiêng về Finance, approval hoặc ops-heavy use cases, direction này có thể hơi “nhẹ” và thiếu cảm giác analytical command center.</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="direction" data-group="chat trust">
+        <div class="direction-head">
+          <div class="direction-id"><span class="pill-num">2</span> Direction 2 • Command Canvas</div>
+          <h3>Command Canvas</h3>
+          <p>Direction cân bằng nhất cho MVP: câu hỏi, tiến trình xử lý, bằng chứng dữ liệu và hành động nằm trên cùng một canvas. Nhanh, rõ, không quá “consumer”, không quá “BI tool”.</p>
+          <div class="meta">
+            <div><strong>Best For</strong><span>MVP chat app cho Sales và Finance.</span></div>
+            <div><strong>Density</strong><span>Medium</span></div>
+            <div><strong>Trust Style</strong><span>Integrated into answer flow</span></div>
+            <div><strong>Tradeoff</strong><span>Cần kỷ luật component để không trôi về dashboard nặng.</span></div>
+          </div>
+        </div>
+        <div class="mock">
+          <div class="canvas stream-app">
+            <div class="stream-main">
+              <div class="headline">
+                <div class="badge-row">
+                  <div class="badge primary">Minh • Sales Analyst</div>
+                  <div class="badge live">Within allowed branch scope</div>
+                </div>
+                <h4>Tôi đang lấy số và kiểm tra nguồn cho bạn.</h4>
+                <p>Direction này làm “thinking state” hữu hình bằng các phase rõ ràng, nhưng không khiến người dùng cảm giác hệ thống đang kỹ thuật hoá quá mức.</p>
+              </div>
+
+              <div class="question-card">
+                <small>Prompt hiện tại</small>
+                <p>Top 5 khách hàng doanh thu giảm mạnh nhất trong quý này ở miền Nam là ai?</p>
+              </div>
+
+              <div class="progress-rail">
+                <div class="phase"><div class="phase-dot">1</div><div><strong>Hiểu yêu cầu</strong><br><span>Miền Nam • Q2/2026 • so sánh với Q1/2026</span></div><span>Done</span></div>
+                <div class="phase live"><div class="phase-dot">2</div><div><strong>Đối chiếu nguồn dữ liệu</strong><br><span>Sales mart + metric glossary + permission scope</span></div><span>Live</span></div>
+                <div class="phase"><div class="phase-dot">3</div><div><strong>Tạo câu trả lời + khuyến nghị</strong><br><span>Chuẩn bị tóm tắt, bảng và next action</span></div><span>Next</span></div>
+              </div>
+
+              <div class="source-grid">
+                <div class="reply-card">
+                  <div class="reply-title">
+                    <strong>5 khách hàng giảm mạnh nhất</strong>
+                    <div class="chip-row">
+                      <div class="chip">Confidence: High</div>
+                      <div class="chip">Rows: 5</div>
+                    </div>
+                  </div>
+                  <div class="tl-dr">Tóm tắt nhanh: Khách hàng <strong>Minh Long Retail</strong> giảm mạnh nhất, thấp hơn quý trước <strong>18.2%</strong>. 3/5 khách hàng giảm do kênh phân phối miền Tây chậm lại.</div>
+                  <div class="table-box">
+                    <table>
+                      <thead><tr><th>Khách hàng</th><th>Q1</th><th>Q2</th><th>Chênh lệch</th></tr></thead>
+                      <tbody>
+                        <tr><td>Minh Long Retail</td><td>4.8 tỷ</td><td>3.92 tỷ</td><td>-18.2%</td></tr>
+                        <tr><td>Vina Home</td><td>3.4 tỷ</td><td>2.96 tỷ</td><td>-12.9%</td></tr>
+                        <tr><td>An Phúc Market</td><td>2.2 tỷ</td><td>1.98 tỷ</td><td>-10.0%</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="doc-box">
+                  <strong>Dấu vân tay dữ liệu</strong>
+                  <p>Bảng nguồn: <strong>SALES_SOUTH.DM_CUSTOMER_REVENUE</strong><br>Cập nhật: 08:06 hôm nay<br>Metric: Doanh thu thuần v3.2<br>Branch filter: SG01, CT02, AG03</p>
+                  <div class="action-row" style="margin-top:14px;">
+                    <div class="button">Xuất Excel</div>
+                    <div class="button alt">Lưu query</div>
+                    <div class="button alt">Xem logic</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <aside class="stream-side">
+              <div class="rail-card">
+                <strong>Suggested next asks</strong>
+                <p>“Tách theo sales rep”<br>“So với cùng kỳ năm ngoái”<br>“Tạo file gửi manager”</p>
+              </div>
+              <div class="event-box">
+                <strong>Guardrail status</strong>
+                <p>PII scan: pass<br>Unauthorized schema reference: pass<br>Hallucination check: pass</p>
+              </div>
+              <div class="doc-box">
+                <strong>Progressive chart reveal</strong>
+                <div class="bars">
+                  <div class="bar" style="height: 104px;"><span>Q1</span></div>
+                  <div class="bar" style="height: 82px;"><span>Q2</span></div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+        <div class="direction-notes">
+          <div class="mini-card">
+            <strong>Tại sao nên chọn direction này làm base</strong>
+            <ul>
+              <li>Giữ core loop “hỏi → thấy progress → nhận số → hành động” trong một viewport.</li>
+              <li>Trust signal không bị đẩy xuống cuối trang; user nhìn thấy bằng chứng trước khi xuất file.</li>
+              <li>Dễ mở rộng sang hybrid RAG, SQL explanation và forecast mà không thay đổi khung chính.</li>
+            </ul>
+          </div>
+          <div class="mini-card">
+            <strong>Nên mượn thêm gì từ direction khác</strong>
+            <p>Mượn trust lane kiểu tài liệu của D3 khi cần xác thực mạnh, và approval summary của D5 cho các flow nhạy cảm.</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="direction" data-group="trust">
+        <div class="direction-head">
+          <div class="direction-id"><span class="pill-num">3</span> Direction 3 • Verified Ledger</div>
+          <h3>Verified Ledger</h3>
+          <p>Hướng “tài liệu hoá sự thật”. UI giống một briefing paper được hệ thống biên soạn trực tiếp từ dữ liệu nguồn. Rất mạnh cho Finance, HR và các ngữ cảnh phải chịu trách nhiệm với con số.</p>
+          <div class="meta">
+            <div><strong>Best For</strong><span>Trust-heavy workflows, export-ready answers.</span></div>
+            <div><strong>Density</strong><span>Medium-low, editorial</span></div>
+            <div><strong>Trust Style</strong><span>Primary visual backbone</span></div>
+            <div><strong>Tradeoff</strong><span>Chậm cảm giác “chat” hơn D2.</span></div>
+          </div>
+        </div>
+        <div class="mock">
+          <div class="canvas briefing-app">
+            <div class="briefing-left">
+              <div class="badge-row">
+                <div class="badge primary">Verified Brief</div>
+                <div class="badge live">Source-checked</div>
+              </div>
+              <h4>Bản trả lời được soạn như một trang briefing đã ký tên nguồn.</h4>
+              <p>Trọng tâm của direction này là giúp user cảm thấy “tôi có thể mang trang này vào cuộc họp”. UI đẩy plain-language explanation lên trước, rồi mới mở dần bảng số và logic.</p>
+              <div class="timeline">
+                <div class="timeline-item"><strong>1. Tóm tắt điều hành</strong><p>Một đoạn ngắn, đủ để đọc lướt và chuyển tiếp cho manager.</p></div>
+                <div class="timeline-item"><strong>2. Cơ sở dữ liệu</strong><p>Nguồn, thời điểm cập nhật, định nghĩa KPI, bộ lọc áp dụng.</p></div>
+                <div class="timeline-item"><strong>3. Phụ lục tương tác</strong><p>Bảng, chart, logic SQL và audit trail mở rộng khi cần.</p></div>
+              </div>
+            </div>
+
+            <div class="briefing-right">
+              <div class="approval-box">
+                <strong>Tóm tắt điều hành</strong>
+                <p>Chi phí vận hành Q1/2026 đang cao hơn ngân sách <strong>6.8%</strong>, tương ứng <strong>1.12 tỷ</strong>. Hai khoản vượt chính đến từ logistics và overtime tại miền Nam. Đây là kết quả đã đối chiếu giữa actual cost và budget baseline cùng kỳ.</p>
+              </div>
+              <div class="approval-grid">
+                <div class="approval-box">
+                  <strong>Dấu vân tay dữ liệu</strong>
+                  <p>Actual cost: FINANCE_ANALYTICS.ACTUAL_COST<br>Budget: BUDGET_DB.OPS_Q1_2026<br>Refresh: 07:58 hôm nay</p>
+                </div>
+                <div class="approval-box">
+                  <strong>Định nghĩa sử dụng</strong>
+                  <p>Chi phí vận hành = lương + logistics + công cụ + overtime, theo glossary version 2.4.</p>
+                </div>
+                <div class="approval-box">
+                  <strong>Phụ lục tương tác</strong>
+                  <div class="table-box" style="margin-top:10px;">
+                    <table>
+                      <thead><tr><th>Nhóm chi phí</th><th>Budget</th><th>Actual</th><th>Delta</th></tr></thead>
+                      <tbody>
+                        <tr><td>Logistics</td><td>4.2 tỷ</td><td>4.7 tỷ</td><td>+11.9%</td></tr>
+                        <tr><td>Overtime</td><td>1.3 tỷ</td><td>1.56 tỷ</td><td>+20.0%</td></tr>
+                        <tr><td>Payroll</td><td>8.9 tỷ</td><td>8.95 tỷ</td><td>+0.6%</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="direction-notes">
+          <div class="mini-card">
+            <strong>Điểm mạnh</strong>
+            <ul>
+              <li>Biến “verified truth” thành cảm giác nhìn thấy được, không chỉ là badge nhỏ.</li>
+              <li>Rất hợp với acceptance yêu cầu export, audit, citation click và human-in-the-loop signature.</li>
+              <li>Cho Finance/HR cảm giác an tâm trước khi hành động hoặc gửi lên cấp trên.</li>
+            </ul>
+          </div>
+          <div class="mini-card">
+            <strong>Tradeoff vận hành</strong>
+            <p>Nếu dùng làm shell chính cho chat app, UI có thể hơi “trang trọng” và giảm cảm giác nhanh đối thoại. Tốt nhất là dùng như mode của các câu trả lời quan trọng hoặc export-ready state.</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="direction" data-group="chat">
+        <div class="direction-head">
+          <div class="direction-id"><span class="pill-num">4</span> Direction 4 • Analyst Stream</div>
+          <h3>Analyst Stream</h3>
+          <p>Power-user mode cho các phiên phân tích liên tiếp. Direction này dày dữ liệu hơn, làm query refinement và so sánh nhiều bước trở nên cực nhanh. Phù hợp với Tuấn và các analyst làm việc cả ngày trong AIAL.</p>
+          <div class="meta">
+            <div><strong>Best For</strong><span>Repeated analytical sessions, Finance, operations.</span></div>
+            <div><strong>Density</strong><span>Medium-high</span></div>
+            <div><strong>Trust Style</strong><span>Secondary but always visible</span></div>
+            <div><strong>Tradeoff</strong><span>Có thể nặng cho first-time user.</span></div>
+          </div>
+        </div>
+        <div class="mock">
+          <div class="canvas dense-app">
+            <div class="dense-hero">
+              <div class="hero-copy">
+                <div class="badge-row">
+                  <div class="badge primary">Finance Mode</div>
+                  <div class="badge cached">Snapshot 18 phút trước</div>
+                </div>
+                <h4>Một command floor cho các quyết định cần nhiều lát cắt.</h4>
+                <p>Direction này ưu tiên glance-ability cho người dùng lặp đi lặp lại: headline, KPI delta, command strip, table, chart, audit trạng thái đều ở ngay trước mắt.</p>
+              </div>
+              <div class="hero-stats">
+                <div class="hero-stat"><span>Variance vs Budget</span><strong>+6.8%</strong></div>
+                <div class="hero-stat"><span>Forecast Confidence</span><strong>88%</strong></div>
+                <div class="hero-stat"><span>Queries Today</span><strong>17</strong></div>
+              </div>
+            </div>
+
+            <div class="sticky-command">
+              <div>
+                <strong>Prompt đang chạy</strong>
+                <span>“Tách variance chi phí theo vùng và highlight phần vượt 10%”</span>
+              </div>
+              <div class="chip-row">
+                <div class="chip">Ctrl+K mở query macro</div>
+                <div class="chip">3 follow-ups saved</div>
+              </div>
+            </div>
+
+            <div class="data-floor">
+              <div class="table-box">
+                <div class="table-head">
+                  <strong>Kết quả hiện tại</strong>
+                  <span>7 hàng • sorted by delta descending</span>
+                </div>
+                <table>
+                  <thead><tr><th>Vùng</th><th>Budget</th><th>Actual</th><th>Variance</th><th>Signal</th></tr></thead>
+                  <tbody>
+                    <tr><td>South</td><td>7.8 tỷ</td><td>8.7 tỷ</td><td>+11.5%</td><td>Attention</td></tr>
+                    <tr><td>Central</td><td>3.5 tỷ</td><td>3.78 tỷ</td><td>+8.0%</td><td>Watch</td></tr>
+                    <tr><td>North</td><td>5.1 tỷ</td><td>4.98 tỷ</td><td>-2.4%</td><td>Healthy</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="rail">
+                <div class="rail-card">
+                  <strong>Variance visual</strong>
+                  <div class="bars">
+                    <div class="bar" style="height: 104px;"><span>South</span></div>
+                    <div class="bar" style="height: 74px;"><span>Central</span></div>
+                    <div class="bar" style="height: 54px;"><span>North</span></div>
+                  </div>
+                </div>
+                <div class="rail-card">
+                  <strong>Trust rail</strong>
+                  <p>Sources: 2 datasets<br>Glossary version: 2.4<br>Approval: not required<br>Masking: applied</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="direction-notes">
+          <div class="mini-card">
+            <strong>Khi nào dùng</strong>
+            <p>Nếu product roadmap xác định rõ power users quay lại hàng ngày và muốn AIAL thay thế một phần Power BI/ad-hoc Excel cho exploratory analysis.</p>
+          </div>
+          <div class="mini-card">
+            <strong>Khi nào không nên dùng làm default</strong>
+            <p>Nếu ưu tiên adoption rộng trong phase 1, direction này cần onboarding mạnh hơn để tránh gây cảm giác “tool khó”.</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="direction" data-group="admin trust">
+        <div class="direction-head">
+          <div class="direction-id"><span class="pill-num">5</span> Direction 5 • Approval Cockpit</div>
+          <h3>Approval Cockpit</h3>
+          <p>Direction cho Hùng, Nam và Lan: approval không phải form hành chính mà là một cockpit ra quyết định. Tất cả context, risk signal, provenance và response options đều hiện trong một nhịp scan ngắn.</p>
+          <div class="meta">
+            <div><strong>Best For</strong><span>Approval workflow, data steward, admin operations.</span></div>
+            <div><strong>Density</strong><span>Compact</span></div>
+            <div><strong>Trust Style</strong><span>Operational and forensic</span></div>
+            <div><strong>Tradeoff</strong><span>Không phù hợp làm default shell cho business chat.</span></div>
+          </div>
+        </div>
+        <div class="mock">
+          <div class="canvas admin-app">
+            <aside class="admin-aside">
+              <div class="logo"><div class="logo-mark">A</div> AIAL Admin</div>
+              <div class="workspace-card" style="background: rgba(255,255,255,0.06); color:#e8eaed;">
+                <strong>Approval Queue</strong>
+                <p style="color: rgba(232,234,237,0.72);">4 pending • 1 overdue • 12 resolved today</p>
+              </div>
+              <nav class="nav-list">
+                <div class="nav-item active">Phê duyệt</div>
+                <div class="nav-item">Audit Dashboard</div>
+                <div class="nav-item">Policy Decisions</div>
+                <div class="nav-item">System Health</div>
+              </nav>
+              <div class="mini-card" style="background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.08);">
+                <strong style="color:#fff;">SLA</strong>
+                <p style="color: rgba(232,234,237,0.72);">Approval tier-2 cần xử lý trong 4 giờ.</p>
+              </div>
+            </aside>
+
+            <div class="admin-main">
+              <div class="headline-row">
+                <div>
+                  <div class="badge-row">
+                    <div class="badge primary">Sensitive Tier 2</div>
+                    <div class="badge cached">Requested 23 phút trước</div>
+                  </div>
+                  <h4>Margin theo sản phẩm miền Nam Q2/2026</h4>
+                  <p style="margin:0; color:var(--muted); line-height:1.7;">Approval card kiểu briefing: ai hỏi, vì sao hỏi, dữ liệu nào sẽ bị chạm, rủi ro gì và quyết định kế tiếp là gì.</p>
+                </div>
+                <div class="action-row">
+                  <div class="button">Approve</div>
+                  <div class="button alt">Ask requester</div>
+                  <div class="button alt">Reject</div>
+                </div>
+              </div>
+
+              <div class="audit-grid">
+                <div class="approval-stream">
+                  <div class="approval-item">
+                    <strong>Requester</strong>
+                    <p>Nguyễn Minh • Finance Analyst • 6 approved requests / 0 rejected trong 30 ngày gần nhất.</p>
+                  </div>
+                  <div class="approval-item">
+                    <strong>Business justification</strong>
+                    <p>Cần chuẩn bị số liệu cho họp điều chỉnh giá với 3 nhà phân phối lớn vào 15:00 hôm nay.</p>
+                  </div>
+                  <div class="approval-item">
+                    <strong>Data scope and sensitivity</strong>
+                    <p>Margin theo SKU + channel tại miền Nam. Không chứa PII, nhưng có dữ liệu lợi nhuận cấp sản phẩm.</p>
+                  </div>
+                </div>
+
+                <div class="rail-card">
+                  <strong>Risk summary</strong>
+                  <p>Pattern bình thường theo vai trò.<br>Không có dấu hiệu lặp bất thường.<br>Scope đúng department Finance.</p>
+                  <div class="chip-row" style="margin-top:12px;">
+                    <div class="chip">ABAC pass</div>
+                    <div class="chip">Masking n/a</div>
+                    <div class="chip">Escalation not needed</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="two-col">
+                <div class="table-box">
+                  <div class="table-head">
+                    <strong>SQL explanation</strong>
+                    <span>Human-readable first</span>
+                  </div>
+                  <div style="padding:16px;">
+                    <p>Hệ thống sẽ lấy doanh thu thuần và giá vốn theo từng SKU trong Q2/2026, giới hạn ở các chi nhánh miền Nam mà requester có quyền xem. Kết quả sẽ nhóm theo sản phẩm và kênh bán.</p>
+                  </div>
+                </div>
+                <div class="rail-card">
+                  <strong>Audit preview</strong>
+                  <p>Approval decision sẽ ghi user, timestamp, justification, data scope, policy path và result delivery channel.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="direction-notes">
+          <div class="mini-card">
+            <strong>Điểm mạnh</strong>
+            <ul>
+              <li>Biến approval từ “bottleneck” thành “briefing moment”.</li>
+              <li>Đúng với pain point Hùng: hiểu đủ context trong dưới 30 giây.</li>
+              <li>Làm enterprise trust hữu hình mà không khiến UI trở nên pháp chế khô cứng.</li>
+            </ul>
+          </div>
+          <div class="mini-card">
+            <strong>Vai trò trong hệ thống tổng thể</strong>
+            <p>Nên là ngôn ngữ chính của Admin/Approval portal, sau đó mượn card pattern này về chat app khi user bị chặn bởi approval gate.</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="direction" data-group="chat admin">
+        <div class="direction-head">
+          <div class="direction-id"><span class="pill-num">6</span> Direction 6 • Ambient Briefing</div>
+          <h3>Ambient Briefing</h3>
+          <p>Direction nhẹ nhất về hành vi: câu trả lời như một “thẻ briefing sống” luôn sẵn sàng để đọc lướt, ghim, chia sẻ hoặc quay lại sau. Phù hợp với người dùng multitasking và các truy vấn lặp theo nhịp công việc.</p>
+          <div class="meta">
+            <div><strong>Best For</strong><span>Managers, recurring reports, time-aware suggestions.</span></div>
+            <div><strong>Density</strong><span>Medium-low</span></div>
+            <div><strong>Trust Style</strong><span>Compact and ambient</span></div>
+            <div><strong>Tradeoff</strong><span>Ít cảm giác “sâu” với exploratory analysis.</span></div>
+          </div>
+        </div>
+        <div class="mock">
+          <div class="canvas">
+            <div class="toolbar">
+              <div>
+                <strong>Briefing feed của bạn</strong>
+                <span>Cuối tháng • Hôm nay có 3 gợi ý liên quan đến báo cáo tuần</span>
+              </div>
+              <div class="badge-row">
+                <div class="badge primary">Time-aware</div>
+                <div class="badge live">3 sources healthy</div>
+              </div>
+            </div>
+            <div style="padding: 22px; display:grid; gap:16px;">
+              <div class="approval-box">
+                <strong>Báo cáo tuần trước đã sẵn sàng</strong>
+                <p>Doanh thu miền Bắc tăng 4.2%. Hai chi nhánh giảm cần chú ý là Hải Phòng và Quảng Ninh. Bạn có muốn mở breakdown theo sales rep không?</p>
+                <div class="action-row" style="margin-top:12px;">
+                  <div class="button">Mở báo cáo</div>
+                  <div class="button alt">Gửi manager</div>
+                  <div class="button alt">Nhắc lại lúc 4PM</div>
+                </div>
+              </div>
+
+              <div class="glance-grid">
+                <div class="reply-card">
+                  <div class="reply-title">
+                    <strong>Tóm tắt nhanh theo thời điểm</strong>
+                    <div class="chip-row">
+                      <div class="chip">3 phút để hành động</div>
+                    </div>
+                  </div>
+                  <div class="tl-dr">UI ưu tiên nhịp làm việc thật: trước họp sáng, cuối tháng, cuối ngày. Không bắt người dùng “vào app để khám phá”, mà kéo insight đến sát lúc họ cần quyết định.</div>
+                </div>
+                <div class="rail-card">
+                  <strong>Nhịp gợi ý</strong>
+                  <p>08:30: báo cáo sáng<br>14:00: approval follow-up<br>16:30: EOD variance check</p>
+                </div>
+              </div>
+
+              <div class="two-col">
+                <div class="doc-box">
+                  <strong>Saved cards</strong>
+                  <p>“Weekly revenue north”<br>“Monthly ops variance”<br>“HR turnover watchlist”</p>
+                </div>
+                <div class="doc-box">
+                  <strong>Trust compact</strong>
+                  <p>Source badge, freshness và confidence nằm ngay trên thẻ, không mở modal.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="direction-notes">
+          <div class="mini-card">
+            <strong>Điểm cộng</strong>
+            <p>Rất mạnh cho retention và “glance-ability”. Phù hợp với insight trong UX doc rằng user dùng AIAL trong khi làm việc khác, không phải thay thế toàn bộ công việc khác.</p>
+          </div>
+          <div class="mini-card">
+            <strong>Giới hạn</strong>
+            <p>Nếu dùng làm mô hình chính từ đầu, có thể thiếu độ rõ cho các query phức tạp đòi hỏi progress narration và provenance đầy đủ.</p>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="comparison">
+      <div class="section-title">
+        <h2>So sánh nhanh</h2>
+        <p>Nếu phải chốt nhanh cho MVP, hãy bắt đầu từ direction nào tối ưu core loop nhất, sau đó mượn module từ các direction chuyên biệt cho những tình huống đòi hỏi trust hoặc approval cao hơn.</p>
+      </div>
+      <div class="compare-grid">
+        <div class="compare-card">
+          <h3>Đề xuất chốt</h3>
+          <p><strong>D2 Command Canvas</strong> làm xương sống cho chat app.</p>
+          <ul>
+            <li>Lý do: nhanh hiểu, balance tốt, hợp core loop.</li>
+            <li>Mượn từ D3: briefing-like trust block cho các câu trả lời quan trọng.</li>
+            <li>Mượn từ D5: approval briefing card khi query chạm sensitive tier.</li>
+          </ul>
+        </div>
+        <div class="compare-card">
+          <h3>Nếu ưu tiên trust tuyệt đối</h3>
+          <p><strong>D3 Verified Ledger</strong> cho các câu trả lời cấp báo cáo hoặc trước export.</p>
+          <ul>
+            <li>Rất mạnh với Tuấn, Hoa, manager và audit-sensitive use cases.</li>
+            <li>Nên dùng như answer mode, không nhất thiết là shell mặc định.</li>
+          </ul>
+        </div>
+        <div class="compare-card">
+          <h3>Nếu approval là blocker lớn nhất</h3>
+          <p><strong>D5 Approval Cockpit</strong> nên dẫn dắt admin portal từ phase 2.</p>
+          <ul>
+            <li>Giải quyết pain point rõ nhất cho Hùng/Nam/Lan.</li>
+            <li>Dễ gắn với FR-A7, FR-A8 và acceptance về audit/approval SLA.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="footer-note">
+      <h3>Recommended combination</h3>
+      <p><strong>Base shell:</strong> D2 Command Canvas.</p>
+      <p><strong>Trust modules:</strong> D3 Verified Ledger cho “verified truth” và export-ready answers.</p>
+      <p><strong>Approval/admin modules:</strong> D5 Approval Cockpit cho approval queue, policy context và audit-first views.</p>
+      <p><strong>Retention layer:</strong> D6 Ambient Briefing cho saved cards, time-aware prompts và repeat workflows.</p>
+    </section>
+  </main>
+
+  <script>
+    const filters = document.querySelectorAll('.filter');
+    const directions = document.querySelectorAll('.direction');
+
+    filters.forEach((button) => {
+      button.addEventListener('click', () => {
+        filters.forEach((item) => item.classList.remove('active'));
+        button.classList.add('active');
+        const filter = button.dataset.filter;
+
+        directions.forEach((card) => {
+          if (filter === 'all') {
+            card.classList.remove('hidden');
+            return;
+          }
+          const groups = card.dataset.group.split(' ');
+          card.classList.toggle('hidden', !groups.includes(filter));
+        });
+      });
+    });
+  </script>
+</body>
+</html>
