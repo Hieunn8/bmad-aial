@@ -1,6 +1,6 @@
 # Story 1.4: FastAPI Service Skeleton + OpenTelemetry
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -18,28 +18,31 @@ so that Epic 1 can progress safely with verifiable outcomes.
 
 ## Tasks / Subtasks
 
-- [ ] Chốt phạm vi và dependency của story từ epics/architecture.
-- [ ] Thiết kế thay đổi ở mức interface + data contract cho story này.
-- [ ] Triển khai theo TDD (RED → GREEN) với test cases map trực tiếp AC.
-- [ ] Bổ sung observability/security checks theo vùng tác động.
-- [ ] Tổng hợp evidence để chuyển trạng thái sang review/done.
+- [x] Chốt phạm vi và dependency của story từ epics/architecture.
+- [x] Thiết kế thay đổi ở mức interface + data contract cho story này.
+- [x] Triển khai theo TDD (RED → GREEN) với test cases map trực tiếp AC.
+- [x] Bổ sung observability/security checks theo vùng tác động.
+- [x] Tổng hợp evidence để chuyển trạng thái sang review/done.
 
 ## Dev Notes
 
 - Epic context: **Epic 1 — Governed Infrastructure & Walking Skeleton**.
 - Canonical source of truth: `_bmad-output/planning-artifacts/epics.md`.
 - Keep implementation aligned with architecture/PRD constraints; avoid speculative scope.
+- Orchestration service binds to port 8090 on host — matches Kong upstream from Story 1.3.
 
 ### Technical Requirements
 
 - Reuse existing patterns in the repo before introducing new abstractions.
 - Validate boundary inputs and handle errors explicitly.
 - Preserve naming and folder conventions to keep automation stable.
+- `setup_tracing(service_name)` must be called as first line in service `main.py` per architecture mandate.
 
 ### Architecture Compliance
 
 - Confirm alignment with `_bmad-output/planning-artifacts/architecture.md` before coding.
 - Preserve API/data contracts unless the story explicitly requires a controlled change.
+- Embedding client contract locked at `BGE_MODEL_NAME="BAAI/bge-m3"`, `DIMS=1024` per ADR-003.
 
 ### File Structure Requirements
 
@@ -62,10 +65,39 @@ so that Epic 1 can progress safely with verifiable outcomes.
 
 ### Agent Model Used
 
-cx/gpt-5.3-codex
+claude-opus-4-6
 
 ### Debug Log References
 
+- `PYTHONPATH="shared/src;services;services/orchestration" python -m pytest tests/ -v` → 76 passed, 0 failed
+- Health endpoint: `GET /health` → 200 `{"status": "healthy"}`
+- Readiness endpoint: `GET /readiness` → 200 when postgres/redis/cerbos reachable, 503 when any down
+- OpenTelemetry: TracerProvider created with service.name resource, spans with trace_id
+- Embedding stub: `BGE_MODEL_NAME="BAAI/bge-m3"`, `DIMS=1024`, raises NotImplementedError
+
 ### Completion Notes List
 
+- Created shared telemetry module: `shared/src/aial_shared/telemetry/tracer.py` — `setup_tracing(service_name)` configures TracerProvider with service.name resource, OTLP exporter (when endpoint set), and optional console export. Called as first line in orchestration `main.py`.
+- Created orchestration service skeleton: `services/orchestration/main.py` — FastAPI app with OpenTelemetry FastAPIInstrumentor, health router. Port 8090 matches Kong upstream.
+- Created health/readiness endpoints: `GET /health` returns `{"status": "healthy"}` (HTTP 200). `GET /readiness` checks TCP connectivity to PostgreSQL (5432), Redis (6379), Cerbos (3592) — returns 200 with all checks or 503 with per-dep status.
+- Created embedding client stub: `services/embedding/client.py` — `BGE_MODEL_NAME="BAAI/bge-m3"`, `DIMS=1024`. Immutable `EmbeddingResult` dataclass. `embed()` and `embed_batch()` raise NotImplementedError (Epic 2A implementation).
+- 76 tests total — 6 health/readiness, 4 tracer, 9 embedding, 57 existing — all pass.
+
 ### File List
+
+- shared/src/aial_shared/telemetry/__init__.py
+- shared/src/aial_shared/telemetry/tracer.py
+- services/orchestration/__init__.py
+- services/orchestration/pyproject.toml
+- services/orchestration/main.py
+- services/orchestration/routes/__init__.py
+- services/orchestration/routes/health.py
+- services/embedding/__init__.py
+- services/embedding/client.py
+- tests/test_orchestration_health.py
+- tests/test_telemetry_tracer.py
+- tests/test_embedding_client.py
+
+### Change Log
+
+- 2026-04-29: Implemented Story 1.4 — FastAPI orchestration service skeleton with health/readiness endpoints, OpenTelemetry instrumentation, shared telemetry setup_tracing module, and embedding client stub (bge-m3/1024).

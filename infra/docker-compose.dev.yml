@@ -2,13 +2,11 @@ services:
   vault:
     image: hashicorp/vault:1.16
     container_name: aial-vault-dev
-    ports:
-      - "8200:8200"
+    ports: ["8200:8200"]
     environment:
       VAULT_DEV_ROOT_TOKEN_ID: root
       VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
-    cap_add:
-      - IPC_LOCK
+    cap_add: ["IPC_LOCK"]
     command: server -dev
     healthcheck:
       test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
@@ -16,21 +14,99 @@ services:
       timeout: 3s
       retries: 20
 
-  app:
-    image: python:3.12-slim
-    container_name: aial-app
-    working_dir: /workspace
-    volumes:
-      - ../services:/workspace/services
+  postgres:
+    image: postgres:16
+    container_name: aial-postgres
     environment:
-      PYTHONPATH: /workspace/services
-      AIAL_KONG_ADMIN_TOKEN: ${AIAL_KONG_ADMIN_TOKEN}
-      AIAL_KEYCLOAK_CLIENT_SECRET: ${AIAL_KEYCLOAK_CLIENT_SECRET}
-      AIAL_ORACLE_USERNAME: ${AIAL_ORACLE_USERNAME}
-      AIAL_ORACLE_PASSWORD: ${AIAL_ORACLE_PASSWORD}
-      AIAL_ORACLE_DSN: ${AIAL_ORACLE_DSN}
+      POSTGRES_USER: aial
+      POSTGRES_PASSWORD: aial
+      POSTGRES_DB: aial
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aial"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: aial-redis
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  weaviate:
+    image: semitechnologies/weaviate:1.26.5
+    container_name: aial-weaviate
+    ports: ["8081:8080"]
+    environment:
+      QUERY_DEFAULTS_LIMIT: "25"
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      DEFAULT_VECTORIZER_MODULE: "none"
+      ENABLE_MODULES: ""
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/v1/.well-known/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    container_name: aial-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      # Dev-only admin credentials — production uses Vault-injected values
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    ports: ["8080:8080"]
     depends_on:
       vault:
         condition: service_healthy
-    command: ["python", "-m", "app.main"]
-    profiles: ["needs-app-image"]
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  cerbos:
+    image: ghcr.io/cerbos/cerbos:0.38.0
+    container_name: aial-cerbos
+    command: ["server", "--config=/config/conf.yaml"]
+    volumes:
+      - ./cerbos:/config:ro
+    ports: ["3592:3592"]
+    healthcheck:
+      test: ["CMD", "sh", "-c", "exec 3<>/dev/tcp/127.0.0.1/3592"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  kong:
+    image: kong:3.7
+    container_name: aial-kong
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /etc/kong/kong.yml
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+    volumes:
+      - ./kong/kong.yml:/etc/kong/kong.yml:ro
+    ports: ["8000:8000", "8001:8001"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      cerbos:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20

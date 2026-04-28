@@ -1,0 +1,23 @@
+---
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  version: default
+  resource: api:chat
+  rules:
+    - actions: ["query"]
+      effect: EFFECT_ALLOW
+      roles: ["admin", "user"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: "P.attr.department != ''"
+              - expr: "P.attr.clearance != ''"
+
+    - actions: ["query"]
+      effect: EFFECT_DENY
+      roles: ["viewer"]
+
+    - actions: ["admin"]
+      effect: EFFECT_ALLOW
+      roles: ["admin"]

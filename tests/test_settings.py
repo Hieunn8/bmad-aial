@@ -1,11 +1,13 @@
 import os
 import subprocess
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from app.settings import Settings
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 REQUIRED_ENV = {
     "AIAL_KONG_ADMIN_TOKEN": "dev-kong-token",
@@ -43,11 +45,11 @@ def test_runtime_entrypoint_fails_fast_when_secret_missing() -> None:
         env.pop(key, None)
 
     env["AIAL_KONG_ADMIN_TOKEN"] = "dev-kong-token"
-    env["PYTHONPATH"] = "D:/WORKING/AIAL/services"
+    env["PYTHONPATH"] = str(PROJECT_ROOT / "services")
 
     result = subprocess.run(
         ["python", "-m", "app.main"],
-        cwd="D:/WORKING/AIAL",
+        cwd=str(PROJECT_ROOT),
         env=env,
         capture_output=True,
         text=True,

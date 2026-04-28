@@ -1,0 +1,31 @@
+[project]
+name = "aial"
+version = "0.1.0"
+description = "Enterprise AI Data Assistant"
+requires-python = ">=3.12"
+
+[tool.uv.workspace]
+members = ["services/*", "shared"]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+    "pre-commit>=3.8",
+    "httpx>=0.27",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests", "services", "shared"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["aial_shared"]

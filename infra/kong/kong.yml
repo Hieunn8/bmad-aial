@@ -1,0 +1,51 @@
+_format_version: "3.0"
+
+services:
+  - name: orchestration-api
+    # Story 1.4 will bind FastAPI to port 8090 on the host
+    url: http://host.docker.internal:8090
+    routes:
+      - name: chat-query
+        paths:
+          - /v1/chat/query
+        methods:
+          - POST
+        strip_path: false
+      - name: health
+        paths:
+          - /v1/health
+        methods:
+          - GET
+        strip_path: false
+
+plugins:
+  - name: jwt
+    config:
+      uri_param_names:
+        - jwt
+      header_names:
+        - Authorization
+      claims_to_verify:
+        - exp
+      key_claim_name: iss
+      run_on_preflight: true
+    route: chat-query
+
+  - name: rate-limiting
+    config:
+      minute: 10
+      hour: 100
+      day: 100
+      policy: local
+      fault_tolerant: true
+      hide_client_headers: false
+      limit_by: consumer
+    route: chat-query
+
+# __KONG_JWT_CONSUMERS__ — replaced at boot by infra/scripts/configure-kong-jwt.sh
+consumers:
+  - username: aial-service
+    jwt_secrets:
+      - key: http://localhost:8080/realms/aial
+        algorithm: RS256
+        rsa_public_key: "__KEYCLOAK_RSA_PUBLIC_KEY__"

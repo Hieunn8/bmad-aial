@@ -1,6 +1,6 @@
 # Story 1.2: Compose Infrastructure Stack
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -18,11 +18,11 @@ so that Epic 1 can progress safely with verifiable outcomes.
 
 ## Tasks / Subtasks
 
-- [ ] Chốt phạm vi và dependency của story từ epics/architecture.
-- [ ] Thiết kế thay đổi ở mức interface + data contract cho story này.
-- [ ] Triển khai theo TDD (RED → GREEN) với test cases map trực tiếp AC.
-- [ ] Bổ sung observability/security checks theo vùng tác động.
-- [ ] Tổng hợp evidence để chuyển trạng thái sang review/done.
+- [x] Chốt phạm vi và dependency của story từ epics/architecture.
+- [x] Thiết kế thay đổi ở mức interface + data contract cho story này.
+- [x] Triển khai theo TDD (RED → GREEN) với test cases map trực tiếp AC.
+- [x] Bổ sung observability/security checks theo vùng tác động.
+- [x] Tổng hợp evidence để chuyển trạng thái sang review/done.
 
 ## Dev Notes
 
@@ -66,6 +66,29 @@ cx/gpt-5.3-codex
 
 ### Debug Log References
 
+- `docker compose -f D:/WORKING/AIAL/infra/docker-compose.dev.yml config` render thành công toàn bộ 7 services
+- `PYTHONPATH=D:/WORKING/AIAL/infra python -m py_compile D:/WORKING/AIAL/infra/scripts/init-weaviate-schema.py D:/WORKING/AIAL/infra/weaviate/schema.py` pass
+
 ### Completion Notes List
 
+- Implemented full local compose infrastructure stack with 7 services: PostgreSQL, Redis, Weaviate, Keycloak, Kong, Cerbos, Vault.
+- Added healthchecks and dependency ordering for reproducible startup behavior.
+- Added automated realm import via `infra/keycloak/realm-export.json`.
+- Added schema ownership contract via `infra/weaviate/schema.py` and idempotent initializer `infra/scripts/init-weaviate-schema.py`.
+- Added bootstrap scripts: `infra/scripts/wait-for-services.sh` and `infra/scripts/seed-secrets.sh`.
+- Kept scope constrained to Story 1.2 infra compose baseline per epic definition.
+
 ### File List
+
+- infra/docker-compose.dev.yml
+- infra/cerbos/conf.yaml
+- infra/keycloak/realm-export.json
+- infra/kong/kong.yml
+- infra/weaviate/schema.py
+- infra/scripts/wait-for-services.sh
+- infra/scripts/init-weaviate-schema.py
+- infra/scripts/seed-secrets.sh
+
+### Change Log
+
+- 2026-04-28: Implemented Story 1.2 compose infrastructure stack baseline and bootstrap scripts.
