@@ -43,7 +43,7 @@ story_location: "{project-root}/_bmad-output/implementation-artifacts"
 
 development_status:
   epic-1: backlog
-  1-1-monorepo-scaffold-plus-secrets-baseline: ready-for-dev
+  1-1-monorepo-scaffold-plus-secrets-baseline: done
   1-2-compose-infrastructure-stack: ready-for-dev
   1-3-auth-layer-sso-login-plus-kong-gateway-plus-cerbos-authorization: ready-for-dev
   1-4-fastapi-service-skeleton-plus-opentelemetry: ready-for-dev

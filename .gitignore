@@ -10,6 +10,8 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.vault-token
+.env.*.local
 
 # OS
 .DS_Store
@@ -19,3 +21,6 @@ Thumbs.db
 dist/
 build/
 *.log
+__pycache__/
+*.py[cod]
+.pytest_cache/

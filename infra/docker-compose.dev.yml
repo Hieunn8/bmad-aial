@@ -1,0 +1,36 @@
+services:
+  vault:
+    image: hashicorp/vault:1.16
+    container_name: aial-vault-dev
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: root
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    cap_add:
+      - IPC_LOCK
+    command: server -dev
+    healthcheck:
+      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    image: python:3.12-slim
+    container_name: aial-app
+    working_dir: /workspace
+    volumes:
+      - ../services:/workspace/services
+    environment:
+      PYTHONPATH: /workspace/services
+      AIAL_KONG_ADMIN_TOKEN: ${AIAL_KONG_ADMIN_TOKEN}
+      AIAL_KEYCLOAK_CLIENT_SECRET: ${AIAL_KEYCLOAK_CLIENT_SECRET}
+      AIAL_ORACLE_USERNAME: ${AIAL_ORACLE_USERNAME}
+      AIAL_ORACLE_PASSWORD: ${AIAL_ORACLE_PASSWORD}
+      AIAL_ORACLE_DSN: ${AIAL_ORACLE_DSN}
+    depends_on:
+      vault:
+        condition: service_healthy
+    command: ["python", "-m", "app.main"]
+    profiles: ["needs-app-image"]
