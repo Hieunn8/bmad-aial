@@ -1,4 +1,4 @@
-# Story 1.1b: Secrets Baseline
+# Story 1.1: Monorepo Scaffold + Secrets Baseline
 
 Status: ready-for-dev
 

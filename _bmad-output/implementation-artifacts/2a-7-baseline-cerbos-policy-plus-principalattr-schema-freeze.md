@@ -1,4 +1,4 @@
-# Story 2A.7: Baseline Cerbos Principal Mapping
+# Story 2A.7: Baseline Cerbos Policy + principal.attr Schema Freeze
 
 Status: ready-for-dev
 

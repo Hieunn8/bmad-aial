@@ -1,4 +1,4 @@
-# Story 1.9: Oracle VPD Smoke Test
+# Story 1.8: Oracle VPD Smoke Test
 
 Status: ready-for-dev
 

@@ -1,4 +1,4 @@
-# Story 6.0: Cross-domain Decomposition Spike
+# Story 6.0: Cross-domain Decomposition Spike (FR-S5 Research)
 
 Status: ready-for-dev
 

@@ -1,0 +1,115 @@
+# generated: 2026-04-28T15:26:38+07:00
+# last_updated: 2026-04-28T15:26:38+07:00
+# project: AIAL
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: {project-root}/_bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: "2026-04-28T15:26:38+07:00"
+last_updated: "2026-04-28T15:45:00+07:00"
+project: "AIAL"
+project_key: "NOKEY"
+tracking_system: "file-system"
+story_location: "{project-root}/_bmad-output/implementation-artifacts"
+
+development_status:
+  epic-1: backlog
+  1-1-monorepo-scaffold-plus-secrets-baseline: ready-for-dev
+  1-2-compose-infrastructure-stack: ready-for-dev
+  1-3-auth-layer-sso-login-plus-kong-gateway-plus-cerbos-authorization: ready-for-dev
+  1-4-fastapi-service-skeleton-plus-opentelemetry: ready-for-dev
+  1-5-langgraph-stub-graph-plus-shared-state-contract: ready-for-dev
+  1-6-observability-minimal-stack: ready-for-dev
+  1-7-frontend-shell-plus-design-tokens-plus-accessibility-foundation: ready-for-dev
+  1-8-oracle-vpd-smoke-test: ready-for-dev
+  1-9-e2e-walking-skeleton-gate: ready-for-dev
+  epic-1-retrospective: optional
+  epic-2a: backlog
+  2a-0-weaviate-schema-bootstrap: ready-for-dev
+  2a-1-query-api-endpoint-plus-input-validation: ready-for-dev
+  2a-2-semantic-layer-bootstrap-plus-business-glossary-api: ready-for-dev
+  2a-3-sql-generation-guardrails-plus-query-governor: ready-for-dev
+  2a-4-oracle-execution-with-identity-passthrough-plus-vpd-enforcement: ready-for-dev
+  2a-5-streaming-chat-ui-plus-sse-transport: ready-for-dev
+  2a-6-short-term-session-memory-plus-per-turn-security: ready-for-dev
+  2a-7-baseline-cerbos-policy-plus-principalattr-schema-freeze: ready-for-dev
+  2a-8-query-lifecycle-audit-logging: ready-for-dev
+  2a-9-onboarding-shell-plus-first-query-scaffold: ready-for-dev
+  epic-2a-retrospective: optional
+  epic-2b: backlog
+  2b-1-full-sql-explanation: ready-for-dev
+  2b-2-citation-badge-component: ready-for-dev
+  2b-3-provenance-drawer-component: ready-for-dev
+  2b-4-chart-reveal-plus-data-freshness-signals: ready-for-dev
+  2b-5-audit-read-model-plus-compliance-dashboard: ready-for-dev
+  epic-2b-retrospective: optional
+  epic-3: backlog
+  3-1-document-ingestion-pipeline: ready-for-dev
+  3-2-pre-retrieval-policy-filtering: ready-for-dev
+  3-3-hybrid-answer-composition-with-citations: ready-for-dev
+  3-4-document-access-control: ready-for-dev
+  3-5-admin-document-management: ready-for-dev
+  epic-3-retrospective: optional
+  epic-4: backlog
+  4-1-full-abac-extension: ready-for-dev
+  4-2-column-level-security: ready-for-dev
+  4-3-pii-masking-with-presidio: ready-for-dev
+  4-4-query-approval-workflow: ready-for-dev
+  4-5-trust-and-permission-ui-components: ready-for-dev
+  epic-4-retrospective: optional
+  epic-5a: backlog
+  5a-1-user-and-role-management: ready-for-dev
+  5a-2-data-source-configuration: ready-for-dev
+  5a-3-audit-dashboard: ready-for-dev
+  5a-4-system-health-dashboard: ready-for-dev
+  epic-5a-retrospective: optional
+  epic-5b: backlog
+  5b-1-semantic-layer-and-kpi-management-ui: ready-for-dev
+  5b-2-medium-term-memory: ready-for-dev
+  5b-3-long-term-preference-memory: ready-for-dev
+  5b-4-memory-isolation-plus-selective-injection: ready-for-dev
+  5b-5-conversation-history-search: ready-for-dev
+  epic-5b-retrospective: optional
+  epic-6: backlog
+  6-0-cross-domain-decomposition-spike: ready-for-dev
+  6-1-export-results: ready-for-dev
+  6-2-scheduled-reports: ready-for-dev
+  6-3-semantic-result-cache: ready-for-dev
+  6-4-cross-domain-query-execution: ready-for-dev
+  epic-6-retrospective: optional
+  epic-7: backlog
+  7-1-time-series-forecasting: ready-for-dev
+  7-2-anomaly-detection-and-alerts: ready-for-dev
+  7-3-trend-analysis: ready-for-dev
+  7-4-drill-down-analytics-plus-result-explainability: ready-for-dev
+  7-5-async-forecast-jobs: ready-for-dev
+  epic-7-retrospective: optional

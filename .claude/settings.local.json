@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(date *)",
+      "Bash(mv \"D:/WORKING/AIAL/_bmad-output/implementation-artifacts/1-1b-secrets-baseline.md\" \"D:/WORKING/AIAL/_bmad-output/implementation-artifacts/1-1-monorepo-scaffold-plus-secrets-baseline.md\")",
+      "Bash(mv \"D:/WORKING/AIAL/_bmad-output/implementation-artifacts/1-9-oracle-vpd-smoke-test.md\" \"D:/WORKING/AIAL/_bmad-output/implementation-artifacts/1-8-oracle-vpd-smoke-test.md\")",
+      "Bash(mv \"D:/WORKING/AIAL/_bmad-output/implementation-artifacts/2a-7-cerbos-principal-attr-baseline.md\" \"D:/WORKING/AIAL/_bmad-output/implementation-artifacts/2a-7-baseline-cerbos-policy-plus-principalattr-schema-freeze.md\")",
+      "Bash(python *)"
+    ]
+  }
+}
