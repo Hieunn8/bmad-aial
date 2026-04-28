@@ -49,7 +49,7 @@ This document provides the complete epic and story breakdown for AIAL, decomposi
 
 **Module 4 — Security & Access Control (CRITICAL):**
 - FR-A1: LDAP/AD Integration → SSO qua Keycloak + LDAP; JWT hợp lệ <1s
-- FR-A2: RBAC + ABAC Policy Engine → enforce đúng role + attributes (department, region, clearance, purpose)
+- FR-A2: RBAC + ABAC Policy Engine → enforce đúng role + attributes (department, region, clearance)
 - FR-A3: Row-level Security (Oracle VPD) → LLM không thể bypass RLS dù SQL bị inject
 - FR-A4: Column-level Security → cột nhạy cảm trả về `***` hoặc bị loại bỏ
 - FR-A5: Data Masking & PII Redaction → Presidio scan kết quả trước khi trả về; CMND/họ tên/email không xuất hiện raw
@@ -725,7 +725,7 @@ So that unauthorized access is blocked at the gateway before reaching any servic
 
 **Given** successful SSO authentication
 **When** the JWT is decoded
-**Then** it contains ALL of: `sub`, `email`, `department`, `roles[]`, `clearance_level` — each field non-null and non-empty; token expiry is 8h with refresh rotation enabled
+**Then** it contains ALL of: `sub`, `email`, `department`, `roles[]`, `clearance` — each field non-null and non-empty; token expiry is 8h with refresh rotation enabled
 
 **Given** a request to `POST /v1/chat/query` without a Bearer token
 **When** Kong processes the request
@@ -1007,7 +1007,7 @@ So that I can only see data I am authorized to access, even if the SQL was gener
 **When** the connection is returned to the pool
 **Then** `_clear_oracle_context(conn)` is called in a `finally` block (not `else`) BEFORE the connection is released; this guarantees cleanup even if an exception occurs mid-query
 
-**And** connection pool uses `homogeneous=False` (heterogeneous pool) with `homogeneous=False` so each request sets its own proxy context; service account used is per-service read-only (not shared DBA); `principal.attr` schema (`department`, `clearance_level`) must be documented from Story 2A.7 before this story implements Oracle context mapping
+**And** connection pool uses `homogeneous=False` (heterogeneous pool) with `homogeneous=False` so each request sets its own proxy context; service account used is per-service read-only (not shared DBA); `principal.attr` schema (`department`, `clearance`) must be documented from Story 2A.7 before this story implements Oracle context mapping
 
 ---
 
@@ -1077,7 +1077,7 @@ So that Epic 4 never needs to backfill JWT claim mapping.
 
 **Given** a user authenticates and JWT is decoded
 **When** the principal context is constructed for Cerbos
-**Then** `principal.attr` always contains: `department` (string), `clearance_level` (int), `purpose` (string) — all non-null, mapped from Keycloak JWT claims; fields populated even if Epic 2A uses only role-based checks
+**Then** `principal.attr` always contains: `department` (string), `clearance` (string) — both non-null, mapped from Keycloak JWT claims; fields populated even if Epic 2A uses only role-based checks
 
 **Given** Epic 2A baseline policy is evaluated
 **When** `roles=["analyst"]` and `department="sales"` user queries Sales data
@@ -1085,7 +1085,7 @@ So that Epic 4 never needs to backfill JWT claim mapping.
 
 **Given** this story is marked complete and Epic 4 begins
 **When** Epic 4 extends Cerbos policies
-**Then** Epic 4 ADDS new attributes (`region`, `approval_authority`) but does NOT rename, remove, or re-type `department`, `clearance_level`, or `purpose`; an ADR documents this contract freeze before Epic 4 begins
+**Then** Epic 4 ADDS new attributes (`region`, `approval_authority`) but does NOT rename, remove, or re-type `department` or `clearance`; an ADR documents this contract freeze before Epic 4 begins
 
 **And** policy files in `infra/cerbos/policies/` with YAML unit test fixtures in `tests/`; `cerbos compile ./policies` runs in CI; test coverage: ALLOW for correct dept, DENY for wrong dept, DENY without required role
 
@@ -1371,7 +1371,7 @@ So that no document can be accessed without explicit authorization or after it h
 **When** validation runs
 **Then** HTTP 400 with specific field-level errors for each missing field (`department`, `classification`, `effective_date`, `source_trust`); partial uploads are rolled back; no Celery task is enqueued
 
-**Given** a document has `classification="CONFIDENTIAL"` and the user's `clearance_level < 2`
+**Given** a document has `classification="CONFIDENTIAL"` and the user's `clearance < 2`
 **When** retrieval runs
 **Then** that document's chunks are excluded from vector search via Weaviate classification filter; the exclusion is transparent to the query (system still returns available results from permitted sources); exclusion is logged in audit
 
@@ -1429,9 +1429,9 @@ So that access decisions reflect complete organizational context.
 
 **Acceptance Criteria:**
 
-**Given** Epic 2A has frozen `principal.attr` with `department`, `clearance_level`, `purpose`
+**Given** Epic 2A has frozen `principal.attr` with `department`, `clearance`
 **When** Epic 4 extends Cerbos policies
-**Then** `region` and `approval_authority` are ADDED; `department`, `clearance_level`, `purpose` are NOT renamed, removed, or retyped; all Epic 2A policy unit tests continue passing without modification
+**Then** `region` and `approval_authority` are ADDED; `department` and `clearance` are NOT renamed, removed, or retyped; all Epic 2A policy unit tests continue passing without modification
 
 **Given** a Finance user in `region="north"` queries data tagged `region="south"`
 **When** Cerbos evaluates the attribute-based policy
@@ -1481,7 +1481,7 @@ So that I never accidentally access unauthorized data even in correctly-structur
 ### Story 4.3: PII Masking with Presidio (FR-A5)
 
 As a compliance officer,
-I want all query results scanned for PII before reaching users, with async processing for large result sets and purpose-based bypass for authorized HR staff,
+I want all query results scanned for PII before reaching users, with async processing for large result sets and clearance-threshold-based bypass for authorized HR staff,
 So that PDPA compliance is maintained without degrading performance.
 
 **Acceptance Criteria:**
@@ -1494,9 +1494,9 @@ So that PDPA compliance is maintained without degrading performance.
 **When** Presidio runs
 **Then** scan executes as async Celery job; client receives `{ "status": "pending", "scan_id": "<uuid>" }` immediately; polls `GET /v1/scan/{scan_id}/status` until complete; result delivered when scan done
 
-**Given** a user with `purpose="hr_management"` (set as JWT claim `purpose`) AND `clearance_level ≥ 3`
+**Given** a user with `clearance ≥ 3`
 **When** Presidio evaluates
-**Then** PII fields returned unmasked; if EITHER condition is missing (wrong purpose OR insufficient clearance) → PII is masked regardless; Cerbos validates the purpose+clearance combination before Presidio bypass is granted
+**Then** PII fields returned unmasked; if clearance is insufficient → PII is masked regardless; Cerbos validates the clearance threshold before Presidio bypass is granted
 
 **Given** Presidio scans any response
 **When** PII is detected and masked
@@ -1523,7 +1523,7 @@ So that I can access sensitive data through a governed, auditable process.
 **Then** the card shows exactly these 5 elements: (1) requester identity + department + recent query history, (2) business justification from query intent analysis, (3) data scope + sensitivity_tier + estimated row count, (4) anomaly risk signal (unusual time/volume pattern), (5) one-click escalation button; card renders completely in <500ms; all 5 elements verifiable by component test
 
 **Given** the SLA timer runs
-**When** Tier 2 query is not acted upon within 8 hours; Tier 3+ query within 1 business day (24 business hours)
+**When** query is not acted upon within 4 hours
 **Then** query transitions to `Expired`; BOTH analyst and approver receive expiry notification; `EXPIRED` does NOT auto-resubmit — analyst must explicitly resubmit; resubmit creates a NEW `QueryIntent` with new approval cycle (any param change = new approval)
 
 **Given** Hùng approves or rejects

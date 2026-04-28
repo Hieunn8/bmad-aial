@@ -18,7 +18,7 @@
 ## 2. Identity & Authorization
 
 - [ ] Integrate Keycloak with LDAP/AD
-- [ ] Define user attributes: `department`, `region`, `role`, `clearance`, `purpose`
+- [ ] Define user attributes: `department`, `region`, `role`, `clearance`
 - [ ] Choose policy engine: `Cerbos` or `OPA`
 - [ ] Define policy decision contract for app/tool/retrieval access
 - [ ] Enable DB-native row/column/cell enforcement where available

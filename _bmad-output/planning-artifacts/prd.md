@@ -279,7 +279,7 @@ Hệ thống này không phải chatbot hỏi đáp Oracle — đây là lớp t
 | ID | Requirement | Acceptance Criteria |
 |----|-------------|---------------------|
 | FR-A1 | LDAP/Active Directory Integration: đăng nhập SSO qua Keycloak + LDAP; user không cần tài khoản riêng | SSO hoạt động với LDAP/AD doanh nghiệp; JWT hợp lệ < 1s |
-| FR-A2 | RBAC + ABAC Policy Engine: phân quyền dựa trên role + attributes (department, region, clearance, purpose) | Baseline Phase 1 khóa `principal.attr` tối thiểu với `department` và `clearance`; Epic sau chỉ được mở rộng, không backfill JWT mapping; ABAC policy enforce đúng khi user có role nhưng sai region/department |
+| FR-A2 | RBAC + ABAC Policy Engine: phân quyền dựa trên role + attributes (department, region, clearance) | Baseline Phase 1 khóa `principal.attr` tối thiểu với `department` và `clearance`; Epic sau chỉ được mở rộng, không backfill JWT mapping; ABAC policy enforce đúng khi user có role nhưng sai region/department |
 | FR-A3 | Row-level Security (Oracle VPD): LLM không thể bypass RLS tại DB layer dù SQL bị inject | Test: SQL bypass attempt vẫn bị Oracle VPD chặn tại DB layer |
 | FR-A4 | Column-level Security: các cột nhạy cảm (lương, margin, PII) không trả về cho user không có quyền | Test: query trả về `***` hoặc loại bỏ cột thay vì error message chứa giá trị |
 | FR-A5 | Data Masking & PII Redaction: kết quả được scan qua Presidio trước khi trả về; PII bị mask theo policy | Test: CMND, họ tên, email không xuất hiện raw trong kết quả của user không có clearance |

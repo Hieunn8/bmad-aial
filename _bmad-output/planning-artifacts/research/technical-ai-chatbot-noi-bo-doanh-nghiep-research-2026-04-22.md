@@ -168,7 +168,7 @@ Layer 6: Audit Logging     → Immutable audit trail (PostgreSQL + event streami
 ```
 allow if {
   user.department == data.department
-  user.clearance_level >= data.sensitivity_level
+  user.clearance >= data.sensitivity_level
   time.now() within user.allowed_hours
   not data.requires_approval
 }
@@ -373,7 +373,7 @@ Client/UI
 - `POST /v1/forecast/run`: route dữ liệu tổng hợp sang analytics/forecast service; không expose raw table access cho client.
 
 **Contract requirements bắt buộc:**
-- Mọi request mang `user_id`, `department_id`, `roles`, `purpose`, `region`, `session_id`.
+- Mọi request mang `user_id`, `department_id`, `roles`, `region`, `session_id`.
 - Mọi tool/API call nội bộ mang `trace_id`, `policy_decision_id`, `data_scope`, `sensitivity_level`.
 - Response phải trả về `sources`, `data_domains`, `applied_policies`, `generated_at`, `confidence_note`.
 - Mọi API có side effect hoặc export phải hỗ trợ idempotency key.
@@ -804,7 +804,7 @@ Users / Systems
 - Chốt owner giữa app team, data team, security team.
 - Kiểm kê data sources Oracle, schema boundaries, role mapping, sensitivity classes.
 - Chọn semantic layer strategy: Cube/custom/dbt MetricFlow.
-- Chọn policy engine và chuẩn hóa attributes: `user`, `purpose`, `region`, `classification`.
+- Chọn policy engine và chuẩn hóa attributes: `user`, `region`, `classification`.
 - Chốt top 20-50 business questions và top 20 KPI priority.
 
 **Exit criteria:**
@@ -984,7 +984,7 @@ Doanh nghiệp nên triển khai bài toán này như một **nền tảng truy 
 
 **B. Security & Identity**
 - [ ] Tích hợp Keycloak với LDAP/AD
-- [ ] Định nghĩa user attributes: `department`, `region`, `role`, `clearance`, `purpose`
+- [ ] Định nghĩa user attributes: `department`, `region`, `role`, `clearance`
 - [ ] Chọn policy engine: Cerbos hoặc OPA
 - [ ] Bật DB-native enforcement cho row/column/cell-level controls nếu có
 - [ ] Chặn shared privileged account cho AI query path
