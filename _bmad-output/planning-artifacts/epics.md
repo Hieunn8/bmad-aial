@@ -1403,3 +1403,604 @@ So that I can maintain document quality without direct database or Weaviate acce
 **Then** all Weaviate chunks are removed; PostgreSQL document record is soft-deleted (not hard delete) for audit trail; deletion is irreversible from UI (hard delete requires DB access); deletion is logged
 
 **And** all admin operations logged in `audit_events`; operations require `roles=["data_owner", "admin"]`; `ReindexJob` table tracks `total_chunks`, `processed_chunks`, `failed_chunks`, `status` in PostgreSQL
+
+---
+
+## Epic 4: Protected Access for Sensitive Data
+
+**Goal:** HR users can query employee data with full PII masking; Approval Officers review sensitive queries within SLA; column-level security enforces data boundaries.
+
+**Done When:** Full ABAC active; Presidio PII masking integrated with async threshold; approval workflow gates sensitivity_tier ≥ 2; ConfidenceBreakdownCard + ExportConfirmationBar + PermissionRequestState built in `packages/ui`.
+
+**Sprint boundary:** Sprint A: Stories 4.1 + 4.2 (infra); Sprint B: Stories 4.3 + 4.4 + 4.5 (features).
+
+---
+
+### Story 4.1: Full ABAC Extension (FR-A2 Full)
+
+As a security engineer,
+I want Cerbos policies extended with region and approval_authority attributes without breaking existing Epic 2A policies,
+So that access decisions reflect complete organizational context.
+
+**Acceptance Criteria:**
+
+**Given** Epic 2A has frozen `principal.attr` with `department`, `clearance_level`, `purpose`
+**When** Epic 4 extends Cerbos policies
+**Then** `region` and `approval_authority` are ADDED; `department`, `clearance_level`, `purpose` are NOT renamed, removed, or retyped; all Epic 2A policy unit tests continue passing without modification
+
+**Given** a Finance user in `region="north"` queries data tagged `region="south"`
+**When** Cerbos evaluates the attribute-based policy
+**Then** DENY with `denial_reason="region_mismatch"`; logged with full principal context
+
+**Given** a user with `approval_authority=True` queries sensitivity_tier=2 data
+**When** Cerbos evaluates
+**Then** pre-authorization granted without entering approval queue; users without `approval_authority` still trigger approval gate
+
+**And** ADR confirming attribute extension (not redefinition) updated before merge; `cerbos compile ./policies` passes in CI
+
+---
+
+### Story 4.2: Column-level Security (FR-A4)
+
+As a business user,
+I want sensitive columns automatically masked or excluded based on my clearance level,
+So that I never accidentally access unauthorized data even in correctly-structured queries.
+
+**Acceptance Criteria:**
+
+**Given** the column clearance mapping:
+
+| Column Tag | Clearance Required | User Clearance | Behavior |
+|------------|-------------------|----------------|---------|
+| PUBLIC / untagged | 0 | any | Full value returned |
+| CONFIDENTIAL | ≥ 2 | < 2 | Value replaced with `***` |
+| CONFIDENTIAL | ≥ 2 | ≥ 2 | Full value returned |
+| SECRET | ≥ 3 | < 3 | Column entirely excluded (name AND value absent) |
+| SECRET | ≥ 3 | ≥ 3 | Full value returned |
+
+**When** Oracle Connector processes the structured column result
+**Then** masking/exclusion is applied according to the table above; untagged columns default to PUBLIC (no restriction)
+
+**Given** column masking is applied in Oracle Connector for a STRUCTURED column (typed: ID, phone, salary)
+**When** Presidio middleware runs on the same result
+**Then** Presidio SKIPS that column (determined by `is_free_text=False` flag in `ColumnResult`); Presidio only scans FREE_TEXT columns (comments, notes, descriptions) — no overlap
+
+**Given** a user sees a masked `***` field
+**When** they click the lock icon `🔒`
+**Then** `PermissionRequestState` opens with: what is blocked and why, what is accessible, CTA "Yêu cầu quyền truy cập"
+
+**And** column sensitivity tags stored in Semantic Layer metadata catalog; masking enforced in Oracle Connector result processing layer — NOT in frontend; column masking is audited per query (field name + masking applied, not the masked value)
+
+---
+
+### Story 4.3: PII Masking with Presidio (FR-A5)
+
+As a compliance officer,
+I want all query results scanned for PII before reaching users, with async processing for large result sets and purpose-based bypass for authorized HR staff,
+So that PDPA compliance is maintained without degrading performance.
+
+**Acceptance Criteria:**
+
+**Given** a query result with `rows × sensitive_columns ≤ 10,000 cells`
+**When** Presidio middleware runs inline (synchronous)
+**Then** entities `PERSON`, `ID_CARD_VN`, `EMAIL`, `PHONE_NUMBER` are replaced: `<TÊN_ĐƯỢC_ẨN>`, `<CMND_ĐƯỢC_ẨN>`, `<EMAIL_ĐƯỢC_ẦN>`, `<SĐT_ĐƯỢC_ẨN>`; total scan time <200ms
+
+**Given** a query result with `rows × sensitive_columns > 10,000 cells`
+**When** Presidio runs
+**Then** scan executes as async Celery job; client receives `{ "status": "pending", "scan_id": "<uuid>" }` immediately; polls `GET /v1/scan/{scan_id}/status` until complete; result delivered when scan done
+
+**Given** a user with `purpose="hr_management"` (set as JWT claim `purpose`) AND `clearance_level ≥ 3`
+**When** Presidio evaluates
+**Then** PII fields returned unmasked; if EITHER condition is missing (wrong purpose OR insufficient clearance) → PII is masked regardless; Cerbos validates the purpose+clearance combination before Presidio bypass is granted
+
+**Given** Presidio scans any response
+**When** PII is detected and masked
+**Then** audit log records ONLY: `{ "field_name": "PERSON", "masked_count": 3 }` — actual PII values are NEVER written to any log, memory store, or trace; this satisfies FR-A8 "comprehensive audit" which means: all access events logged with actor/timestamp/resource/operation; for PII fields, field metadata (name + count) is logged, actual values excluded
+
+**And** `SanitizedLogger` wrapper used before emitting any Presidio metrics; Vietnamese-specific recognizers added for CMND (12-digit), Vietnamese phone patterns; Presidio hooks into `post_query_hook` — NOT `pre_execution_hook`; Presidio scans ALL responses (SQL, RAG, hybrid, forecast)
+
+---
+
+### Story 4.4: Query Approval Workflow (FR-A7)
+
+As a Finance Analyst,
+I want to submit sensitive queries that route to an Approval Officer with a clear briefing card and defined SLA,
+So that I can access sensitive data through a governed, auditable process.
+
+**Acceptance Criteria:**
+
+**Given** a query is classified with `sensitivity_tier ≥ 2`
+**When** the orchestrator processes the request
+**Then** query enters `ApprovalRequested` state; analyst receives "Câu hỏi này đang chờ phê duyệt"; notification sent to users with `approval_authority=True` via email + Admin Portal badge; system stores `QueryIntent` (structured object with intent type, filters, sensitivity_tier) — NOT raw SQL string
+
+**Given** Hùng reviews the ApprovalBriefingCard
+**When** he opens the approval queue item
+**Then** the card shows exactly these 5 elements: (1) requester identity + department + recent query history, (2) business justification from query intent analysis, (3) data scope + sensitivity_tier + estimated row count, (4) anomaly risk signal (unusual time/volume pattern), (5) one-click escalation button; card renders completely in <500ms; all 5 elements verifiable by component test
+
+**Given** the SLA timer runs
+**When** Tier 2 query is not acted upon within 8 hours; Tier 3+ query within 1 business day (24 business hours)
+**Then** query transitions to `Expired`; BOTH analyst and approver receive expiry notification; `EXPIRED` does NOT auto-resubmit — analyst must explicitly resubmit; resubmit creates a NEW `QueryIntent` with new approval cycle (any param change = new approval)
+
+**Given** Hùng approves or rejects
+**When** decision is saved
+**Then** approval stores `(user_id, query_fingerprint, sensitivity_tier, decision, reason)`; approval executes the stored `QueryIntent` — no user-modified SQL is accepted; lifecycle is fully logged: `ApprovalRequested → PendingReview → Approved/Rejected/Expired`
+
+**And** `ApprovalBriefingCard` built in this story; approval does NOT interrupt other users' query flows
+
+---
+
+### Story 4.5: Trust & Permission UI Components
+
+As a developer,
+I want three reusable UI components (ConfidenceBreakdownCard, ExportConfirmationBar, PermissionRequestState) published to `packages/ui`,
+So that Epic 4 can render trust signals and Epic 6 + Epic 7 can consume them without rebuilding.
+
+**Acceptance Criteria:**
+
+**Given** a query produces low-confidence results (cross-source discrepancy, partial data, or stale data)
+**When** `ConfidenceBreakdownCard` renders
+**Then** it shows one of 5 named states: `low-confidence`, `partial-data`, `stale-data`, `permission-limited`, `cross-source-conflict`; each state has plain-Vietnamese explanation + exactly 3 exit actions; status is indicated by BOTH color AND text label (not color-only); Epic 7 CONSUMES this component from `packages/ui` passing `{ type: "forecast-uncertainty" }` — no rebuild
+
+**Given** a user triggers an export action
+**When** `ExportConfirmationBar` renders
+**Then** sticky bottom bar (NOT modal) shows: file format, estimated row count, sensitivity warning if applicable; "Xác nhận xuất" requires Human-in-the-Loop Signature checkbox "Tôi đã xem xét và xác nhận dữ liệu này"; auto-dismisses after 30 seconds with cancel default; **ExportConfirmationBar component interface contract is frozen before this story begins and Epic 6 team has reviewed and signed off**; Epic 6 CONSUMES — no rebuild
+
+**Given** a user encounters a permission denial
+**When** `PermissionRequestState` renders
+**Then** shows: what is blocked (plain Vietnamese), what user CAN access, primary CTA "Yêu cầu quyền truy cập" → IT Admin queue, secondary CTA "Xem dữ liệu khả dụng" → re-run with available scope
+
+**And** all 3 components shared state verified before treating as single story: PermissionRequestState state influences ExportConfirmationBar disabled state → shared context → 1 story is correct; all 3 published to `packages/ui/src/components/custom/`; UX-DR12 + UX-DR15 + UX-DR17 coverage complete
+
+---
+
+## Epic 5A: IT Admin Control Center
+
+**Goal:** IT Admin can onboard departments, configure data sources, manage users/roles, and monitor system health without manual Oracle configuration.
+
+**Done When:** FR-AD2-AD5 verified; admin shell functional; Lan can configure a new department end-to-end without engineering support.
+
+---
+
+### Story 5A.1: User & Role Management (FR-AD2)
+
+As an IT Admin,
+I want to create, update, and delete users and role assignments with LDAP synchronization,
+So that user access reflects the current organizational structure without manual DB operations.
+
+**Acceptance Criteria:**
+
+**Given** Lan creates a new role `finance_analyst` and assigns schema `FINANCE_ANALYTICS`
+**When** the role is saved
+**Then** the role is created in Cerbos policy store; schema allowlist is persisted in data source config; assigned users inherit the role on next login; the operation is logged in `audit_events` with Lan's `user_id` and timestamp
+
+**Given** a user's LDAP group changes (e.g., moved from Sales to Finance)
+**When** the LDAP sync runs (configurable interval, default: 15 minutes)
+**Then** the user's Keycloak claims are updated; Cerbos principal context reflects new department on next query; no manual action required from IT Admin
+
+**Given** Lan deletes a user account
+**When** deletion is confirmed
+**Then** user's active sessions are invalidated (Keycloak session revoked); audit record is created; user's historical audit entries are preserved (not deleted); soft-delete in user table for 90-day retention
+
+**And** CRUD operations require `roles=["admin"]`; bulk import via CSV with preview + validation before commit; sync status visible on dashboard
+
+---
+
+### Story 5A.2: Data Source Configuration (FR-AD3)
+
+As an IT Admin,
+I want to configure Oracle database connections, schema allowlists, query timeouts, and row limits through the Admin Portal,
+So that I can control what data each department can access without editing config files or restarting services.
+
+**Acceptance Criteria:**
+
+**Given** Lan adds a new Oracle data source with host, port, service name, and schema allowlist
+**When** the configuration is saved
+**Then** the data source is registered in `DataSourceRegistry`; a connection test is run automatically (timeout 5 seconds); credentials are stored in Vault — NEVER displayed in UI after initial entry; configuration is logged in audit without credential values
+
+**Given** Lan updates the row limit for a data source from 50,000 to 10,000
+**When** the change is saved
+**Then** the new limit takes effect on the NEXT query (no restart required); currently-running queries complete with old limit; change logged with `previous_value`, `new_value`, `changed_by`
+
+**Given** the connection test fails
+**When** Lan saves the configuration
+**Then** save is still allowed with a warning "Kết nối thất bại — kiểm tra thông tin trước khi dùng"; the data source is marked `status=UNVERIFIED`; queries against an `UNVERIFIED` source return an informational warning to users
+
+**And** Oracle connection credentials injected at runtime from Vault; no credentials in environment variables or config files; timeout and row limit editable without service restart; schema allowlist validated against actual Oracle schemas on test connection
+
+---
+
+### Story 5A.3: Audit Dashboard (FR-AD4)
+
+As an IT Admin,
+I want to search and filter audit logs by user, time range, action, data source, and policy decision,
+So that I can investigate anomalies and fulfill compliance requests quickly.
+
+**Acceptance Criteria:**
+
+**Given** Lan searches audit logs with filters: `user_id="hoa@company.com"`, `date_range=last_7_days`, `action="query"`
+**When** the search executes
+**Then** results return in <3 seconds; each result shows: timestamp, user, intent type, data sources, policy decision, rows returned (not raw data); results are paginated (50 per page)
+
+**Given** Lan searches for a specific `request_id`
+**When** the result is found
+**Then** full lifecycle is displayed: every state transition with timestamp; if the query was denied, shows the denial reason and Cerbos rule triggered
+
+**Given** audit log results are shown
+**When** Lan exports to CSV
+**Then** export completes within 60 seconds for date ranges up to 90 days; CSV contains same fields as UI (no additional PII or raw data); export action itself is logged in audit
+
+**And** audit log is read-only in Admin UI (no edit/delete); retention is ≥12 months; audit data sourced from PostgreSQL `audit_events` table (append-only)
+
+---
+
+### Story 5A.4: System Health Dashboard (FR-AD5)
+
+As an IT Admin,
+I want a real-time dashboard showing system health metrics, latency, error rates, and active alerts,
+So that I can identify and respond to system issues before users are impacted.
+
+**Acceptance Criteria:**
+
+**Given** Lan opens the System Health Dashboard
+**When** the page loads
+**Then** metrics panels show: P50/P95 query latency per mode (sql/rag/hybrid/forecast), cache hit ratio, error rate %, token cost per day, active Oracle connections, Weaviate index status; metrics refresh every 30 seconds
+
+**Given** P95 latency exceeds the configured SLO threshold
+**When** the alert fires
+**Then** an alert banner appears on the dashboard within 2 minutes of threshold crossing; alert shows: metric name, current value, threshold, affected service; dismissable after acknowledgment; alert is also logged in `audit_events`
+
+**Given** Lan wants historical performance trends
+**When** they change the time range picker to "Last 7 days"
+**Then** Grafana-sourced charts load within 5 seconds; P50/P95 percentiles visible for the selected period; no data older than 12 months is retained
+
+**And** dashboard powered by Prometheus/Grafana via embedded iframe or Grafana API; no raw log data shown; rate limit alerts configurable per user/department by IT Admin
+
+---
+
+## Epic 5B: Data Governance & KPI Management
+
+**Goal:** Data Owners can manage KPI definitions with versioning and rollback; users benefit from persistent cross-session memory; advanced memory features preserve context intelligently.
+
+**Done When:** FR-AD1 (KPI versioning), FR-S2 (management UI), FR-M2-M7 (full memory stack) verified.
+
+---
+
+### Story 5B.1: Semantic Layer & KPI Management UI (FR-AD1 + FR-S2)
+
+As a Data Owner,
+I want to manage KPI metric definitions with version history, diff view, and one-click rollback through the Admin Portal,
+So that business term changes are controlled, audited, and reversible.
+
+**Acceptance Criteria:**
+
+**Given** Nam updates the formula for "doanh thu thuần"
+**When** the new version is published
+**Then** a new version entry is created with `version_id`, `changed_by`, `timestamp`, `previous_formula`, `new_formula`; all caches referencing the metric are invalidated within 60 seconds; subsequent queries use the new formula
+
+**Given** Nam views two versions of a metric
+**When** the diff view opens
+**Then** side-by-side comparison shows formula changes highlighted (added: green, removed: red); no merge required — versions are immutable snapshots
+
+**Given** Nam rollbacks to a previous version
+**When** rollback is confirmed
+**Then** the previous version becomes the active definition; a new version entry is created recording the rollback action; cache invalidation triggered; rollback is logged with reason (optional free text)
+
+**And** management UI extends the API from Story 2A.2 (Semantic Layer bootstrap); Epic 5B adds management CRUD without breaking the read-only API; only users with `roles=["data_owner", "admin"]` can publish/rollback
+
+---
+
+### Story 5B.2: Medium-term Memory (FR-M2)
+
+As a business user,
+I want the system to remember a summary of my recent conversations across sessions,
+So that I can pick up where I left off without repeating context.
+
+**Acceptance Criteria:**
+
+**Given** a user's session ends (logout or TTL expiry)
+**When** the session summarizer runs
+**Then** a compressed summary of the session is stored in PostgreSQL `conversation_memory` table tagged with `user_id`, `department_id`, `session_id`, `sensitivity_level`, `created_at`, `expires_at`; raw Oracle data values are NEVER stored in the summary — only business intent, topic, and filter context
+
+**Given** a user opens a new session
+**When** the orchestrator loads context
+**Then** summaries from the last 30 sessions are retrieved; only summaries with `sensitivity_level` ≤ user's current clearance are included; cross-user memory access is impossible (RLS on `conversation_memory` table)
+
+**Given** session summaries are retrieved
+**When** they are injected into LangGraph context
+**Then** token usage increases <20% compared to sessions without medium-term memory (measured via Langfuse); irrelevant summaries are excluded via semantic similarity score (cosine > 0.7 threshold)
+
+**And** `conversation_memory` table has PostgreSQL RLS policy preventing cross-user reads; summaries expire after configurable period (default: 90 days); PDPA: no PII in summaries
+
+---
+
+### Story 5B.3: Long-term Preference Memory (FR-M3)
+
+As a business user,
+I want the system to remember my frequently used KPIs, report templates, and query patterns across all sessions,
+So that the system proactively surfaces what I need most.
+
+**Acceptance Criteria:**
+
+**Given** a user has completed ≥5 sessions
+**When** they open a new session
+**Then** the Chat UI displays top 3 most-used KPIs/reports from the last 30 days as suggested queries (not blocking the input); suggestions are role-appropriate and within the user's permitted data scope
+
+**Given** a user marks a query result as "Lưu mẫu báo cáo"
+**When** the template is saved
+**Then** it appears in their saved templates list; template includes: query intent, filters, time range, output format preference; templates are private to the user (not shared by default)
+
+**And** preference data stored in PostgreSQL `user_preferences` table; no raw Oracle data stored; preference learning is opt-out (user can disable in settings); NFR-CM1 token cost tracking per session applies to preference-loaded sessions
+
+---
+
+### Story 5B.4: Memory Isolation + Selective Injection (FR-M4 + FR-M5)
+
+As a security engineer,
+I want user memory to be strictly isolated and selectively injected into context without privilege escalation,
+So that no user can access another user's memory and context injection remains token-efficient.
+
+**Acceptance Criteria:**
+
+**Given** two users (User A and User B) in the same department
+**When** User B's LangGraph invocation runs
+**Then** User B has ZERO access to User A's session summaries, preferences, or saved templates; verified by: `conversation_memory` PostgreSQL RLS policy, and `user_preferences` table RLS policy; unit test attempts cross-user memory read and asserts zero results
+
+**Given** a session with 15 turns of conversation history
+**When** LangGraph injects context for turn 16
+**Then** token usage for turn 16 is <20% higher than turn 1 (memory compaction active); selective recall uses semantic similarity — only summaries with cosine >0.7 to current query are injected; full history replay is never used
+
+**And** memory compaction runs as Celery task after every 10 turns; `fakeredis` for unit tests; testcontainers Redis for integration; after session TTL expiry: graceful "session expired" message returned, no stale data access
+
+---
+
+### Story 5B.5: Conversation History Search (FR-M6 + FR-M7)
+
+As a business user,
+I want to search my conversation history by keyword, time range, and topic,
+So that I can find a previous analysis without remembering the exact query I used.
+
+**Acceptance Criteria:**
+
+**Given** a user searches their history with "doanh thu tháng 3"
+**When** the search executes
+**Then** results return in <2 seconds; results show: query date, intent type, key result summary (not raw data); results are scoped strictly to the requesting user's history
+
+**Given** a user views a historical conversation
+**When** they click "Dùng lại câu hỏi này"
+**Then** the query intent (filters, topic, time range) is pre-loaded into the chat input; user can modify before submitting; no raw Oracle data from the original result is cached or re-used
+
+**Given** any memory or history entry was created
+**When** it is inspected
+**Then** it contains ZERO raw Oracle data values (no salary numbers, no margin %, no PII); only business intent metadata, topic tags, and filter descriptions; this is verified by automated memory audit test on every push
+
+---
+
+## Epic 6: Automated Reporting & Cross-domain Analysis
+
+**Goal:** Finance users get scheduled reports automatically; users query across Finance + Budget domains; popular queries return instantly from cache.
+
+**Done When:** FR-E1-E4 (export complete), FR-S5 (cross-domain verified), FR-S6 (cache >40% hit rate) all met.
+
+---
+
+### Story 6.0: Cross-domain Decomposition Spike (FR-S5 Research)
+
+As a developer,
+I want a documented decomposition architecture for cross-domain queries before production implementation,
+So that Epic 6 Story 6.4 implementation is unambiguous and architecturally sound.
+
+**Acceptance Criteria:**
+
+**Given** this is a research spike (runs during Epic 2B timeline)
+**When** the spike is complete
+**Then** it delivers: (1) `QueryDecompositionState` TypedDict definition, (2) horizontal vs vertical decomposition strategy documentation with examples, (3) RRF merge strategy for cross-domain results, (4) stub code for `decompose_query_node` and `merge_domain_results_node`, (5) ADR documenting the chosen approach
+
+**And** spike output is a document + stub code only — NO production traffic; spike runs parallel to Epic 2B; implementation (Story 6.4) begins only after Epic 2B is complete; referenced in implementation-artifacts/6-0-cross-domain-decomposition-spike.md
+
+---
+
+### Story 6.1: Export Results (FR-E1 + FR-E4)
+
+As a business user,
+I want to export query results to Excel, PDF, or CSV with an async job that doesn't block my conversation,
+So that I can share insights without leaving the chat interface.
+
+**Acceptance Criteria:**
+
+**Given** a user clicks "Generate Report" after receiving a query result
+**When** `ExportConfirmationBar` (from Epic 4) renders
+**Then** shows: file format, estimated row count, sensitivity warning; requires Human-in-the-Loop Signature checkbox before confirm; auto-dismisses after 30 seconds with cancel default
+
+**Given** the user confirms export
+**When** the Celery task `export.report.generate_excel` is dispatched
+**Then** user immediately receives `{ "job_id": "<uuid>", "status": "queued" }`; user can continue chatting; when done: toast "Báo cáo đã sẵn sàng ↗ Tải xuống"; export file contains only data within user's permitted scope — no data from other departments
+
+**Given** export completes
+**When** the audit entry is written
+**Then** `audit_events` records: `user_id`, `job_id`, `format`, `row_count`, `department_scope`, `sensitivity_tier`, `recipient` (if shared), `timestamp`; raw exported data is NOT stored in audit — only metadata
+
+**And** Celery task `acks_late=True`, `reject_on_worker_lost=True`; export jobs on queue `export-jobs` (separate from chat path); file format support: Excel (.xlsx), PDF, CSV; download link valid for 24 hours then expires
+
+---
+
+### Story 6.2: Scheduled Reports (FR-E2 + FR-E3)
+
+As a Finance user,
+I want to schedule recurring reports that are automatically generated and delivered to my inbox,
+So that I receive regular data updates without manual re-querying.
+
+**Acceptance Criteria:**
+
+**Given** Tuấn configures a weekly Finance report (every Monday 08:00)
+**When** the scheduled time arrives
+**Then** Celery Beat triggers `export.report.generate_scheduled`; report is generated with the same access controls as a live query; delivered to Tuấn's email; `audit_events` records every scheduled delivery with timestamp and recipient
+
+**Given** a scheduled report contains sensitivity_tier ≥ 2 data
+**When** the schedule is created
+**Then** the schedule requires approval from an Approval Officer before it can be activated; one-time approval covers all future scheduled deliveries of that template; re-approval required if report scope changes
+
+**Given** a scheduled report delivery fails (email delivery failure)
+**When** the failure is detected
+**Then** retry 3 times with exponential backoff; after 3 failures: notify IT Admin + log failure in audit; user receives "Báo cáo tuần này gặp sự cố — liên hệ IT" notification
+
+**And** scheduled reports use same ExportConfirmationBar audit trail per delivery; recipients validated against authorized user list — no reports sent to external addresses; Celery Beat configuration stored in `infra/docker-compose.dev.yml`
+
+---
+
+### Story 6.3: Semantic Result Cache (FR-S6)
+
+As a platform engineer,
+I want frequently-asked queries to be served from cache with semantic similarity matching,
+So that repeated or similar queries return instantly instead of re-executing Oracle queries.
+
+**Acceptance Criteria:**
+
+**Given** user A asks "Doanh thu Q1 2026 theo chi nhánh?"
+**When** the response is cached with key = hash(`normalized_intent + role_scope + department`)
+**Then** user B from the same department asking "Cho tôi xem doanh thu Q1 2026 chia theo chi nhánh?" retrieves the cache hit (semantic similarity >0.85); response latency <300ms for cache hits
+
+**Given** a cache hit is returned
+**When** the response is delivered
+**Then** a `🟡 Kết quả từ cache — cập nhật lúc [timestamp]` freshness indicator is displayed; user can force refresh with "Tải lại dữ liệu mới" button; force refresh invalidates cache entry for that query
+
+**Given** user's permissions change (role revoked, department changed)
+**When** the permission change event is processed
+**Then** ALL cache entries for that user are invalidated within 60 seconds; TOCTOU risk: permission check happens at query time before cache lookup — not vice versa
+
+**And** cache keys include: `department_id`, `role_scope`, `semantic_layer_version`, `data_freshness_class`; cache stored in Redis with TTL from ADR-002 (SQL: 5 min, RAG: 60 min); cache hit rate target: >40% after 2 weeks steady-state; cache hit rate tracked in Grafana
+
+---
+
+### Story 6.4: Cross-domain Query Execution (FR-S5)
+
+As a Finance user,
+I want to query data across Finance and Budget domains in a single natural language question,
+So that I get a unified answer without submitting two separate queries and manually joining the results.
+
+**Acceptance Criteria:**
+
+**Given** Tuấn asks "Chi phí vận hành Q1 so với ngân sách được duyệt?"
+**When** the orchestrator detects a cross-domain query (FINANCE + BUDGET)
+**Then** it applies the decomposition strategy from Story 6.0 spike; two sub-queries execute against their respective Oracle sources; results are merged at application layer using canonical business key (`department_code`, `period_key`); a single unified answer is returned
+
+**Given** cross-domain merge produces a data discrepancy (FINANCE says 5.2B, BUDGET says 4.9B)
+**When** the discrepancy is detected
+**Then** `ConfidenceBreakdownCard` with state `cross-source-conflict` is shown; both source values are displayed; user is offered: "Xem chi tiết nguồn lệch" (opens ProvenanceDrawer showing both sources), "Loại trừ một nguồn" (re-query with single source), "Tạo ticket cho Data Owner"
+
+**And** cross-domain queries route through decomposition orchestrator only AFTER Epic 2B is complete (Story 6.0 spike validated); each sub-query is independently policy-checked; NFR-P1 cross-domain P50<8s/P95<20s; sub-query results independently audited
+
+---
+
+## Epic 7: Forecasting & Predictive Intelligence
+
+**Goal:** Analysts request time-series forecasts, anomaly detection, and trend analysis in natural language with explainable business-readable results.
+
+**Done When:** FR-F1-F6 all verified; ConfidenceBreakdownCard consumed from Epic 4 for uncertainty visualization.
+
+---
+
+### Story 7.1: Time-series Forecasting (FR-F1)
+
+As a Finance analyst,
+I want to request a revenue or cost forecast for the next quarter in natural language and receive results with confidence intervals,
+So that I can plan budgets based on data-driven predictions with clear uncertainty bounds.
+
+**Acceptance Criteria:**
+
+**Given** Tuấn asks "Dự báo doanh thu Q3 2026 theo kênh phân phối"
+**When** the forecast job runs
+**Then** Nixtla TimeGPT generates forecasts for each channel; results include point forecast + 80% and 95% confidence intervals; MAPE on validation holdout set is <15%
+
+**Given** the forecast result is returned
+**When** rendered in the UI
+**Then** time-series chart shows: historical data (solid line), forecast period (dashed line), confidence band (shaded area); `ConfidenceBreakdownCard` from Epic 4 is consumed with `{ type: "forecast-uncertainty" }` — NOT rebuilt; chart built with Recharts + `useChartTheme()` hook
+
+**Given** the forecast job is submitted
+**When** Celery task `forecast.time_series.generate_report` is dispatched
+**Then** job_id returned immediately; user can continue chatting; `ExportJobStatus` (from Epic 4) shows progress; when complete: toast notification + download option
+
+**And** Celery task: `acks_late=True`, `reject_on_worker_lost=True`; queue: `forecast-batch`; Nixtla API key stored in Vault; if Nixtla unavailable: fallback to `statsmodels` Prophet; forecast inputs are governed by same ABAC as query path
+
+---
+
+### Story 7.2: Anomaly Detection & Alerts (FR-F2)
+
+As a Sales manager,
+I want to be automatically alerted when metrics show unusual patterns,
+So that I can investigate anomalies before they become problems.
+
+**Acceptance Criteria:**
+
+**Given** anomaly detection runs on order volume time-series
+**When** an anomaly is detected (Isolation Forest score below threshold)
+**Then** alert fires within 1 hour of the data being available; alert includes: metric name, anomaly timestamp, deviation from expected range, severity (low/medium/high); false positive rate is <10% measured over 30-day rolling window
+
+**Given** Hoa receives an anomaly alert
+**When** she opens the alert
+**Then** she sees: (1) the time-series chart with anomaly highlighted in red, (2) natural language explanation "Đơn hàng khu vực HCM ngày 15/3 thấp hơn 40% so với dự kiến", (3) 3 suggested next actions; `ConfidenceBreakdownCard` from Epic 4 consumed for uncertainty visualization
+
+**And** anomaly alerts routed only to users with access to the affected data domain (Cerbos policy check); alert history stored in PostgreSQL; user can acknowledge/dismiss alerts; dismissed alerts still visible in history
+
+---
+
+### Story 7.3: Trend Analysis (FR-F3)
+
+As a business analyst,
+I want to compare metrics across time periods (YoY, MoM, QoQ) with plain-language explanations,
+So that I can understand business trends without statistical expertise.
+
+**Acceptance Criteria:**
+
+**Given** Minh asks "Doanh thu Q1 2026 so với Q1 2025 thay đổi thế nào?"
+**When** trend analysis runs
+**Then** result shows: percentage change, absolute change, direction (tăng/giảm); explanation uses ZERO ML/statistical jargon; acceptable: "Tăng 12% so với cùng kỳ năm ngoái"; not acceptable: "Positive YoY delta of 12% with p-value 0.03"
+
+**Given** the trend explanation is generated
+**When** user acceptance test runs
+**Then** 3 non-technical reviewers (HR, Sales, Finance personas) independently rate explanation clarity ≥4/5 on the "no jargon" rubric; this is a manual UAT gate before story is closed
+
+**And** trend analysis uses statsmodels for computation; results cached per FR-S6 rules; drill-down by department/product/region available within user's permitted scope (FR-F4)
+
+---
+
+### Story 7.4: Drill-down Analytics + Result Explainability (FR-F4 + FR-F5)
+
+As a business analyst,
+I want to drill down into forecast and trend results by department, product, region, or channel, with top contributing factors explained in plain language,
+So that I can understand what drives the numbers without statistical expertise.
+
+**Acceptance Criteria:**
+
+**Given** a forecast result for total revenue
+**When** user clicks "Phân tích chi tiết theo khu vực"
+**Then** chart updates to show regional breakdown; only regions the user is authorized to see are shown (Cerbos policy enforced); drill-down respects the same data scope as the original query
+
+**Given** the explainability engine runs
+**When** results are returned
+**Then** top 3 contributing factors are shown in plain Vietnamese: "Yếu tố 1: Mùa vụ (đóng góp 45%)", "Yếu tố 2: Xu hướng thị trường (đóng góp 30%)", "Yếu tố 3: Chiến dịch marketing (đóng góp 15%)"; confidence level stated as: "có khả năng tăng" / "khả năng cao giảm" / "không rõ xu hướng" — NOT raw probability values
+
+**And** SHAP feature importance used internally; business-friendly labels mapped from SHAP output; if SHAP is unavailable: show "Giải thích chi tiết đang được xử lý" with async job fallback
+
+---
+
+### Story 7.5: Async Forecast Jobs (FR-F6)
+
+As a platform engineer,
+I want heavy forecasting jobs to run asynchronously on dedicated workers without blocking the chat path,
+So that users can continue chatting while bulk forecasts compute.
+
+**Acceptance Criteria:**
+
+**Given** a forecast request with large date range (e.g., 2-year forecast, 50 SKUs)
+**When** the job is classified as "heavy" (estimated >10 seconds)
+**Then** `POST /v1/forecast/run` returns `{ "job_id": "<uuid>", "status": "queued" }` within 500ms; `ExportJobStatus` component (from Epic 4) shows progress in chat thread; user can continue chatting
+
+**Given** the forecast job completes
+**When** results are ready
+**Then** user receives toast notification; results available at `GET /v1/forecast/{job_id}/result`; results cached for 60 minutes; if user navigates away and returns within 60 minutes, result is immediately available
+
+**Given** the forecast Celery worker is overwhelmed (queue depth >20 jobs)
+**When** a new forecast is submitted
+**Then** user receives estimated wait time: "Kết quả dự kiến sau 15 phút"; no silent timeout; after 30 minutes, job marked `FAILED` with `"reason": "queue_timeout"`; user notified to retry
+
+**And** Celery tasks on dedicated `forecast-batch` queue (separate from `chat-low-latency`); `acks_late=True`, `reject_on_worker_lost=True`; Nixtla timeout 120 seconds per forecast unit; forecast access governed by ABAC (same as query path)
