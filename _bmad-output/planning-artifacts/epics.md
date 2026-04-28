@@ -1,5 +1,5 @@
 ---
-stepsCompleted: [1, 2]
+stepsCompleted: [1, 2, 3]
 inputDocuments:
   - _bmad-output/planning-artifacts/prd.md
   - _bmad-output/planning-artifacts/architecture.md
@@ -645,3 +645,761 @@ Epic 2A + 5B ──► Epic 7 (Forecasting)
 | **Phase 1** | 1, 2A, 2B, 5A | Minh can query; Lan can configure; audit works |
 | **Phase 2** | 3, 4, 5B, 6 | Hoa/Hùng protected; RAG; export; cross-domain |
 | **Phase 3** | 7 | Forecasting + predictive analytics |
+
+---
+
+## Epic 1: Governed Infrastructure & Walking Skeleton
+
+**Goal:** Engineering team có thể chạy hệ thống end-to-end với E2E distributed traces observable; bất kỳ user nào có thể đăng nhập bằng SSO doanh nghiệp.
+
+**Stories:** 9 stories (after merging 1.1+1.1b → 1.1; 1.3+1.4 → 1.3; 1.7 scoped to 1.7a minimal)
+
+---
+
+### Story 1.1: Monorepo Scaffold + Secrets Baseline
+
+As a developer,
+I want the AIAL monorepo initialized with uv workspaces, per-service pyproject.toml, Dockerfiles, Makefile, pre-commit hooks, and HashiCorp Vault dev mode for secrets,
+So that every contributor can install, lint, run the project with one command and no credentials are ever hardcoded.
+
+**Acceptance Criteria:**
+
+**Given** a developer clones the repository for the first time
+**When** they run `make install`
+**Then** all Python workspace packages are installed via uv, Node packages installed, pre-commit hooks active, and `uv sync --all-packages` completes without version conflict warnings
+
+**Given** the Pydantic version conflict between langchain-core and FastAPI is present
+**When** `uv sync` resolves dependencies
+**Then** pydantic v2 is the resolved version (`python -c "import pydantic; assert pydantic.VERSION.startswith('2')"` passes in CI); no runtime import errors from langchain-core
+
+**Given** `docker-compose.dev.yml` starts
+**When** any service reads a secret (Keycloak client secret, Oracle credentials, Kong admin token)
+**Then** the secret is sourced from Vault dev mode via `infra/scripts/seed-secrets.sh` — never from a committed `.env` file; `.env` is gitignored; `.env.example` documents all required variables
+
+**Given** a developer runs `make dev`
+**When** the stack starts
+**Then** `make test` runs all unit tests green; `make lint` runs Ruff + ESLint without errors; `.python-version` contains `3.12`
+
+---
+
+### Story 1.2: Compose Infrastructure Stack
+
+As a developer,
+I want all seven infrastructure services (PostgreSQL, Redis, Weaviate, Keycloak, Kong, Cerbos, Vault) to start reliably with Weaviate schema initialized,
+So that the full local environment is reproducible with one command.
+
+**Acceptance Criteria:**
+
+**Given** `make dev` is run on a clean machine
+**When** Docker Compose starts
+**Then** all 7 services pass health checks within 60 seconds; `infra/scripts/wait-for-services.sh` exits 0; no manual step required
+
+**Given** Weaviate starts
+**When** `infra/scripts/init-weaviate-schema.py` runs
+**Then** the shared `weaviate/schema.py` collections are created idempotently; this is the single owner of collection schema — Epics 2A and 3 consume this schema, never redefine it
+
+**Given** Keycloak starts
+**When** Docker Compose initializes
+**Then** `keycloak/realm-export.json` is imported automatically; no manual realm configuration required
+
+**And** `infra/scripts/seed-secrets.sh` populates Vault dev mode before services start; the Makefile target `make infra-up` executes full stack bootstrap
+
+---
+
+### Story 1.3: Auth Layer — SSO Login + Kong Gateway + Cerbos Authorization
+
+As a business user,
+I want to log in with my corporate credentials via SSO and have all API requests enforced by Kong and Cerbos,
+So that unauthorized access is blocked at the gateway before reaching any service.
+
+**Acceptance Criteria:**
+
+**Given** a user navigates to the AIAL login page on a system under normal load (≤50 concurrent users)
+**When** they click "Log in with corporate account"
+**Then** they are redirected to Keycloak, authenticate via LDAP/AD, and a JWT is returned to the client within 3 seconds (measured from SSO redirect initiation to token receipt)
+
+**Given** successful SSO authentication
+**When** the JWT is decoded
+**Then** it contains ALL of: `sub`, `email`, `department`, `roles[]`, `clearance_level` — each field non-null and non-empty; token expiry is 8h with refresh rotation enabled
+
+**Given** a request to `POST /v1/chat/query` without a Bearer token
+**When** Kong processes the request
+**Then** HTTP 401 is returned immediately; no backend service is called; denial is logged in audit
+
+**Given** a valid JWT but the user's role lacks access to the requested route
+**When** Kong delegates to Cerbos
+**Then** HTTP 403 is returned; Cerbos denial event is logged with principal context; no Oracle query is executed
+
+**And** Kong configuration is stored in `infra/kong/kong.yml` (declarative DB-less mode); Cerbos PDP is deployed and connected in this story; rate limiting baseline active (100 requests/day per user)
+
+---
+
+### Story 1.4: FastAPI Service Skeleton + OpenTelemetry
+
+As a developer,
+I want a FastAPI application skeleton with health/readiness endpoints, OpenTelemetry instrumentation, and a shared embedding client scaffold,
+So that every service emits distributed traces from the first request and the bge-m3 client contract is established before parallel tracks start.
+
+**Acceptance Criteria:**
+
+**Given** the orchestration service starts
+**When** `GET /health` is called
+**Then** HTTP 200 `{ "status": "healthy" }` is returned; `GET /readiness` returns 200 only when downstream dependencies (PostgreSQL, Redis, Cerbos) are reachable
+
+**Given** any API request is processed
+**When** OpenTelemetry middleware runs
+**Then** a trace span is created with `trace_id`, `service.name`, `span.kind` attributes; spans are exported to the Tempo collector via OTLP
+
+**And** `aial_shared/telemetry/tracer.py` exports `setup_tracing(service_name)` called as the first line of every service `main.py`; `services/embedding/client.py` stub scaffolded with `BGE_MODEL_NAME="BAAI/bge-m3"`, `DIMS=1024` — this is the shared contract before Epic 2A and Epic 3 parallel work begins
+
+---
+
+### Story 1.5: LangGraph Stub Graph + Shared State Contract
+
+As a developer,
+I want a LangGraph stub graph with the finalized `AIALGraphState` TypedDict and a single pass-through node wired to Redis checkpointer,
+So that Epic 2A can extend the graph with real nodes without redefining the state contract.
+
+**Acceptance Criteria:**
+
+**Given** the orchestration service receives a chat query request
+**When** the LangGraph stub graph is invoked
+**Then** it processes through the stub node and returns `{ "answer": "stub", "trace_id": <uuid> }` with `AIALGraphState` fields populated
+
+**Given** `AIALGraphState` is defined in `services/orchestration/src/orchestration/graph/state.py`
+**When** any node in Epic 2A imports it
+**Then** it uses the exact TypedDict without redefining fields; schema includes: `trace_id`, `session_id`, `user_id`, `department_id`, `messages`, `intent_type`, `sql_result`, `rag_result`, `final_response`, `error`, `should_abort`
+
+**Given** unit tests for LangGraph nodes run
+**When** Redis is not available
+**Then** tests use `fakeredis.FakeRedis` as the checkpointer backend and pass without a real Redis connection; integration tests tagged `@pytest.mark.requires_redis` are skipped if Redis unavailable
+
+**And** `RedisSaver` checkpointer configured with `thread_id=session_id`; ARCH-10 state contract frozen and documented before Epic 2A story work begins; prerequisite note: "Requires Story 1.2 Redis service for integration tests"
+
+---
+
+### Story 1.6: Observability Minimal Stack
+
+As a platform engineer,
+I want distributed traces and LLM observability viewable in Grafana with a single dashboard covering latency, error rate, and LLM node execution,
+So that any request failure can be investigated from day one of feature development.
+
+**Acceptance Criteria:**
+
+**Given** any service processes a request
+**When** the OpenTelemetry collector receives spans
+**Then** traces are stored in Grafana Tempo and searchable by `trace_id` within 10 seconds; Langfuse captures LLM invocation events with token counts
+
+**Given** the Grafana dashboard is opened
+**When** a query completes
+**Then** the dashboard shows 3 panels: P50/P95 request latency by service, error rate %, and LangGraph node execution count per session
+
+**And** full Prometheus alerting rules and extended dashboard library are deferred to Sprint 1 (Story 1.6b); this story delivers the minimum needed for Story 1.9 E2E gate
+
+---
+
+### Story 1.7: Frontend Shell + Design Tokens + Accessibility Foundation
+
+As a developer,
+I want the React 18 + Vite 6 frontend shell with design tokens, TanStack Router skeleton, Error Boundary hierarchy, and a passing axe-core accessibility baseline,
+So that Epic 2A can build streaming components on a consistent, accessible foundation without design drift.
+
+**Acceptance Criteria:**
+
+**Given** the frontend starts
+**When** the app renders
+**Then** CSS custom properties from `packages/ui/src/styles/tokens.css` are loaded (Deep Teal `#0F7B6C`, warm gray neutrals, animation tokens); Inter + Noto Sans Vietnamese font stack is active; auth redirect to Keycloak login page works
+
+**Given** a streaming component crashes during development
+**When** the error propagates
+**Then** `StreamErrorBoundary` renders a fallback (not a blank screen); `PageErrorBoundary` catches page-level errors; `AppErrorBoundary` is root safety net
+
+**Given** axe-core accessibility audit runs against the shell (login page, main layout)
+**When** audit completes with ruleset `["wcag2a", "wcag2aa"]`
+**Then** ZERO violations of impact level "critical" or "serious"; ≤5 moderate violations each with a documented exception ticket; audit report artifact is saved to CI; ARIA landmark structure (`<main>`, `<nav>`, `<header>`) is present
+
+**And** `useSSEStream` hook stub is scaffolded with interface only (not connected to backend); TanStack Router `defaultPreload: 'intent'` configured; scope is strictly shell + auth + error boundaries — NO Storybook, NO full design system, NO theme switching
+
+---
+
+### Story 1.8: Oracle VPD Smoke Test
+
+As a security engineer,
+I want Oracle Virtual Private Database row-level security validated in CI before any Epic 2A Oracle code is written,
+So that the P0 security requirement is confirmed and Epic 2A cannot merge code that bypasses VPD.
+
+**Acceptance Criteria:**
+
+**Given** Oracle XE runs in testcontainers (`gvenzl/oracle-xe:21-slim`, startup timeout 120s) with a VPD policy applied to a test table
+**When** Service Account A queries the table with `user_id=A` in the Oracle session context
+**Then** only rows owned by user A are returned; rows owned by user B are not visible in the result
+
+**Given** Service Account A's connection is returned to the connection pool and reused for a user B request WITHOUT context reset
+**When** user B's query executes
+**Then** the test **FAILS** — this verifies that `ALTER SESSION SET CONTEXT` must be called before every query; the pool must force context reset before releasing connections
+
+**And** test is tagged `@pytest.mark.p0_security @pytest.mark.slow @pytest.mark.requires_oracle`; runs in CI before any Epic 2A story is merged (ARCH-13 resolved); test uses `cx_Oracle` or `python-oracledb` with `homogeneous=False` SessionPool
+
+**Referenced story file:** `implementation-artifacts/1-9-oracle-vpd-smoke-test.md`
+
+---
+
+### Story 1.9: E2E Walking Skeleton Gate
+
+As a developer and PM,
+I want a complete authenticated request to flow end-to-end (Kong → FastAPI → Cerbos → LangGraph stub) with a distributed trace visible in Tempo and a demo-able happy path,
+So that the integration harness is proven and stakeholders can see the system responding before Epic 2A features are built.
+
+**Acceptance Criteria:**
+
+**Given** a valid Keycloak JWT is obtained for a test user with `roles=["analyst"]` and `department="sales"`
+**When** `POST /v1/chat/query` is called with `{ "query": "test query", "session_id": "<uuid>" }`
+**Then** HTTP 200 OK is returned within 5 seconds; response body contains `{ "answer": <non-empty string>, "trace_id": <uuid> }`
+
+**Given** the request completes successfully
+**When** Grafana Tempo is queried for the `trace_id` within 30 seconds
+**Then** a complete trace is visible with spans for ALL FOUR services: `kong-gateway`, `cerbos-authz`, `fastapi-orchestration`, `langgraph-stub`; all spans linked by the same `trace_id`; if ANY span is missing, this gate FAILS
+
+**Given** an expired or malformed JWT
+**When** `POST /v1/chat/query` is called
+**Then** HTTP 401 is returned with error body `{ "code": "AUTH_FAILED" }`; NO backend spans appear in Tempo for this request
+
+**Given** the system is running and a PM clicks through the application
+**When** the demo flow is executed (login via SSO → land on dashboard → submit a query → receive mock response)
+**Then** the complete user flow is click-through-able without engineering assistance; the UI does not show a blank screen or unhandled error at any step
+
+**Given** Kong is stopped while the system is running
+**When** a new request is sent
+**Then** the frontend's `ConnectionStatusBanner` displays a degraded-state message; Grafana fires an alert; the Error Boundary renders a graceful fallback — not a blank screen
+
+**And** this story is the WALKING SKELETON GATE — Epic 2A, Epic 3, and Epic 5A MUST NOT start until Story 1.9 passes in CI; gate is automated in the CI pipeline
+
+---
+
+## Epic 2A: Minimal Viable Query
+
+**Goal:** Sales/Finance users can ask a question in Vietnamese, receive Oracle data results with SQL explanation stub, filtered by their row-level permissions, with every query logged.
+
+**Done When:** A real business user (Minh/Sales persona) submits a NL query through the streaming UI, receives a governed Oracle result within P50 <3s TTFB, Cerbos policy enforcement verified by unit test, short-term memory resolves follow-up "nó/cái đó"; FR-O5 SQL explanation renders as placeholder stub (full implementation in Epic 2B).
+
+**Stories:** 2A.0–2A.9 (10 stories)
+
+---
+
+### Story 2A.0: Weaviate Schema Bootstrap
+
+As a developer,
+I want a single authoritative `weaviate/schema.py` that creates all required Weaviate collections idempotently,
+So that Epic 2A (semantic query cache) and Epic 3 (document RAG) can both consume schema without forking ownership.
+
+**Acceptance Criteria:**
+
+**Given** `init-weaviate-schema.py` runs against a fresh Weaviate instance
+**When** the script completes
+**Then** collections `QueryResultCache` and `DocumentChunk` are created with correct vectorizer config; script is idempotent — running twice produces no error
+
+**Given** Epic 3 ingestion pipeline imports from `weaviate/schema.py`
+**When** it references collection names
+**Then** it uses the same definitions without redefinition; schema changes must be made in `weaviate/schema.py` only — Epic 3 never forks schema ownership
+
+**And** `model_version="bge-m3-v1"` is stored as a property on all vector documents; changing the embedding model requires a migration script, not a silent overwrite
+
+**Referenced story file:** `implementation-artifacts/2a-0-weaviate-schema-bootstrap.md`
+
+---
+
+### Story 2A.1: Query API Endpoint + Input Validation
+
+As a business user,
+I want `POST /v1/chat/query` to accept my Vietnamese query and return a stream handle,
+So that my question enters the system correctly validated before any Oracle query runs.
+
+**Acceptance Criteria:**
+
+**Given** a valid authenticated request with `{ "query": "Doanh thu HCM tháng 3?", "session_id": "<uuid>" }`
+**When** `POST /v1/chat/query` is called
+**Then** HTTP 200 is returned with `{ "request_id": "<uuid>", "status": "streaming", "trace_id": "<uuid>" }`; SSE stream begins
+
+**Given** a query string longer than 2000 characters or empty after trim
+**When** the endpoint receives the request
+**Then** HTTP 400 with `{ "type": ".../errors/invalid-query", "detail": "..." }`; no LangGraph invocation occurs
+
+**Given** a user requests SQL explanation for a completed query
+**When** FR-O5 is not yet implemented (Epic 2B)
+**Then** the UI renders: "Giải thích câu truy vấn sẽ có trong bản cập nhật tiếp theo" (graceful placeholder stub); no error, no broken UI; full FR-O5 implementation deferred to Epic 2B
+
+**And** `ChatQueryRequest` Pydantic v2 model validates: `query` (str 1–2000 chars), `session_id` (UUID); NFR-CM2 rate limit (100/day per user) enforced via Kong + Redis counter
+
+---
+
+### Story 2A.2: Semantic Layer Bootstrap + Business Glossary API
+
+As a data analyst,
+I want queries to resolve through a governed semantic layer so business terms map correctly to Oracle columns,
+So that "doanh thu thuần" reliably maps to the correct formula without LLM guessing.
+
+**Acceptance Criteria:**
+
+**Given** a query containing "doanh thu thuần" is processed
+**When** the semantic layer resolves business terms
+**Then** the term maps to the pre-defined metric formula from the glossary catalog; the LLM receives this definition, NOT raw column names from Oracle
+
+**Given** the glossary service is called with `GET /v1/glossary/{term}`
+**When** the term exists in the catalog
+**Then** it returns `{ "term": "doanh thu thuần", "definition": "...", "formula": "...", "owner": "Finance", "freshness_rule": "daily" }` from PostgreSQL
+
+**Given** a term is not in the glossary
+**When** the semantic layer is queried
+**Then** it returns `{ "status": "not_found" }` and the orchestrator initiates intent clarification; no raw Oracle schema column name is exposed to the LLM
+
+**And** S2 Interface Contract document created before this story merges; Epic 5B management UI will extend this API without breaking changes; management CRUD deferred to Epic 5B
+
+---
+
+### Story 2A.3: SQL Generation Guardrails + Query Governor
+
+As a security engineer,
+I want all LLM-generated SQL to pass two-layer validation (AST + regex blocklist) and be subject to execution limits,
+So that no destructive, resource-abusive, or Oracle-specific injection can execute even if the LLM is compromised.
+
+**Acceptance Criteria:**
+
+**Given** the LLM generates SQL containing `DROP TABLE`, `INSERT`, `UPDATE`, `DELETE`, or any DDL
+**When** the AST validator (sqlglot Oracle dialect) runs
+**Then** the query is rejected with `{ "code": "SQL_UNSAFE_OPERATION" }`; no Oracle connection is opened; rejection logged in audit
+
+**Given** the LLM generates SQL containing Oracle-specific dangerous patterns
+**When** the regex blocklist runs in parallel with sqlglot
+**Then** queries matching any of these patterns are blocked: `\bCONNECT\s+BY\b` (hierarchical query billion-row exploit), `\bXMLQUERY\b` (sqlglot weak support), `\bDBMS_\w+\b` (PL/SQL injection), `@\w+` (database links), `\bFLASHBACK\b` (temporal VPD bypass), `\bEXECUTE\s+IMMEDIATE\b`
+
+**Given** a valid SELECT query on a table with >1M rows without a partition predicate
+**When** the query governor evaluates
+**Then** it is blocked with `{ "code": "QUERY_GOVERNOR_VIOLATION", "reason": "full_table_scan_prohibited" }`; user receives friendly message suggesting to add date filters
+
+**Given** a valid SELECT query is approved
+**When** the query governor applies limits
+**Then** `FETCH FIRST 50000 ROWS ONLY` is appended if absent; query timeout set to 30 seconds; Cartesian joins detected and blocked
+
+---
+
+### Story 2A.4: Oracle Execution with Identity Passthrough + VPD Enforcement
+
+As a business user,
+I want Oracle queries to execute under my own identity with row-level security enforced at the database layer,
+So that I can only see data I am authorized to access, even if the SQL was generated incorrectly.
+
+**Acceptance Criteria:**
+
+**Given** a connection pool session previously used by User A, with NO Oracle session context reset applied
+**When** User B's request attempts to use that connection
+**Then** the system DETECTS the missing context reset, REJECTS the connection before query execution, returns `SESSION_CONTEXT_VIOLATION` error; Oracle query is NEVER executed; the rejection is logged in audit
+
+**Given** a connection with full VPD context reset applied for User B (`SYS_CONTEXT` populated with User B's `USER_ID`, `DEPARTMENT`)
+**When** User B's query executes
+**Then** Oracle returns ONLY rows authorized for User B; VPD policy filters are verified; integration test `1-8-oracle-vpd-smoke-test.md` must pass in CI before this story can merge
+
+**Given** the Oracle connector completes a query (success or failure)
+**When** the connection is returned to the pool
+**Then** `_clear_oracle_context(conn)` is called in a `finally` block (not `else`) BEFORE the connection is released; this guarantees cleanup even if an exception occurs mid-query
+
+**And** connection pool uses `homogeneous=False` (heterogeneous pool) with `homogeneous=False` so each request sets its own proxy context; service account used is per-service read-only (not shared DBA); `principal.attr` schema (`department`, `clearance_level`) must be documented from Story 2A.7 before this story implements Oracle context mapping
+
+---
+
+### Story 2A.5: Streaming Chat UI + SSE Transport
+
+As a business user,
+I want to see my query results stream progressively with precise thinking-state feedback and accessible screen reader announcements,
+So that I understand the system is working and trust the result as it arrives.
+
+**Acceptance Criteria:**
+
+**Given** a query is submitted (0–300ms)
+**When** Thinking Pulse Phase 1 starts
+**Then** the input query is echoed; "Đang phân tích..." text appears; animation: opacity 0.4→1.0, duration 600ms, `cubic-bezier(0.4, 0, 0.2, 1)`, loop; ARIA live region announces "AI đang xử lý"
+
+**Given** processing continues 300ms–2s
+**When** Thinking Pulse Phase 2 is active
+**Then** scale animation: 1.0→1.05→1.0, duration 800ms, ease-in-out, loop; cross-fade transition 200ms between phases
+
+**Given** processing continues beyond 2 seconds
+**When** LangGraph emits SSE step events
+**Then** step narration updates: "Bước 1/4: Phân loại..." → "Bước 2/4: Truy vấn Oracle..." → "Bước 3/4: Tổng hợp..."; `prefers-reduced-motion`: replace all animation with static indicator + "đang xử lý..." text; no animation runs
+
+**Given** data rows stream back
+**When** `ProgressiveDataTable` receives row events
+**Then** rows are batched every 150ms (data trigger interval); each chunk renders with fade-in 60ms ease-out (presentation layer); minimum visible chunk ≥15 tokens to prevent micro-flicker; column headers locked during streaming (no layout shift); `isAnimationActive={false}` on Recharts
+
+**Given** stream completes or user presses Escape
+**When** `StreamAbortButton` is activated
+**Then** SSE connection closes; `_clear_oracle_context` called if Oracle query in-flight; UI shows "Đã hủy"; button visible at ALL times during streaming — never hidden in a menu
+
+**And** `useSSEStream` hook is the ONLY source of SSE connections; UX-DR25: ARIA live region announces per sentence boundary, not per token; `ConnectionStatusBanner` appears within 3 seconds if SSE drops
+
+---
+
+### Story 2A.6: Short-term Session Memory + Per-Turn Security
+
+As a business user,
+I want the system to remember context within my current session for natural follow-up questions, with security re-checked every turn,
+So that I don't repeat context and no privilege can accumulate across turns.
+
+**Acceptance Criteria:**
+
+**Given** Minh asks "Doanh thu HCM tháng 3?" followed by "Vì sao giảm?"
+**When** the second question is processed
+**Then** the orchestrator injects context from Redis session memory; the follow-up resolves correctly without Minh repeating "tháng 3, chi nhánh HCM"
+
+**Given** user A's session is active in Redis
+**When** user B sends a request
+**Then** user B has NO access to user A's session memory; `session_id` is bound to `user_id + department_id`; cross-user memory injection is technically impossible
+
+**Given** a new conversation turn runs
+**When** LangGraph processes the turn
+**Then** Cerbos policy check is executed independently for EVERY turn with the current principal context; no permissions from a previous turn carry forward
+
+**And** Redis TTL = 24 hours; after expiry backend returns `{ "session_expired": true }`; UI shows "Phiên làm việc đã hết hạn"; token usage increases <20% after 10 turns (FR-M5); unit tests use `fakeredis.FakeRedis`; integration tests use `testcontainers-python` with `redis:7-alpine` (tagged `@pytest.mark.requires_redis`)
+
+---
+
+### Story 2A.7: Baseline Cerbos Policy + principal.attr Schema Freeze
+
+As a developer,
+I want Cerbos policies deployed with a frozen `principal.attr` schema so Epic 4's full ABAC extension can build on a stable contract,
+So that Epic 4 never needs to backfill JWT claim mapping.
+
+**Acceptance Criteria:**
+
+**Given** a user authenticates and JWT is decoded
+**When** the principal context is constructed for Cerbos
+**Then** `principal.attr` always contains: `department` (string), `clearance_level` (int), `purpose` (string) — all non-null, mapped from Keycloak JWT claims; fields populated even if Epic 2A uses only role-based checks
+
+**Given** Epic 2A baseline policy is evaluated
+**When** `roles=["analyst"]` and `department="sales"` user queries Sales data
+**Then** Cerbos returns ALLOW; same user querying Finance data returns DENY; denial logged with principal context
+
+**Given** this story is marked complete and Epic 4 begins
+**When** Epic 4 extends Cerbos policies
+**Then** Epic 4 ADDS new attributes (`region`, `approval_authority`) but does NOT rename, remove, or re-type `department`, `clearance_level`, or `purpose`; an ADR documents this contract freeze before Epic 4 begins
+
+**And** policy files in `infra/cerbos/policies/` with YAML unit test fixtures in `tests/`; `cerbos compile ./policies` runs in CI; test coverage: ALLOW for correct dept, DENY for wrong dept, DENY without required role
+
+**Referenced story file:** `implementation-artifacts/2a-7-cerbos-principal-attr-baseline.md`
+
+---
+
+### Story 2A.8: Query Lifecycle Audit Logging
+
+As a compliance officer,
+I want every query lifecycle event recorded in an immutable audit log without storing raw PII or query results,
+So that any query can be fully traced for compliance without violating PDPA data minimization principles.
+
+**Acceptance Criteria:**
+
+**Given** a query completes successfully
+**When** the audit logger writes the event
+**Then** `audit_events` table (PostgreSQL, append-only) contains: `request_id`, `user_id`, `department_id`, `timestamp`, `intent_type`, `sensitivity_tier`, `sql_hash` (SHA-256), `data_sources[]`, `rows_returned`, `latency_ms`, `policy_decision`, `session_id`; raw SQL text and raw result values are NEVER stored
+
+**Given** a query is classified as sensitive (references columns tagged `PII_TIER_1` or `PII_TIER_2` in metadata catalog, OR WHERE clause matches patterns in `sensitivity-patterns.yaml`)
+**When** the audit entry is written
+**Then** only hash + metadata is stored (no raw SQL text for sensitive queries); non-sensitive queries store encrypted raw SQL in a separate audit column
+
+**Given** a query is rejected by Cerbos or SQL validator
+**When** the rejection occurs
+**Then** denial event is logged with `status=DENIED`, `denial_reason`, `principal_context`; log entry created even if no Oracle connection was opened
+
+**And** audit log is append-only enforced at PostgreSQL level; retention ≥12 months; `GET /v1/admin/audit-logs` returns results <3s for standard date ranges; NFR-OB1/OB2/OB3 events emitted for every audit write
+
+---
+
+### Story 2A.9: Onboarding Shell + First-Query Scaffold
+
+As a first-time business user,
+I want a guided onboarding flow that helps me successfully submit my first query without IT assistance,
+So that I feel confident and competent using AIAL from day one.
+
+**Acceptance Criteria:**
+
+**Given** a user logs in for the FIRST TIME (no stored role preference)
+**When** the onboarding flow starts
+**Then** Screen 0 is mandatory (cannot be skipped): "Bạn thường dùng dữ liệu để làm gì?" with 3 visual options `[📅 Báo cáo định kỳ]` `[⚡ Trả lời câu hỏi từ sếp]` `[🔍 Phân tích chuyên sâu]`; user cannot proceed without selecting; role preference stored server-side (not localStorage)
+
+**Given** a RETURNING user with an existing role preference logs in
+**When** the app loads
+**Then** Screen 0 is SKIPPED; user goes directly to chat shell; a "Change role" option is available in the profile menu to re-trigger Screen 0; trigger condition is "role stored", not "previously logged in"
+
+**Given** a user selects their role and reaches Screen 2 (First Query Scaffold)
+**When** the chat input renders
+**Then** role-specific placeholder is shown: Sales → "VD: Doanh thu chi nhánh HCM tháng này?"; real-time intent hint appears after 500ms pause: "AIAL sẽ dùng dữ liệu từ SALES domain"
+
+**Given** the user's first query returns no data (production data unavailable for their domain)
+**When** the system responds
+**Then** it renders the "First Query Guide" variant (NOT a generic EmptyStateCard): includes (1) plain-language explanation of why no data was found, (2) a suggested alternative query pre-filled specific to the user's role, (3) a "Try this instead →" CTA button; user has ≥1 clear path forward without reading documentation or contacting support
+
+**Given** any error occurs during the first query (timeout, permission denied, validation failure)
+**When** the error state renders
+**Then** the UI NEVER shows a blank screen or raw error JSON; an appropriate `ErrorBoundary` or `EmptyStateCard` variant is shown with role-aware guidance and ≥2 exit actions
+
+**And** this story implements UX-DR26a (flow structure, navigation, step progression) only — curated demo data (UX-DR26b) deferred to Epic 5A/5B; progressive reveal begins after first success: export tooltip on first result, context indicator on first follow-up
+
+---
+
+## Epic 2B: Trust & Audit Layer
+
+**Goal:** Every answer shows exactly where data came from; every query is fully auditable by compliance officers; users understand AI reasoning.
+
+**Done When:** CitationBadge, ProvenanceDrawer, and ChartReveal are built and published to `packages/ui`; compliance officers can trace any completed request end-to-end; FR-O5 SQL explanation replaces the stub from Epic 2A.
+
+**Note:** Story 6.0 (FR-S5 cross-domain spike) runs in parallel with Epic 2B timeline — see Epic 6.
+
+---
+
+### Story 2B.1: Full SQL Explanation (FR-O5)
+
+As a business user,
+I want to see a plain-Vietnamese explanation of how my answer was calculated — what data was used, which filters applied, and what the metric formula means,
+So that I can trust and verify the answer before using it in a meeting.
+
+**Acceptance Criteria:**
+
+**Given** a query produces an Oracle-backed result
+**When** the user expands "Xem giải thích"
+**Then** the explanation shows: (1) human-readable data source description, (2) metric formula in plain Vietnamese if applicable, (3) filters applied; raw SQL is NOT shown by default
+
+**Given** the user clicks "Xem SQL gốc" (progressive disclosure)
+**When** the SQL panel expands
+**Then** generated SQL displayed in read-only syntax-highlighted block with disclaimer "SQL được kiểm tra an toàn trước khi thực thi"
+
+**Given** the LLM cannot produce a confident explanation
+**When** the explanation renders
+**Then** `ConfidenceIndicator` shows "Đây là giải thích ước tính — độ tin cậy: Trung bình"; uncertainty surfaced proactively
+
+**And** explanation generated in LangGraph `compose_response` node; cached alongside query result; stub from Epic 2A Story 2A.1 replaced by this implementation
+
+---
+
+### Story 2B.2: Citation Badge Component (UX-DR10 — BUILD HERE)
+
+As a business user,
+I want inline citation markers that expand to show the exact data source for each claim,
+So that I can verify any number traces back to a real, authorized source.
+
+**Acceptance Criteria:**
+
+**Given** a response contains a cited claim (e.g., "Doanh thu đạt 45.2 tỷ [1]")
+**When** `CitationBadge` renders
+**Then** the `[1]` badge is a focusable button with `aria-label="Xem nguồn số 1"`; badge index uses `citationNumber` from `CitationRef` object — NOT computed from array index
+
+**Given** user hovers or focuses the badge
+**When** tooltip opens
+**Then** shows: data source name, table/document reference, data freshness timestamp; raw schema names are NOT the primary label
+
+**Given** Epic 3 or later epics need citations
+**When** they import `CitationBadge` from `packages/ui`
+**Then** they use this component — no rebuild; accepts both `{ type: "sql" }` and `{ type: "document" }` variants
+
+**And** `CitationRef` contract: `{ citationNumber: number, type: "sql"|"document", label: string, details: CitationDetails }`; Epic 3 consumes — no new implementation
+
+---
+
+### Story 2B.3: Provenance Drawer Component (UX-DR11 — BUILD HERE)
+
+As a power user,
+I want a side panel showing the complete provenance of an answer — all sources, freshness, metric definitions, and confidence — without navigating away,
+So that I can perform due diligence before sharing AI-generated insights.
+
+**Acceptance Criteria:**
+
+**Given** user clicks "Xem toàn bộ nguồn"
+**When** `ProvenanceDrawer` opens
+**Then** slides in from right as side panel (not modal); conversation remains visible and interactive; closeable with Escape; focus returns to trigger button on close
+
+**Given** drawer is open for SQL-backed result
+**When** user reviews provenance
+**Then** shows: all data sources (table names, freshness, row counts), metric formulas in plain Vietnamese, Cerbos policy decision summary, SQL explanation
+
+**Given** Epic 3 or Epic 4 imports `ProvenanceDrawer`
+**When** opened for RAG or masked result
+**Then** same component renders with additional `{ type: "document" }` or `{ type: "masked" }` sections — no fork; accepts pluggable `ProvenanceSection` children
+
+**And** `role="complementary"`, accessible label "Nguồn dữ liệu và bằng chứng"; focus trapped when open; `data-testid="provenance-drawer"`
+
+---
+
+### Story 2B.4: Chart Reveal + Data Freshness Signals (UX-DR9)
+
+As a business user,
+I want charts to appear smoothly only when data is complete, with freshness clearly indicated,
+So that I never see a half-rendered chart that could mislead me.
+
+**Acceptance Criteria:**
+
+**Given** chart data JSON stream is incomplete
+**When** `ChartReveal` is active
+**Then** skeleton placeholder shown with same dimensions as expected chart; no partial bars or axis labels rendered
+
+**Given** JSON stream completes
+**When** `ChartReveal` transitions
+**Then** chart fades in over 400ms, `cubic-bezier(0.4, 0, 0.2, 1)`; `prefers-reduced-motion` → instant reveal; `isAnimationActive={false}` on all Recharts
+
+**Given** any chart renders
+**When** user views it
+**Then** freshness indicator visible: `🟢 Cập nhật lúc 09:00 hôm nay` / `🟡 Dữ liệu từ hôm qua` / `🔴 Dữ liệu > 24 giờ`; color-coded AND text-labeled (not color-only)
+
+**And** `useChartTheme()` hook provides CSS-var-based colors; aspect ratio locked during skeleton to prevent layout shift
+
+---
+
+### Story 2B.5: Audit Read Model + Compliance Dashboard
+
+As a compliance officer,
+I want to search and filter the complete audit log for any query, user, or data access event,
+So that I can fulfill compliance investigations without requiring engineering database access.
+
+**Acceptance Criteria:**
+
+**Given** compliance officer applies filters (user, date range, action type, data source, policy decision)
+**When** search executes
+**Then** results returned in <3 seconds for ranges up to 90 days; shows timestamp, user, intent, data sources, policy decision, rows returned — NOT raw query text for sensitive queries or raw result values
+
+**Given** officer searches for a specific `request_id`
+**When** search executes
+**Then** full lifecycle displayed: intake → classification → policy check → Oracle execution → result delivery → audit write; each step with timestamp
+
+**Given** audit entry exists for DENIED query
+**When** officer views it
+**Then** shows: `status=DENIED`, `denial_reason`, `principal_context`, which Cerbos rule triggered deny
+
+**And** read-only UI — no edit/delete; paginated API; CSV export for date ranges; can be delivered as read-only page within Admin Portal shell from Epic 1 Story 1.3
+
+---
+
+## Epic 3: Document Intelligence & Hybrid Answers
+
+**Goal:** Users get combined Oracle + document answers with citations from both sources; Admin can manage documents.
+
+**Done When:** Documents can be ingested, policy-filtered before retrieval, and surfaced in hybrid answers using shared CitationBadge + ProvenanceDrawer from Epic 2B; all 5 FRs (R1-R5) verified.
+
+---
+
+### Story 3.1: Document Ingestion Pipeline (FR-R1)
+
+As an IT Admin,
+I want to upload PDF, DOCX, XLSX, and TXT files that are automatically parsed, chunked, embedded, and indexed with required metadata,
+So that documents are searchable within 5 minutes of upload completion.
+
+**Acceptance Criteria:**
+
+**Given** an admin uploads a PDF file < 100 pages via Admin Portal
+**When** HTTP 200 upload response is returned (T0)
+**Then** the document is queryable via the search API within 300 seconds (T0 + 5 minutes); this is measured from HTTP 200 response, not from when ingestion begins; measurement excludes network latency
+
+**Given** ingestion pipeline runs
+**When** chunks are written to Weaviate
+**Then** each chunk contains: `document_id`, `department`, `classification` (int: 0=PUBLIC, 1=INTERNAL, 2=CONFIDENTIAL, 3=SECRET), `source_trust`, `effective_date` (ISO 8601 date type), `model_version="bge-m3-v1"`, `chunk_index`, `page_number`; `effective_date` must be stored as Weaviate `date` type — NOT text (required for range filtering in Story 3.4)
+
+**Given** a document is uploaded without required metadata
+**When** the upload form is submitted
+**Then** upload is rejected with HTTP 400 with field-level errors; file is not ingested; rollback is clean
+
+**And** chunking uses `SentenceSplitter(chunk_size=512, chunk_overlap=64)` with Vietnamese-aware separators; ingestion runs as Celery task `rag.document.sync_index` with `acks_late=True`, `reject_on_worker_lost=True`; Weaviate schema from Story 2A.0 consumed — no schema forking
+
+---
+
+### Story 3.2: Pre-retrieval Policy Filtering (FR-R2)
+
+As a business user,
+I want document retrieval to enforce my department access permissions before any vector search runs,
+So that I never receive document chunks from departments I'm not authorized to access — even if they are semantically relevant.
+
+**Acceptance Criteria:**
+
+**Given** user from Sales department submits a query about "salary negotiation policy"
+**When** RAG retrieval runs
+**Then** `PolicyEnforcementService` calls Cerbos first → receives `allowed_departments` and `max_classification` → `WeaviateFilterBuilder` translates this into a Weaviate `where` filter → vector search runs only on permitted chunks; HR chunks with semantic score 0.95 are EXCLUDED; a Sales chunk with semantic score 0.60 is returned instead
+
+**Given** Cerbos returns ALLOW for Sales data
+**When** `WeaviateFilterBuilder` constructs the filter
+**Then** the filter uses `Filter.by_property("department").contains_any(allowed_departments)` combined with classification range filter; filtering happens at the Weaviate layer before vector scoring — NOT post-retrieval
+
+**Given** policy filtering excludes relevant chunks for the user's query
+**When** the answer is composed
+**Then** the response includes a notice: "Kết quả có thể bị giới hạn bởi quyền truy cập của bạn" (Results may be limited by your access level); user is not left wondering why the answer is incomplete
+
+**And** `PolicyEnforcementService` and `WeaviateFilterBuilder` are separate classes; Cerbos timeout (>500ms) triggers circuit breaker with fail-closed behavior — request denied, not passed through; the Cerbos policy decision is logged in audit
+
+---
+
+### Story 3.3: Hybrid Answer Composition with Citations (FR-R3)
+
+As a business user,
+I want answers that combine Oracle data with document insights, with every claim cited from its specific source,
+So that I know exactly which database table and which document supported each part of the answer.
+
+**Acceptance Criteria:**
+
+**Given** a hybrid query ("Vì sao doanh thu giảm?") requires both SQL data and document context
+**When** LangGraph orchestrates the hybrid path
+**Then** SQL retrieval and RAG retrieval run in PARALLEL via `asyncio.gather()`; results are merged in `merge_results_node` using Reciprocal Rank Fusion (RRF, k=60); final answer is composed in `compose_answer_node`; citations are formatted in `format_citations_node`
+
+**Given** `format_citations_node` builds the citation structure
+**When** the response is rendered
+**Then** SQL sources use `CitationBadge { type: "sql", table, timestamp }`; document sources use `CitationBadge { type: "document", title, page, department }`; Epic 2B CitationBadge and ProvenanceDrawer components are consumed — NOT rebuilt
+
+**Given** the 3-node decomposition: `merge_results_node` → `compose_answer_node` → `format_citations_node`
+**When** any single node fails
+**Then** only that node is retried; merge and citation formatting are idempotent; LangGraph traces show per-node latency separately (diagnose whether SQL, RAG, or LLM is the bottleneck)
+
+**And** cross-source merge does not expose data from unauthorized departments; NFR-OB1 traces cover both SQL and RAG execution paths with separate spans
+
+---
+
+### Story 3.4: Document Access Control (FR-R4)
+
+As an IT Admin,
+I want every document to have mandatory access control metadata validated at upload and enforced at retrieval including time-based staleness exclusion,
+So that no document can be accessed without explicit authorization or after it has expired.
+
+**Acceptance Criteria:**
+
+**Given** a document upload request arrives without all required metadata fields
+**When** validation runs
+**Then** HTTP 400 with specific field-level errors for each missing field (`department`, `classification`, `effective_date`, `source_trust`); partial uploads are rolled back; no Celery task is enqueued
+
+**Given** a document has `classification="CONFIDENTIAL"` and the user's `clearance_level < 2`
+**When** retrieval runs
+**Then** that document's chunks are excluded from vector search via Weaviate classification filter; the exclusion is transparent to the query (system still returns available results from permitted sources); exclusion is logged in audit
+
+**Given** a document's `effective_date` is older than the configured staleness threshold
+**When** retrieval runs
+**Then** chunks from that document are excluded via `Filter.by_property("effective_date").greater_or_equal(cutoff)`; staleness threshold is CONFIGURABLE (default: 180 days) per department in the Admin Portal — NOT hardcoded; a document with `effective_date` exactly at the boundary (180th day) is INCLUDED (greater_or_equal behavior)
+
+**And** access control metadata is stored per Weaviate chunk (not only document-level); `effective_date` stored as Weaviate `date` type from Story 3.1; staleness threshold configurable by IT Admin in data source config
+
+---
+
+### Story 3.5: Admin Document Management (FR-R5)
+
+As an IT Admin or Data Owner,
+I want to view, edit metadata, re-index, and delete documents through the Admin Portal with observable async re-index progress,
+So that I can maintain document quality without direct database or Weaviate access.
+
+**Acceptance Criteria:**
+
+**Given** an admin navigates to Document Management
+**When** the document list loads
+**Then** all ingested documents shown with: name, upload date, department, classification, chunk count, status (indexed/processing/failed/partial_failed), last modified
+
+**Given** an admin updates a document's metadata (e.g., `classification` from INTERNAL to CONFIDENTIAL)
+**When** the change is saved
+**Then** the update is applied atomically — either ALL Weaviate chunks for that document reflect the new metadata, OR ALL chunks retain the original metadata; partial state where some chunks have new classification and others have old classification MUST NOT persist beyond a 30-second recovery window; update is logged in audit with `user_id` and `timestamp`; no re-embedding required for metadata-only changes
+
+**Given** an admin triggers a re-index operation on a large document
+**When** the Celery re-index job runs
+**Then** re-index is split into batches of 100 chunks dispatched as sub-tasks on queue `rag.reindex` (separate from `rag.document.sync_index`); the Admin UI polls `GET /admin/documents/{id}/reindex-status` every 5 seconds showing `{ status, progress_percent, processed_chunks, failed_chunks }`; on partial failure, status is `PARTIAL_FAILED` and admin can retry only failed batches
+
+**Given** an admin deletes a document
+**When** deletion is confirmed
+**Then** all Weaviate chunks are removed; PostgreSQL document record is soft-deleted (not hard delete) for audit trail; deletion is irreversible from UI (hard delete requires DB access); deletion is logged
+
+**And** all admin operations logged in `audit_events`; operations require `roles=["data_owner", "admin"]`; `ReindexJob` table tracks `total_chunks`, `processed_chunks`, `failed_chunks`, `status` in PostgreSQL
