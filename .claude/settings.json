@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "defaultMode": "auto"
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf '%s\n' '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"Execution policy (non-stop triage mode): For /party-triage and /bmad-dev-story runs, auto-accept only Critical/High findings with concrete evidence (file:line or explicit FR/AC mismatch), auto-reject out-of-scope findings, bypass Medium/Low findings (log only, no pause), and only interrupt for hard blockers (tool failure, permission denied, or required missing input).\"}}'"
+          }
+        ]
+      }
+    ]
+  }
+}
