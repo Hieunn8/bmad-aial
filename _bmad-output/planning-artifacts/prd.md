@@ -214,7 +214,7 @@ Hệ thống này không phải chatbot hỏi đáp Oracle — đây là lớp t
 ┌────────────────────────────▼────────────────────────────────────┐
 │                   AI ORCHESTRATION LAYER                        │
 │  LangGraph (Intent Router, Multi-step Agent, Mode Dispatcher)   │
-│  Policy Check: Cerbos/OPA (ABAC pre-retrieval enforcement)      │
+│  Policy Check: Cerbos (ABAC pre-retrieval enforcement)          │
 └───────┬──────────────┬──────────────┬──────────────┬────────────┘
         │              │              │              │
 ┌───────▼──┐  ┌────────▼────┐  ┌─────▼──────┐  ┌──▼──────────────┐
@@ -227,7 +227,7 @@ Hệ thống này không phải chatbot hỏi đáp Oracle — đây là lớp t
 │                    DATA ACCESS LAYER                           │
 │  Oracle Connector Gateway (read-only, AST validation, audit)  │
 │  Oracle DB (VPD, RLS, SQL Firewall, True Cache)               │
-│  Weaviate Vector Store (RBAC-enabled)                         │
+│  Weaviate Vector Store (self-hosted, network-isolated)        │
 │  PostgreSQL (Metadata, Audit Store, Memory)                   │
 │  Redis (Session cache, Rate limiting, Result cache)           │
 └────────────────────────────────────────────────────────────────┘
@@ -261,7 +261,7 @@ Hệ thống này không phải chatbot hỏi đáp Oracle — đây là lớp t
 | FR-S2 | Metadata Catalog & Business Glossary: catalog ánh xạ business terms → metric definition → technical columns/views | Có thể tìm kiếm glossary; mỗi metric có owner, formula, freshness rule |
 | FR-S3 | SQL Whitelist & AST Validation: chỉ cho phép `SELECT`; SQL được parse qua AST checker trước khi execute | Block: `DROP`, `INSERT`, `UPDATE`, `EXEC`, subquery vòng lặp, Cartesian joins, cross-DB links |
 | FR-S4 | Query Governor: giới hạn row count, timeout, query cost | Default: max 50,000 rows, timeout 30s, cấm full table scan trên bảng > 1M rows nếu không có partition predicate |
-| FR-S5 | Cross-domain Query Decomposition: câu hỏi multi-domain được tách thành nhiều single-domain queries, merge tại application layer | Test: câu hỏi cross-schema trả đúng kết quả và không expose schema chéo |
+| FR-S5 | Cross-domain Query Decomposition: câu hỏi multi-domain được tách thành nhiều single-domain queries, merge tại application layer | Test: câu hỏi cross-schema trả đúng kết quả và không expose schema chéo; implementation production chỉ bắt đầu sau spike định nghĩa `QueryDecompositionState`, horizontal/vertical strategies, và merge patterns |
 | FR-S6 | Query Result Cache: cache semantic results theo normalized intent + role scope | Cache hit rate > 40% cho câu hỏi phổ biến sau 2 tuần vận hành |
 
 ### Module 3 — RAG & Document Management
@@ -279,7 +279,7 @@ Hệ thống này không phải chatbot hỏi đáp Oracle — đây là lớp t
 | ID | Requirement | Acceptance Criteria |
 |----|-------------|---------------------|
 | FR-A1 | LDAP/Active Directory Integration: đăng nhập SSO qua Keycloak + LDAP; user không cần tài khoản riêng | SSO hoạt động với LDAP/AD doanh nghiệp; JWT hợp lệ < 1s |
-| FR-A2 | RBAC + ABAC Policy Engine: phân quyền dựa trên role + attributes (department, region, clearance, purpose) | ABAC policy enforce đúng khi user có role nhưng sai region/department |
+| FR-A2 | RBAC + ABAC Policy Engine: phân quyền dựa trên role + attributes (department, region, clearance, purpose) | Baseline Phase 1 khóa `principal.attr` tối thiểu với `department` và `clearance`; Epic sau chỉ được mở rộng, không backfill JWT mapping; ABAC policy enforce đúng khi user có role nhưng sai region/department |
 | FR-A3 | Row-level Security (Oracle VPD): LLM không thể bypass RLS tại DB layer dù SQL bị inject | Test: SQL bypass attempt vẫn bị Oracle VPD chặn tại DB layer |
 | FR-A4 | Column-level Security: các cột nhạy cảm (lương, margin, PII) không trả về cho user không có quyền | Test: query trả về `***` hoặc loại bỏ cột thay vì error message chứa giá trị |
 | FR-A5 | Data Masking & PII Redaction: kết quả được scan qua Presidio trước khi trả về; PII bị mask theo policy | Test: CMND, họ tên, email không xuất hiện raw trong kết quả của user không có clearance |
@@ -352,7 +352,7 @@ Hệ thống này không phải chatbot hỏi đáp Oracle — đây là lớp t
 |-------------|------|
 | Encryption at rest | AES-256 cho PostgreSQL, Redis, Vector Store |
 | Encryption in transit | TLS 1.3 bắt buộc; không accept TLS 1.2 |
-| Secret management | Vault (HashiCorp) hoặc Kubernetes Secrets; không hardcode |
+| Secret management | HashiCorp Vault là baseline; local/dev dùng Vault dev mode, staging/prod dùng Vault-integrated secret delivery; không hardcode |
 | Audit log integrity | Append-only store; log không thể sửa sau khi ghi |
 | Session token | JWT với expiry 8h; refresh token rotation |
 | Network isolation | Database layer không expose public; chỉ accessible từ Connector Gateway |
@@ -453,7 +453,7 @@ Hệ thống này không phải chatbot hỏi đáp Oracle — đây là lớp t
 - [ ] Chỉ định owners: business, data, security, engineering
 - [ ] Kiểm kê Oracle sources, schema boundaries, role mapping, sensitivity classes
 - [ ] Chọn semantic layer strategy: Cube.dev / custom / dbt MetricFlow
-- [ ] Chọn policy engine: Cerbos hoặc OPA
+- [x] Lock policy engine: Cerbos; principal attribute mapping Phase 1 tối thiểu gồm `department` và `clearance`
 - [ ] Chốt top 20–50 business questions và 10–20 KPI tier-0
 - [ ] Chuẩn hóa canonical business keys giữa các domain
 
@@ -493,7 +493,7 @@ Hệ thống này không phải chatbot hỏi đáp Oracle — đây là lớp t
 **Phạm vi:**
 - Mở rộng sang 3–5 departments
 - Cross-domain decomposed queries
-- Cerbos/OPA obligations trước retrieval + tool calls
+- Cerbos obligations trước retrieval + tool calls; Phase 1 đã lock baseline `principal.attr` với `department` và `clearance`, Phase 2 chỉ mở rộng obligations/policy depth
 - RAG metadata filtering + ingestion validation đầy đủ
 - Semantic result cache + curated marts cho hot paths
 - Async export + basic scheduled reporting
@@ -553,7 +553,7 @@ Các item sau **KHÔNG** nằm trong phạm vi của dự án này:
 
 | Layer | Technology | Lý do chọn |
 |-------|-----------|------------|
-| Backend API | Python 3.11 + FastAPI | Async, AI/ML ecosystem tốt nhất |
+| Backend API | Python 3.12 + FastAPI | Async, AI/ML ecosystem tốt nhất; aligned với workspace/tooling đã lock |
 | API Gateway | Kong Gateway | Rate limiting, auth plugin, distributed tracing |
 | Identity Provider | Keycloak | LDAP/AD integration, OIDC/OAuth2, enterprise-ready |
 | Agent Orchestration | LangGraph | Stateful multi-step agent, workflow control |
@@ -564,7 +564,7 @@ Các item sau **KHÔNG** nằm trong phạm vi của dự án này:
 | Complex analysis | Claude Opus 4.7 | Deepest reasoning cho forecast, phân tích phức tạp |
 | Local LLM (Phase 2+) | LLaMA 3.x 70B+ / Qwen 2.5-72B | On-premise, air-gapped, full data control |
 | Oracle Connector | python-oracledb + SQLAlchemy | Oracle official driver; connection pooling |
-| Vector Store | Weaviate (self-hosted) | Native RBAC + document-level ACL; enterprise security |
+| Vector Store | Weaviate (self-hosted) | Vector retrieval cho RAG; access control dựa vào pre-retrieval policy filtering + network isolation + metadata constraints |
 | Metadata / Audit / Memory | PostgreSQL 16+ | ACID, RLS, append-only audit tables |
 | Session Cache | Redis 7+ | Short-term memory TTL, result cache, rate limiting |
 | PII Detection | Microsoft Presidio | Production-grade PII anonymization |
@@ -646,6 +646,7 @@ LangGraph Orchestrator: Intent Classification (sql/rag/hybrid/forecast)
     │
     ▼
 Policy Check (Cerbos): user có quyền access domain này không?
+Principal mapping tối thiểu Phase 1: `principal.attr.department`, `principal.attr.clearance`; schema này được freeze sớm để các phase sau chỉ extend.
     │  (Nếu không → reject ngay, ghi audit)
     ▼
 Semantic Layer: Resolve business terms → metric definitions → allowed joins

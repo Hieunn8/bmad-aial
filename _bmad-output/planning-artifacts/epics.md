@@ -155,16 +155,19 @@ This document provides the complete epic and story breakdown for AIAL, decomposi
 - UX-DR7: `StreamAbortButton` — visible, không ẩn trong menu; Escape key binding
 - UX-DR8: `ConnectionStatusBanner` — SSE drop detection; auto-retry với exponential backoff
 - UX-DR9: `ChartReveal` — fade-in khi JSON stream complete; skeleton placeholder trước đó
+- UX-DR9a: Loading skeleton pattern — global skeleton language for chat/table/chart loading states; define in Epic 1 before DR5/DR6 consumers
+- UX-DR9b: Animation tokens — duration/easing curves for streaming transitions; define with DR1-4 in Epic 1 and reuse across DR5/DR9
+- UX-DR9c: SSE error scenario validation — verify DR18/19/20/21 cover timeout, partial stream, reconnect, and server-abort behavior before Epic 2A implementation
 
 **Trust & Transparency Components:**
-- UX-DR10: `CitationBadge` — inline `[1][2]` parse từ streaming text; shadcn Tooltip; human-readable source (không raw SQL)
-- UX-DR11: `ProvenanceDrawer` — side panel; không navigate away; human-readable lineage + timestamp + confidence; SQL collapse by default
-- UX-DR12: `ConfidenceBreakdownCard` — 5 states: low-confidence/partial-data/stale-data/permission-limited/cross-source-conflict; luôn offer 3 exits
+- UX-DR10: `CitationBadge` — inline `[1][2]` parse từ streaming text; shadcn Tooltip; human-readable source (không raw SQL); build in Epic 2B, consume in Epic 3
+- UX-DR11: `ProvenanceDrawer` — side panel; không navigate away; human-readable lineage + timestamp + confidence; SQL collapse by default; build in Epic 2B, consume in Epic 3
+- UX-DR12: `ConfidenceBreakdownCard` — 5 states: low-confidence/partial-data/stale-data/permission-limited/cross-source-conflict; luôn offer 3 exits; build in Epic 4, consume in Epic 7
 
 **Approval & Async Components:**
 - UX-DR13: `ApprovalBriefingCard` — 5 elements: requester + business justification + data scope + risk signal + escalation; non-modal; keyboard accessible
 - UX-DR14: `ExportJobStatus` — 4 states: queued/running/ready/failed; SSE job updates; non-blocking; toast notification khi done
-- UX-DR15: `ExportConfirmationBar` — sticky bottom; không modal; auto-dismiss 30s; Human-in-the-Loop Signature
+- UX-DR15: `ExportConfirmationBar` — sticky bottom; không modal; auto-dismiss 30s; Human-in-the-Loop Signature; build in Epic 4, consume in Epic 6
 
 **Error & Permission Components:**
 - UX-DR16: `IntentConfirmationDialog` — state machine: idle → intent_ambiguous → confirmed; SSE event `{ type: 'intent_ambiguous', options: [...] }`; Vietnamese business terminology
@@ -181,11 +184,12 @@ This document provides the complete epic and story breakdown for AIAL, decomposi
 - UX-DR23: Command Palette — `cmdk` library; `isPaletteOpen` Zustand; template queries + history
 
 **Accessibility:**
-- UX-DR24: WCAG 2.2 AA compliance — ARIA live regions cho streaming; keyboard navigation cho streaming controls; ARIA `role="log"` cho StreamingMessage; `prefers-reduced-motion` respected
-- UX-DR25: Screen reader announcement strategy — batch theo sentence boundary; announce phase changes; không announce mỗi token
+- UX-DR24: WCAG 2.2 AA base compliance — Epic 1 owns ARIA landmark structure, contrast validation in design tokens, and `prefers-reduced-motion` baseline; axe-core accessibility audit is AC for every UI epic
+- UX-DR25: Screen reader announcement strategy — Epic 2A owns streaming-specific behavior for `StreamingMessage`; use `aria-live="polite"`, sentence-boundary batching, and phase-change announcements; reused by later streaming surfaces
 
 **Onboarding:**
-- UX-DR26: Onboarding flow — Role Recognition (10s) → Live Demo (45s curated demo data) → First Query Scaffold; first query PHẢI thành công 100%; progressive reveal features
+- UX-DR26a: Onboarding flow structure — Role Recognition (10s) → step progression → First Query Scaffold; Epic 2A owns flow structure, navigation logic, and success path without curated demo data
+- UX-DR26b: Onboarding demo experience — Live Demo (45s curated demo data) + "try it now" flows; Epic 5A/5B owns curated demo data integration if included in later phase
 
 **Admin Portal:**
 - UX-DR27: Admin Portal layout — desktop-only; Command Layout với sidebar 240px; 56px header; 12-column grid
@@ -289,15 +293,15 @@ This document provides the complete epic and story breakdown for AIAL, decomposi
 
 **Walking Skeleton Stories:**
 - 1.1: Monorepo scaffold (uv workspaces, pyproject.toml per service, Dockerfiles multi-stage)
-- 1.1b: Secrets baseline — HashiCorp Vault dev mode in Compose; secret injection pattern for Keycloak/Kong/Oracle credentials
+- 1.1b: Secrets baseline — HashiCorp Vault dev mode in Compose; secret injection pattern for Kong admin token, Keycloak client secret, and Oracle credentials
 - 1.2: Compose infra stack (PostgreSQL, Redis, Weaviate, Keycloak, Kong, Cerbos) + wait-for-services.sh
 - 1.3: Keycloak realm + OIDC → Cerbos PDP connected; SSO login flow works; realm-export.json committed
-- 1.4: Kong gateway: OIDC plugin → Keycloak, Cerbos authorization sidecar, route table skeleton, rate limiting baseline
+- 1.4: Kong gateway: OIDC plugin → Keycloak, Cerbos PDP deployment/authorization sidecar, route table skeleton, rate limiting baseline
 - 1.5: FastAPI app skeleton: health/readiness endpoints, OpenTelemetry instrumentation, shared embedding client scaffold (`services/embedding/client.py`)
 - 1.6: LangGraph stub graph + AIALGraphState TypedDict (ARCH-10 draft); Weaviate schema bootstrap (`weaviate/schema.py` — single source of truth for Epic 2A + Epic 3)
 - 1.7: Observability stack: Tempo + Grafana + Prometheus scrape configs; Langfuse self-hosted
 - 1.8: Frontend shell: React 18 + Vite 6 + TanStack Router skeleton; design token CSS vars loaded; Error Boundary hierarchy (AppErrorBoundary → PageErrorBoundary → StreamErrorBoundary); `useSSEStream` hook stub; shadcn/ui base components
-- 1.9: **Oracle VPD Smoke Test** — `CREATE CONTEXT` + `DBMS_RLS.ADD_POLICY`; 1 policy, 1 table, 1 service account; row-level filter assertion passes; cx_Oracle pool authenticated correctly ← P0 SECURITY GATE
+- 1.9: **Oracle VPD Smoke Test** — `CREATE CONTEXT` + `DBMS_RLS.ADD_POLICY`; 1 policy, 1 table, 1 user principal; row-level filter assertion passes; cx_Oracle pool authenticated correctly ← P0 SECURITY GATE
 - 1.10: **E2E trace GATE** — curl → Kong (JWT validated) → FastAPI → Cerbos (policy check) → LangGraph stub → response; full trace visible in Grafana Tempo ← WALKING SKELETON COMPLETE
 
 **Phase:** 1 (Sprint 0) | **Blocks:** All other epics | **NFR baseline:** NFR-P1 SLO targets documented; NFR-S1-S4 encryption standards implemented; NFR-HA1-3 backup strategy configured
@@ -308,10 +312,46 @@ This document provides the complete epic and story breakdown for AIAL, decomposi
 
 **User outcome:** Sales/Finance users can ask a question in Vietnamese, receive Oracle data results with SQL explanation, filtered by their row-level permissions, with every query logged.
 
+**Done When:** A logged-in business user can submit a Vietnamese query through the streaming UI, receive a governed Oracle answer under 3 seconds P50 for datasets under 1M rows, see stream-safe screen reader announcements, and have policy + audit traces recorded for the request.
+
+**Explicitly Out of Scope:** Document retrieval, cross-domain decomposition execution, approval workflow for sensitive exports, forecast generation, curated onboarding demo data.
+
 **FRs covered:** FR-O1, FR-O2, FR-O3, FR-O4 (orchestration), FR-S1, FR-S2 (bootstrap API only), FR-S3, FR-S4 (Text-to-SQL core), FR-A2 (RBAC baseline), FR-A3 (Oracle VPD enforce), FR-A6 (identity passthrough), FR-M1 (short-term memory Redis)
 
 **ARCH items:** ARCH-10 (AIALGraphState finalized), ARCH-11 (Celery config), ARCH-12 (bge-m3 lock)
-**UX items:** UX-DR5 (StreamingMessage), UX-DR6 (ProgressiveDataTable), UX-DR7 (StreamAbortButton), UX-DR8 (ConnectionStatusBanner), UX-DR16 (IntentConfirmationDialog), UX-DR26 (onboarding flow)
+**UX items:**
+- UX-DR5 (StreamingMessage with UX-DR25 live region behavior)
+- UX-DR6 (ProgressiveDataTable)
+- UX-DR7 (StreamAbortButton)
+- UX-DR8 (ConnectionStatusBanner)
+- UX-DR16 (IntentConfirmationDialog)
+- UX-DR25 (screen reader announcement strategy for streaming)
+- UX-DR26a (onboarding flow structure, navigation logic, step progression only)
+
+**Story outline:**
+- 2A.0: Weaviate schema bootstrap — own `weaviate/schema.py`; create bootstrap/migration path used by Epic 2A and Epic 3; no duplicate schema ownership
+- 2A.1: Intent classification + query contract enforcement (`POST /v1/chat/query`) with input validation, UTF-8 handling, and query length limits
+- 2A.2: Semantic layer bootstrap API + glossary lookup service for governed business terms
+- 2A.3: SQL generation guardrails — whitelist/AST validation + query governor + row/timeout limits
+- 2A.4: Oracle execution path with identity passthrough + VPD enforcement wired to authenticated principal
+- 2A.5: Streaming chat UX + SSE transport (`StreamingMessage`, `ProgressiveDataTable`, abort/reconnect, accessibility behavior)
+- 2A.6: Redis short-term memory isolation + per-turn privilege re-check
+- 2A.7: Baseline Cerbos policy mapping — principal schema frozen for `department` and `clearance`; JWT mapping documented for later Epic 4 extension
+- 2A.8: Audit/event logging for query lifecycle + query explanation payload
+- 2A.9: Onboarding shell (DR26a) + first-query scaffold without demo data
+
+**Required coordination notes:**
+- Cerbos PDP must already be deployed in Story 1.4; Epic 2A consumes it and must not re-home PDP deployment.
+- `principal.attr` schema is frozen in Epic 2A with `department` and `clearance` even if baseline authorization still relies mainly on roles.
+- ADR required before parallel Epic 4 work starts: `Cerbos principal.attr schema frozen at Epic 2A Story 2A.7`.
+- `services/embedding/client.py` contract from Epic 1.5 is the shared bge-m3 client consumed by Epic 2A and Epic 3.
+
+**Component Interface Notes:**
+- Frontend: `QueryComposer`, `StreamingMessage`, `ProgressiveDataTable`, `ConnectionStatusBanner`, `IntentConfirmationDialog`, `OnboardingFlowShell`
+- Backend: Query API service, orchestration service, SQL validation service, Oracle execution adapter, audit logger
+- Shared contracts: `ChatQueryRequest`, `ChatStreamEvent`, `QueryResultPayload`, `PrincipalContext`, `AIALGraphState`
+
+**NFR thresholds:** NFR-P1 query response P50<3s/P95<8s for single-domain datasets under 1M rows; NFR-CM1/CM2 token cost + rate limiting recorded per request; NFR-MT2 regression tests cover policy/SQL leakage paths.
 
 **Phase:** 1 (Sprint 1-2) | **Requires:** Epic 1 complete | **Parallel with:** Epic 3, Epic 5A
 
@@ -321,9 +361,23 @@ This document provides the complete epic and story breakdown for AIAL, decomposi
 
 **User outcome:** Every answer shows exactly where data came from with citations; every query is fully auditable by compliance officers; users understand AI confidence level.
 
+**Done When:** Query answers render provenance and citation UI sourced from audited backend metadata, and compliance staff can trace a completed request end-to-end without asking engineering to reconstruct logs.
+
+**Explicitly Out of Scope:** New citation/parsing component implementations in later epics, full ABAC expansion, document ingestion pipeline.
+
 **FRs covered:** FR-O5 (SQL explanation full), FR-A8 (comprehensive audit log), FR-S2 (management integration)
 
-**UX items:** UX-DR9 (ChartReveal), UX-DR10 (CitationBadge), UX-DR11 (ProvenanceDrawer)
+**UX items:**
+- UX-DR9 (ChartReveal)
+- UX-DR10 (CitationBadge) — build here, later epics consume
+- UX-DR11 (ProvenanceDrawer) — build here, later epics consume
+
+**Component Interface Notes:**
+- Frontend: `CitationBadge`, `ProvenanceDrawer`, `AuditTimeline`, `SqlExplanationPanel`
+- Backend: provenance formatter, audit read model, query explanation serializer
+- Shared contracts: `CitationRef`, `ProvenanceEntry`, `AuditLogRecord`, `SqlExplanation`
+
+**NFR thresholds:** Audit lookup and provenance payload retrieval <3s for standard query history views; NFR-OB1/OB2/OB3 events emitted for every completed or failed answer.
 
 **Phase:** 1 (Sprint 2-3) | **Requires:** Epic 2A complete
 
@@ -333,10 +387,27 @@ This document provides the complete epic and story breakdown for AIAL, decomposi
 
 **User outcome:** Users can ask questions that combine Oracle database data with internal documents; answers include citations from both data sources with source attribution.
 
+**Done When:** Authorized documents can be ingested, filtered before retrieval by policy metadata, and surfaced in hybrid answers using the shared provenance UI built in Epic 2B.
+
+**Explicitly Out of Scope:** Rebuilding Weaviate schema ownership, duplicating citation/provenance UI, cross-domain query decomposition across business domains.
+
 **FRs covered:** FR-R1, FR-R2, FR-R3, FR-R4, FR-R5
 
 **ARCH items:** ARCH-12 (bge-m3 embedding), Weaviate schema migrations
-**UX items:** UX-DR10 (citation from documents), UX-DR11 (ProvenanceDrawer for docs)
+**UX items:**
+- UX-DR10 (citation from documents) — consume implementation from Epic 2B
+- UX-DR11 (ProvenanceDrawer for docs) — consume implementation from Epic 2B
+
+**Required coordination notes:**
+- Consume `weaviate/schema.py` from Story 2A.0 or Epic 1.6 baseline; Epic 3 must not fork schema ownership.
+- Consume shared `services/embedding/client.py` scaffold from Epic 1.5/1.6 for bge-m3 access.
+
+**Component Interface Notes:**
+- Frontend: hybrid answer view, provenance drawer integration, document citation rendering
+- Backend: ingestion worker, retrieval service, metadata policy filter, hybrid answer orchestrator
+- Shared contracts: `DocumentChunk`, `DocumentCitation`, `HybridAnswerPayload`, `EmbeddingVectorRef`
+
+**NFR thresholds:** File ingest <5 minutes for documents under 100 pages; retrieval responses meet FR-R3 citation completeness and enforce FR-R2 policy filtering before vector search.
 
 **Phase:** 2 (Sprint 3-4) | **Requires:** Epic 1 | **Parallel with:** Epic 2A/2B
 
@@ -346,9 +417,27 @@ This document provides the complete epic and story breakdown for AIAL, decomposi
 
 **User outcome:** HR users can safely query employee data without PII exposure; Approval Officers can review and decide on sensitive queries within 4 hours; column-level security enforces data boundaries.
 
+**Done When:** Sensitive queries are checked against expanded attribute-based policies, PII/masked columns are safely handled, approval workflows gate protected data access, and users receive actionable permission/approval UX states.
+
+**Explicitly Out of Scope:** Reworking principal attribute JWT mapping introduced in Epic 2A, export/report scheduling, forecast-specific explainability.
+
 **FRs covered:** FR-A2 (full ABAC with department/region/clearance attributes), FR-A4 (column-level security), FR-A5 (PII masking Presidio), FR-A7 (approval workflow)
 
-**UX items:** UX-DR12 (ConfidenceBreakdownCard), UX-DR13 (ApprovalBriefingCard), UX-DR15 (ExportConfirmationBar), UX-DR17 (PermissionRequestState)
+**UX items:**
+- UX-DR12 (ConfidenceBreakdownCard) — build here, later Epic 7 consumes
+- UX-DR13 (ApprovalBriefingCard)
+- UX-DR15 (ExportConfirmationBar) — build here, later Epic 6 consumes
+- UX-DR17 (PermissionRequestState)
+
+**Required coordination notes:**
+- Extend the `principal.attr` schema frozen in Epic 2A; do not backfill or rename baseline JWT-to-Cerbos mappings.
+
+**Component Interface Notes:**
+- Frontend: `ConfidenceBreakdownCard`, `ApprovalBriefingCard`, `PermissionRequestState`, `ExportConfirmationBar`
+- Backend: policy decision service, masking/redaction pipeline, approval workflow service
+- Shared contracts: `ApprovalRequest`, `PermissionDecision`, `MaskedField`, `ConfidenceBreakdown`
+
+**NFR thresholds:** Approval workflow SLA <4 hours; masking regressions blocked by automated redaction tests; all protected-path failures emit auditable deny events.
 
 **Phase:** 2 (Sprint 4-5) | **Requires:** Epics 2A, 2B
 
@@ -358,9 +447,20 @@ This document provides the complete epic and story breakdown for AIAL, decomposi
 
 **User outcome:** IT Admin can onboard new departments, configure data source access, manage users/roles, and monitor system health and audit logs — without any manual Oracle configuration.
 
+**Done When:** Admin users can manage core operational settings from the portal, observe system health and audits, and prepare department onboarding without touching infra manifests directly.
+
+**Explicitly Out of Scope:** Semantic layer rollback authoring, medium/long-term memory management, curated onboarding demo experience.
+
 **FRs covered:** FR-AD2 (user/role management + LDAP sync), FR-AD3 (data source configuration), FR-AD4 (audit dashboard), FR-AD5 (system health dashboard)
 
-**UX items:** UX-DR27 (Admin Portal layout), partial UX-DR28 (Semantic Layer management UI read-only view)
+**UX items:** UX-DR27 (Admin Portal layout), partial UX-DR28 (Semantic Layer management UI read-only view), UX-DR26b candidate consume point for demo data if product wants admin-configurable demos later
+
+**Component Interface Notes:**
+- Frontend: admin shell, user/role management tables, data source config forms, audit dashboard, health dashboard
+- Backend: admin API, LDAP sync adapter, data source config service, health aggregation service
+- Shared contracts: `AdminUser`, `RoleAssignment`, `DataSourceConfig`, `HealthSnapshot`
+
+**NFR thresholds:** Admin dashboard search/filter under 3 seconds for standard datasets; health signals refresh every 30 seconds with alert propagation under 2 minutes.
 
 **Phase:** 1.5 (Sprint 2-3, parallel with 2A) | **Requires:** Epic 1.3 (Keycloak ready)
 
@@ -370,9 +470,20 @@ This document provides the complete epic and story breakdown for AIAL, decomposi
 
 **User outcome:** Data Owners can manage KPI definitions with versioning and rollback; users benefit from persistent conversation memory across sessions; advanced memory features preserve context intelligently.
 
+**Done When:** KPI/version governance workflows are operational in the admin portal, memory summaries persist across sessions without storing raw Oracle data, and governance users can audit and roll back semantic definitions safely.
+
+**Explicitly Out of Scope:** Rebuilding admin shell foundations from Epic 5A, forecast-specific workflows, cross-domain execution logic.
+
 **FRs covered:** FR-AD1 (Semantic Layer management full), FR-S2 (management UI), FR-M2, FR-M3, FR-M4, FR-M5, FR-M6, FR-M7 (full memory stack)
 
-**UX items:** UX-DR28 (Semantic Layer admin with diff view + rollback)
+**UX items:** UX-DR28 (Semantic Layer admin with diff view + rollback), UX-DR26b (curated demo data integration and "try it now" flows if product keeps onboarding in Phase 2)
+
+**Component Interface Notes:**
+- Frontend: KPI version diff/rollback UI, memory history search, preference panels
+- Backend: semantic layer version service, memory summarizer, history search service
+- Shared contracts: `KpiDefinitionVersion`, `ConversationSummary`, `PreferenceProfile`, `HistorySearchResult`
+
+**NFR thresholds:** History search <2 seconds; memory storage stores summaries/intents only and never raw Oracle values; rollback operations are fully audited.
 
 **Phase:** 2 (Sprint 5-6) | **Requires:** Epic 2A (memory store), Epic 5A (admin portal shell)
 
@@ -382,9 +493,31 @@ This document provides the complete epic and story breakdown for AIAL, decomposi
 
 **User outcome:** Finance users get scheduled reports delivered automatically to their inbox; users can query across Finance + Budget domains simultaneously; popular queries return instantly from cache.
 
+**Done When:** Export/report workflows operate end-to-end, cache improves common-query latency, and the team can execute cross-domain queries using a decomposition approach already validated by the Story 6.0 spike.
+
+**Explicitly Out of Scope:** First implementation of decomposition research, new export confirmation UX implementation, forecasting models.
+
 **FRs covered:** FR-E1, FR-E2, FR-E3, FR-E4 (export complete), FR-S5 (cross-domain query decomposition), FR-S6 (semantic result cache)
 
-**UX items:** UX-DR14 (ExportJobStatus), UX-DR15 (ExportConfirmationBar), UX-DR22 (routing for report pages), UX-DR23 (command palette for report templates)
+**UX items:**
+- UX-DR14 (ExportJobStatus)
+- UX-DR15 (ExportConfirmationBar) — consume implementation from Epic 4
+- UX-DR22 (routing for report pages)
+- UX-DR23 (command palette for report templates)
+
+**Story outline:**
+- 6.0: FR-S5 spike — define `QueryDecompositionState` TypedDict, horizontal vs vertical decomposition strategies, and merge patterns; runs in parallel with Epic 2B but implementation stays after Epic 2B
+- 6.1: Scheduled report generation + delivery pipeline
+- 6.2: Export authorization/audit integration on top of Epic 4 controls
+- 6.3: Semantic result cache for common governed queries
+- 6.4: Production cross-domain execution using the approved 6.0 decomposition model
+
+**Component Interface Notes:**
+- Frontend: report pages, export job status, export confirmation consume path, report template palette
+- Backend: report scheduler, export worker, cache service, decomposition orchestrator
+- Shared contracts: `ReportJob`, `ExportRequest`, `CachedQueryResult`, `QueryDecompositionState`, `MergedDomainResult`
+
+**NFR thresholds:** Export async completion under 5 minutes for standard report sizes; cross-domain queries target P50<8s/P95<20s once implemented; cache hit rate goal >40% after two weeks of steady-state use.
 
 **Phase:** 2 (Sprint 6-7) | **Requires:** Epics 2A, 4
 
@@ -394,12 +527,99 @@ This document provides the complete epic and story breakdown for AIAL, decomposi
 
 **User outcome:** HR and Finance analysts can request time-series forecasts, anomaly detection alerts, and trend analysis in natural language, receiving explainable results without ML jargon.
 
+**Done When:** Forecast and anomaly jobs run asynchronously, return business-readable explanations with uncertainty handling, and reuse shared confidence UI without duplicating it.
+
+**Explicitly Out of Scope:** Rebuilding confidence breakdown UX, export/reporting, onboarding demo infrastructure.
+
 **FRs covered:** FR-F1, FR-F2, FR-F3, FR-F4, FR-F5, FR-F6
 
 **ARCH items:** Nixtla TimeGPT integration, async forecast worker (Celery)
-**UX items:** UX-DR12 (ConfidenceBreakdownCard for forecast uncertainty)
+**UX items:** UX-DR12 (ConfidenceBreakdownCard for forecast uncertainty) — consume implementation from Epic 4
+
+**Component Interface Notes:**
+- Frontend: forecast request form, anomaly alert panels, forecast result views
+- Backend: forecast orchestrator, async worker, explainability formatter
+- Shared contracts: `ForecastRequest`, `ForecastJob`, `ForecastExplanation`, `AnomalyAlert`
+
+**NFR thresholds:** Forecast responses P50<10s/P95<30s after job execution begins; explainability outputs must include confidence intervals and top contributing factors.
 
 **Phase:** 3 (Sprint 8+) | **Requires:** Epics 2A, 5B (memory for forecast context)
+
+---
+
+### Cross-cutting Clarifications
+
+**UX ownership and consume rules:**
+- UX-DR10 and UX-DR11 are built in Epic 2B; Epic 3 consumes the same components and must not rebuild them.
+- UX-DR12 is built in Epic 4; Epic 7 consumes the same component for forecast uncertainty and must not fork it.
+- UX-DR15 is built in Epic 4; Epic 6 consumes the same export confirmation component and must not create a parallel version.
+
+**Accessibility enforcement:**
+- UX-DR24 base ownership sits in Epic 1 for ARIA landmark structure and contrast validation in design tokens.
+- UX-DR25 streaming screen reader behavior sits in Epic 2A alongside UX-DR5 `StreamingMessage`.
+- Axe-core accessibility audit is acceptance criteria for every epic touching UI.
+
+**Onboarding split:**
+- UX-DR26a belongs to Epic 2A for flow structure, navigation logic, and step progression.
+- UX-DR26b belongs to Epic 5A/5B for curated demo data integration and "try it now" flows.
+
+**Shared infrastructure ownership:**
+- `weaviate/schema.py` has single ownership through Story 2A.0 with Epic 1.6 bootstrap roots; Epic 2A and Epic 3 both consume it.
+- `services/embedding/client.py` is scaffolded in Epic 1.5 and treated as the shared bge-m3 client contract before Epic 2A and Epic 3 parallel work starts.
+- Cerbos principal attribute contract is frozen in Epic 2A before Epic 4 extends attribute-based policy coverage.
+
+---
+
+### Query Contract Sketch — Epic 2A
+
+- Endpoint: `POST /v1/chat/query`
+- Auth: Bearer JWT from Keycloak; request rejected if token missing, expired, or principal mapping incomplete.
+- Content type: `application/json; charset=utf-8`
+- Input contract:
+  - `query`: UTF-8 string, Vietnamese or English, 1-1000 characters after trim
+  - `session_id`: UUID string
+  - `department_context`: optional string if chosen by user but must still be validated against JWT/Cerbos principal
+  - `stream`: boolean, default `true`
+- Success path:
+  - API validates payload, resolves principal context, runs policy pre-check, classifies intent, starts orchestration, and returns stream handle or inline stream response
+  - SSE events follow `thinking|querying|streaming|done|error` contract from ARCH-16
+- Failure modes:
+  - `400` invalid payload, encoding, or query length
+  - `401` missing/invalid token
+  - `403` policy deny or department mismatch
+  - `409` ambiguous intent requiring confirmation
+  - `422` SQL safety validation failure
+  - `504` Oracle/query timeout
+  - `5xx` orchestration or downstream service failure with structured problem payload
+
+---
+
+### Technology Decisions Appendix
+
+- Database: PostgreSQL 16
+- Cache/session store: Redis
+- Vector store: Weaviate
+- Auth: Keycloak with LDAP/AD federation
+- API style: REST/JSON with SSE for streaming
+- Frontend: React 18 + Vite 6 + TanStack Router + TanStack Query + Zustand
+- Gateway: Kong
+- Policy engine: Cerbos
+- Backend orchestration: FastAPI + LangGraph
+- Embedding model: `bge-m3` with 1024 dimensions
+- Observability: OpenTelemetry + Tempo + Grafana + Langfuse
+- Secret management baseline: HashiCorp Vault dev mode in Compose for local/dev
+
+---
+
+### Domain Glossary
+
+- Query: the user's natural-language analytical question submitted to the system.
+- Request: the API-level invocation carrying one query plus session/auth context.
+- Job: an asynchronous unit of work such as export, ingestion, or forecasting.
+- Task: an internal orchestration or worker step inside a request or job.
+- Domain: a governed business data area such as Finance, Sales, or Budget.
+- Principal: the authenticated user context projected into Cerbos and Oracle access checks.
+- Semantic Layer: the governed business metric/dimension abstraction exposed to the LLM instead of raw Oracle schema.
 
 ---
 
@@ -413,6 +633,7 @@ Epic 1 (Walking Skeleton + SSO)
 
 Epic 2A + 2B ──► Epic 4 (Security)
 Epic 2A + 5A ──► Epic 5B (Data Governance)
+Epic 2B  ──► Story 6.0 (Cross-domain spike) [parallel research]
 Epic 2A + 4  ──► Epic 6 (Export & Reporting)
 Epic 2A + 5B ──► Epic 7 (Forecasting)
 ```

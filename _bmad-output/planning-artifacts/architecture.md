@@ -514,7 +514,7 @@ Add Celery Beat service to `infra/docker-compose.dev.yml`.
 - [x] Documentation scaffolding: ADR template, service README template, OpenAPI strategy
 
 **✅ Architectural Decisions (Step 4)**
-- [x] ADR-001: Shared schema + Oracle VPD (governance pending)
+- [x] ADR-001: Shared schema + Oracle VPD + Cerbos `principal.attr` freeze before Epic 4 extension
 - [x] ADR-002: Consistency contract per domain
 - [x] ADR-003: bge-m3 embedding, 1024 dims, self-hosted
 - [x] ADR-004: Exponential backoff retry + DLQ Redis Streams
@@ -1152,9 +1152,11 @@ User Query
 - `useSSEStream` custom hook — same
 - `structlog` — `logging.basicConfig()` chấp nhận được ban đầu; adopt khi cần trace production issues
 
+**Phase 1 mandatory security lock**
+- Cerbos policy engine integration → KHÔNG defer; Phase 1 phải deploy Cerbos cùng Kong/Keycloak. Baseline `principal.attr` schema lock sớm với `department` và `clearance`; Epic sau chỉ extend, không được backfill JWT mapping
+
 **🟡 Defer to Phase 2:**
 - RFC 9457 full compliance → dùng simple `{success, data, error}` envelope Phase 1
-- Cerbos policy engine integration → hardcode simple role check Phase 1; requirements chưa fully known
 - Full `AIALException` hierarchy → đừng design failure modes trước khi biết mình sẽ fail ở đâu
 
 ---
@@ -1923,6 +1925,8 @@ CELERY_TASK_TRACK_STARTED = True       # Track in-progress tasks
 **Data Migration Strategy:**
 - PostgreSQL: Alembic (auto-generate migrations, version controlled)
 - Weaviate: custom migration scripts (`services/rag/migrations/`) — không có Alembic equivalent
+- `weaviate/schema.py` là single source of truth cho collection bootstrap; Epic 2A owns bootstrap contract, Epic 3 consumes, không fork schema ownership
+- `services/embedding/client.py` là shared `bge-m3` client scaffold; Phase 1 phải tạo interface contract trước khi Epic 2A và Epic 3 chạy song song
 - Trigger: schema change → CI run migration scripts → verify index health
 
 ---
@@ -1940,10 +1944,15 @@ User request → Keycloak JWT → Orchestration → Cerbos policy check
 ```
 Không dùng shared DBA account. `cx_Oracle.SessionPool` với `homogeneous=False` (heterogeneous pool) để support per-user proxy.
 
+**Cerbos principal contract (Phase 1 lock):**
+- Baseline `principal.attr` schema: `department`, `clearance`
+- JWT mapping cho 2 attrs này phải được lock trong Epic 2A trước khi Epic 4 mở rộng ABAC
+- ADR bắt buộc: `Cerbos principal.attr schema frozen at Epic 2A`
+
 **Secret Management:**
 | Environment | Strategy |
 |-------------|---------|
-| Local dev | `.env` + Pydantic Settings (auto-load, không commit) |
+| Local dev | HashiCorp Vault dev mode + Pydantic Settings injection pattern (không hardcode, không commit) |
 | Staging | K8s ConfigMap + Vault Agent Sidecar |
 | Production | HashiCorp Vault (dynamic secrets Oracle, LLM API keys) + K8s Secrets |
 
