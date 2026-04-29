@@ -31,6 +31,14 @@ plugins:
       run_on_preflight: true
     route: chat-query
 
+  - name: post-function
+    config:
+      access:
+        - |
+          local authz = assert(loadfile("/etc/kong/cerbos_authz.lua"))()
+          authz()
+    route: chat-query
+
   - name: rate-limiting
     config:
       minute: 10

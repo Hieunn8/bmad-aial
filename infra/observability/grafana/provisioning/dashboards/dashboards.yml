@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: aial-dashboards
+    orgId: 1
+    folder: AIAL
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

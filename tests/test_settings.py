@@ -1,11 +1,11 @@
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
-
 from app.settings import Settings
+from pydantic import ValidationError
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -48,7 +48,7 @@ def test_runtime_entrypoint_fails_fast_when_secret_missing() -> None:
     env["PYTHONPATH"] = str(PROJECT_ROOT / "services")
 
     result = subprocess.run(
-        ["python", "-m", "app.main"],
+        [sys.executable, "-m", "app.main"],
         cwd=str(PROJECT_ROOT),
         env=env,
         capture_output=True,

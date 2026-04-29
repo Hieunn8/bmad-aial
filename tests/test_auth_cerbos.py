@@ -6,8 +6,6 @@ Validates the client against the Cerbos 0.38+ /api/check/resources contract.
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from aial_shared.auth.cerbos import AuthzResult, CerbosClient, _extract_effect
 from aial_shared.auth.keycloak import JWTClaims
 
@@ -30,15 +28,17 @@ def _make_principal(
 
 def _mock_cerbos_response(effect: str = "EFFECT_ALLOW", action: str = "query") -> bytes:
     """Matches the real Cerbos /api/check/resources response format."""
-    return json.dumps({
-        "requestId": "test",
-        "results": [
-            {
-                "resource": {"kind": "api:chat", "id": "default"},
-                "actions": {action: effect},
-            }
-        ],
-    }).encode()
+    return json.dumps(
+        {
+            "requestId": "test",
+            "results": [
+                {
+                    "resource": {"kind": "api:chat", "id": "default"},
+                    "actions": {action: effect},
+                }
+            ],
+        }
+    ).encode()
 
 
 def _make_mock_urlopen(response_bytes: bytes) -> MagicMock:

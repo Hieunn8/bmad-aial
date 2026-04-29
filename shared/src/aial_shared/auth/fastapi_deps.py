@@ -13,8 +13,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from collections.abc import Callable
 from functools import lru_cache
-from typing import Callable
 
 from fastapi import Depends, HTTPException, Request
 
@@ -37,6 +37,10 @@ def _get_cerbos_client() -> CerbosClient:
     return CerbosClient(base_url=_CERBOS_URL)
 
 
+def reset_cerbos_client_cache() -> None:
+    _get_cerbos_client.cache_clear()
+
+
 async def get_current_user(request: Request) -> JWTClaims:
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
@@ -45,7 +49,7 @@ async def get_current_user(request: Request) -> JWTClaims:
     token = auth_header[7:]
 
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         raw_claims = await loop.run_in_executor(
             None, lambda: decode_jwt(token, issuer=_ISSUER, verify=True)
         )
@@ -60,16 +64,20 @@ async def get_current_user(request: Request) -> JWTClaims:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
 
+CURRENT_USER_DEP = Depends(get_current_user)
+CERBOS_CLIENT_DEP = Depends(_get_cerbos_client)
+
+
 def require_permission(
     resource_kind: str,
     resource_id: str,
     action: str,
 ) -> Callable:
     async def _check_permission(
-        principal: JWTClaims = Depends(get_current_user),
-        cerbos: CerbosClient = Depends(_get_cerbos_client),
+        principal: JWTClaims = CURRENT_USER_DEP,
+        cerbos: CerbosClient = CERBOS_CLIENT_DEP,
     ) -> JWTClaims:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             None, lambda: cerbos.check(principal, resource_kind, resource_id, action)
         )

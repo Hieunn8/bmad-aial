@@ -1,7 +1,6 @@
 """Tests for embedding client contract stub."""
 
 import pytest
-
 from embedding.client import (
     BGE_MODEL_NAME,
     DIMS,

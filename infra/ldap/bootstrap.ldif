@@ -10,31 +10,35 @@ dn: uid=dev-admin,ou=people,dc=aial,dc=local
 objectClass: inetOrgPerson
 objectClass: organizationalPerson
 objectClass: person
+objectClass: extensibleObject
 cn: Dev Admin
 sn: Admin
 uid: dev-admin
 mail: admin@aial.local
 userPassword: admin
 departmentNumber: engineering
+employeeNumber: 3
 
 dn: uid=dev-user,ou=people,dc=aial,dc=local
 objectClass: inetOrgPerson
 objectClass: organizationalPerson
 objectClass: person
+objectClass: extensibleObject
 cn: Dev User
 sn: User
 uid: dev-user
 mail: user@aial.local
 userPassword: user
 departmentNumber: sales
+employeeNumber: 1
 
-dn: cn=admins,ou=groups,dc=aial,dc=local
+dn: cn=admin,ou=groups,dc=aial,dc=local
 objectClass: groupOfNames
-cn: admins
+cn: admin
 member: uid=dev-admin,ou=people,dc=aial,dc=local
 
-dn: cn=users,ou=groups,dc=aial,dc=local
+dn: cn=user,ou=groups,dc=aial,dc=local
 objectClass: groupOfNames
-cn: users
+cn: user
 member: uid=dev-admin,ou=people,dc=aial,dc=local
 member: uid=dev-user,ou=people,dc=aial,dc=local

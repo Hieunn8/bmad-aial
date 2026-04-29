@@ -12,7 +12,6 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
-
 _DEFAULT_OTLP_ENDPOINT = "http://localhost:4317"
 
 

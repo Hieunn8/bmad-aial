@@ -2,7 +2,6 @@ import logging
 
 from app.settings import Settings
 
-
 logger = logging.getLogger(__name__)
 
 

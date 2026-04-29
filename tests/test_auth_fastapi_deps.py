@@ -10,11 +10,22 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from aial_shared.auth.fastapi_deps import get_current_user, require_permission
+from aial_shared.auth.fastapi_deps import (
+    get_current_user,
+    require_permission,
+    reset_cerbos_client_cache,
+)
 from aial_shared.auth.keycloak import JWTClaims
+
+CURRENT_USER_DEP = Depends(get_current_user)
+
+
+@pytest.fixture(autouse=True)
+def clear_cerbos_client_cache() -> None:
+    reset_cerbos_client_cache()
 
 
 @pytest.fixture()
@@ -25,7 +36,13 @@ def sample_claims() -> JWTClaims:
         department="sales",
         roles=("user",),
         clearance=1,
-        raw={"sub": "user-123", "email": "user@aial.local", "department": "sales", "roles": ["user"], "clearance": 1},
+        raw={
+            "sub": "user-123",
+            "email": "user@aial.local",
+            "department": "sales",
+            "roles": ["user"],
+            "clearance": 1,
+        },
     )
 
 
@@ -55,7 +72,13 @@ def viewer_claims() -> JWTClaims:
         department="hr",
         roles=("viewer",),
         clearance=0,
-        raw={"sub": "viewer-789", "email": "viewer@aial.local", "department": "hr", "roles": ["viewer"], "clearance": 0},
+        raw={
+            "sub": "viewer-789",
+            "email": "viewer@aial.local",
+            "department": "hr",
+            "roles": ["viewer"],
+            "clearance": 0,
+        },
     )
 
 
@@ -64,7 +87,7 @@ class TestGetCurrentUser:
         app = FastAPI()
 
         @app.get("/test")
-        async def endpoint(user: JWTClaims = pytest.importorskip("fastapi").Depends(get_current_user)):
+        async def endpoint(user: JWTClaims = CURRENT_USER_DEP):
             return {"sub": user.sub}
 
         client = TestClient(app, raise_server_exceptions=False)
@@ -75,7 +98,7 @@ class TestGetCurrentUser:
         app = FastAPI()
 
         @app.get("/test")
-        async def endpoint(user: JWTClaims = pytest.importorskip("fastapi").Depends(get_current_user)):
+        async def endpoint(user: JWTClaims = CURRENT_USER_DEP):
             return {"sub": user.sub}
 
         client = TestClient(app, raise_server_exceptions=False)
@@ -96,7 +119,7 @@ class TestGetCurrentUser:
         app = FastAPI()
 
         @app.get("/test")
-        async def endpoint(user: JWTClaims = pytest.importorskip("fastapi").Depends(get_current_user)):
+        async def endpoint(user: JWTClaims = CURRENT_USER_DEP):
             return {"sub": user.sub, "department": user.department}
 
         client = TestClient(app)
@@ -109,7 +132,7 @@ class TestGetCurrentUser:
         app = FastAPI()
 
         @app.get("/test")
-        async def endpoint(user: JWTClaims = pytest.importorskip("fastapi").Depends(get_current_user)):
+        async def endpoint(user: JWTClaims = CURRENT_USER_DEP):
             return {"sub": user.sub}
 
         client = TestClient(app, raise_server_exceptions=False)
@@ -137,7 +160,7 @@ class TestRequirePermission:
         dep = require_permission("api:chat", "default", "query")
         app = FastAPI()
 
-        @app.post("/v1/chat/query", dependencies=[pytest.importorskip("fastapi").Depends(dep)])
+        @app.post("/v1/chat/query", dependencies=[Depends(dep)])
         async def chat_query():
             return {"answer": "stub"}
 
@@ -158,13 +181,18 @@ class TestRequirePermission:
         mock_decode.return_value = viewer_claims.raw
         mock_validate.return_value = viewer_claims
         mock_cerbos = MagicMock()
-        mock_cerbos.check.return_value = MagicMock(allowed=False, principal_id="viewer-789", resource="api:chat", action="query")
+        mock_cerbos.check.return_value = MagicMock(
+            allowed=False,
+            principal_id="viewer-789",
+            resource="api:chat",
+            action="query",
+        )
         mock_cerbos_cls.return_value = mock_cerbos
 
         dep = require_permission("api:chat", "default", "query")
         app = FastAPI()
 
-        @app.post("/v1/chat/query", dependencies=[pytest.importorskip("fastapi").Depends(dep)])
+        @app.post("/v1/chat/query", dependencies=[Depends(dep)])
         async def chat_query():
             return {"answer": "stub"}
 
@@ -191,7 +219,7 @@ class TestRequirePermission:
         dep = require_permission("api:chat", "default", "query")
         app = FastAPI()
 
-        @app.post("/v1/chat/query", dependencies=[pytest.importorskip("fastapi").Depends(dep)])
+        @app.post("/v1/chat/query", dependencies=[Depends(dep)])
         async def chat_query():
             return {"answer": "stub"}
 
@@ -203,7 +231,7 @@ class TestRequirePermission:
         dep = require_permission("api:chat", "default", "query")
         app = FastAPI()
 
-        @app.post("/v1/chat/query", dependencies=[pytest.importorskip("fastapi").Depends(dep)])
+        @app.post("/v1/chat/query", dependencies=[Depends(dep)])
         async def chat_query():
             return {"answer": "stub"}
 

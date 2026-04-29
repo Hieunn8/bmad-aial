@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-04-28T15:26:38+07:00"
-last_updated: "2026-04-29T01:00:00+07:00"
+last_updated: "2026-04-29T10:44:46+07:00"
 project: "AIAL"
 project_key: "NOKEY"
 tracking_system: "file-system"
@@ -47,8 +47,8 @@ development_status:
   1-2-compose-infrastructure-stack: review
   1-3-auth-layer-sso-login-plus-kong-gateway-plus-cerbos-authorization: review
   1-4-fastapi-service-skeleton-plus-opentelemetry: review
-  1-5-langgraph-stub-graph-plus-shared-state-contract: ready-for-dev
-  1-6-observability-minimal-stack: ready-for-dev
+  1-5-langgraph-stub-graph-plus-shared-state-contract: review
+  1-6-observability-minimal-stack: review
   1-7-frontend-shell-plus-design-tokens-plus-accessibility-foundation: ready-for-dev
   1-8-oracle-vpd-smoke-test: ready-for-dev
   1-9-e2e-walking-skeleton-gate: ready-for-dev

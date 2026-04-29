@@ -1,7 +1,11 @@
 """AIAL authentication and authorization utilities."""
 
 from aial_shared.auth.cerbos import AuthzResult, CerbosClient
-from aial_shared.auth.fastapi_deps import get_current_user, require_permission
+from aial_shared.auth.fastapi_deps import (
+    get_current_user,
+    require_permission,
+    reset_cerbos_client_cache,
+)
 from aial_shared.auth.keycloak import JWTClaims, TokenValidationError, decode_jwt, validate_token_claims
 
 __all__ = [
@@ -12,5 +16,6 @@ __all__ = [
     "decode_jwt",
     "get_current_user",
     "require_permission",
+    "reset_cerbos_client_cache",
     "validate_token_claims",
 ]

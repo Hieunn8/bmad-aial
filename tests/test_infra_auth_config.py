@@ -93,6 +93,8 @@ class TestKeycloakRealmExport:
         assert "username" in mapper_names
         assert "email" in mapper_names
         assert "department" in mapper_names
+        assert "clearance" in mapper_names
+        assert "realm-role-mapper" in mapper_names
 
 
 class TestKongConfig:
@@ -122,6 +124,10 @@ class TestKongConfig:
         plugin_names = [p["name"] for p in config.get("plugins", [])]
         assert "jwt" in plugin_names
 
+    def test_post_function_plugin_configured(self, config: dict) -> None:
+        plugin_names = [p["name"] for p in config.get("plugins", [])]
+        assert "post-function" in plugin_names
+
     def test_rate_limiting_plugin_configured(self, config: dict) -> None:
         plugin_names = [p["name"] for p in config.get("plugins", [])]
         assert "rate-limiting" in plugin_names
@@ -141,9 +147,7 @@ class TestKongConfig:
     def test_upstream_not_kong_proxy_port(self, config: dict) -> None:
         for svc in config.get("services", []):
             url = svc.get("url", "")
-            assert ":8000" not in url, (
-                f"Service {svc['name']} upstream {url} points to Kong's own proxy port 8000"
-            )
+            assert ":8000" not in url, f"Service {svc['name']} upstream {url} points to Kong's own proxy port 8000"
 
 
 class TestCerbosPolicies:

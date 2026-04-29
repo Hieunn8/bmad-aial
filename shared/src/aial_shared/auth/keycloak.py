@@ -14,7 +14,6 @@ from typing import Any
 
 import jwt
 
-
 REQUIRED_CLAIMS = frozenset({"sub", "email", "department", "roles", "clearance"})
 
 
@@ -86,6 +85,8 @@ def validate_token_claims(claims: dict[str, Any]) -> JWTClaims:
         roles = [roles]
     if not isinstance(roles, (list, tuple)):
         raise TokenValidationError(f"roles must be a list, got {type(roles).__name__}")
+    if not roles:
+        raise TokenValidationError("Empty required claims: ['roles']")
 
     try:
         clearance = int(claims["clearance"])

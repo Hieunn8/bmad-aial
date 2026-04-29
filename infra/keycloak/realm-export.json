@@ -185,6 +185,33 @@
               }
             },
             {
+              "name": "clearance",
+              "providerId": "user-attribute-ldap-mapper",
+              "config": {
+                "ldap.attribute": ["employeeNumber"],
+                "user.model.attribute": ["clearance"],
+                "is.mandatory.in.ldap": ["false"],
+                "read.only": ["true"]
+              }
+            },
+            {
+              "name": "realm-role-mapper",
+              "providerId": "role-ldap-mapper",
+              "config": {
+                "roles.dn": ["ou=groups,dc=aial,dc=local"],
+                "role.name.ldap.attribute": ["cn"],
+                "role.object.classes": ["groupOfNames"],
+                "membership.ldap.attribute": ["member"],
+                "membership.attribute.type": ["DN"],
+                "membership.user.ldap.attribute": ["uid"],
+                "mode": ["READ_ONLY"],
+                "user.roles.retrieve.strategy": ["LOAD_ROLES_BY_MEMBER_ATTRIBUTE"],
+                "mapped.role.attributes": ["cn"],
+                "use.realm.roles.mapping": ["true"],
+                "drop.non.existing.role.mappings.during.sync": ["false"]
+              }
+            },
+            {
               "name": "group-mapper",
               "providerId": "group-ldap-mapper",
               "config": {
@@ -195,6 +222,8 @@
                 "membership.attribute.type": ["DN"],
                 "membership.user.ldap.attribute": ["uid"],
                 "mode": ["READ_ONLY"],
+                "preserve.group.inheritance": ["true"],
+                "user.roles.retrieve.strategy": ["LOAD_GROUPS_BY_MEMBER_ATTRIBUTE"],
                 "drop.non.existing.groups.during.sync": ["false"]
               }
             }

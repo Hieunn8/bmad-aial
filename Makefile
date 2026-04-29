@@ -26,7 +26,7 @@ infra-up:
 	bash infra/scripts/vault-to-dotenv.sh
 	@echo "Phase 2: Starting remaining services with secrets available ..."
 	@test -f infra/kong/kong.yml || cp infra/kong/kong.yml.tmpl infra/kong/kong.yml
-	docker compose -f infra/docker-compose.dev.yml up -d
+	docker compose --env-file .env.infra -f infra/docker-compose.dev.yml up -d
 	bash infra/scripts/wait-for-services.sh
 	bash infra/scripts/configure-kong-jwt.sh infra/kong
 	docker compose -f infra/docker-compose.dev.yml restart kong

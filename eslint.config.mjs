@@ -10,6 +10,7 @@ export default [
       ".claude/",
       ".agents/",
       ".gemini/",
+      "commitlint.config.js",
     ],
   },
 ];

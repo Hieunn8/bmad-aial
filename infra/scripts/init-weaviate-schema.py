@@ -1,5 +1,4 @@
 import requests
-
 from weaviate_schema.schema import SCHEMA_COLLECTIONS
 
 BASE = "http://localhost:8081/v1/schema"

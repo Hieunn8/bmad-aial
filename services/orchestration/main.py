@@ -9,8 +9,8 @@ from fastapi import Depends, FastAPI
 
 from aial_shared.auth.fastapi_deps import require_permission
 from aial_shared.telemetry.tracer import setup_tracing
-
 from orchestration.routes.health import router as health_router
+from orchestration.routes.query import router as query_router
 
 logger = logging.getLogger(__name__)
 
@@ -30,13 +30,7 @@ def create_app() -> FastAPI:
     FastAPIInstrumentor.instrument_app(app)
 
     app.include_router(health_router)
-
-    @app.post(
-        "/v1/chat/query",
-        dependencies=[Depends(chat_query_auth)],
-    )
-    async def chat_query() -> dict[str, str]:
-        return {"answer": "stub", "status": "ok"}
+    app.include_router(query_router, dependencies=[Depends(chat_query_auth)])
 
     return app
 
