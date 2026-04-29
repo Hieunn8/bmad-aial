@@ -90,16 +90,22 @@ claude-opus-4-6
 ### File List
 
 - infra/keycloak/realm-export.json
-- infra/kong/kong.yml
+- infra/kong/kong.yml.tmpl
 - infra/cerbos/policies/resource_api.yaml
 - infra/cerbos/policies/resource_admin.yaml
 - infra/scripts/configure-kong-jwt.sh
+- infra/scripts/wait-for-vault.sh
+- infra/ldap/bootstrap.ldif
+- infra/docker-compose.dev.yml
 - shared/src/aial_shared/auth/__init__.py
 - shared/src/aial_shared/auth/keycloak.py
 - shared/src/aial_shared/auth/cerbos.py
+- shared/src/aial_shared/auth/fastapi_deps.py
 - shared/pyproject.toml
+- services/orchestration/main.py
 - tests/test_auth_keycloak.py
 - tests/test_auth_cerbos.py
+- tests/test_auth_fastapi_deps.py
 - tests/test_infra_auth_config.py
 - Makefile
 
@@ -107,3 +113,5 @@ claude-opus-4-6
 
 - 2026-04-29: Implemented Story 1.3 auth layer — Keycloak realm with OIDC clients and JWT claim mappers, Kong gateway with JWT validation and rate limiting, Cerbos PDP policies for endpoint authorization, shared auth module with JWT validation and Cerbos client.
 - 2026-04-29: Fixed 3 runtime issues — (1) Kong upstream changed from port 8000 (self-referencing) to 8090 (Story 1.4 FastAPI target); (2) Added rsa_public_key field to Kong JWT consumer + configure-kong-jwt.sh bootstrap script to fetch key from Keycloak at startup; (3) CerbosClient updated to use POST /api/check/resources with resources[] array format per Cerbos 0.38+ contract.
+- 2026-04-29: Review fix — configure-kong-jwt.sh PEM formatting: replaced `repr(pem)` (which escaped newlines as literal `\n`) with YAML literal block scalar (`|-`) via pure-Python string replacement. PEM now has real newlines, valid for RS256 verification.
+- 2026-04-29: Review fix batch — 5 issues resolved: (1) Cerbos authz enforced via FastAPI dependency `require_permission()` on /v1/chat/query — JWT-only no longer bypasses role checks; (2) LDAP/AD federation added: OpenLDAP in docker-compose + Keycloak userFederationProvider config with attribute mappers; (3) Vault secrets injection fixed: two-phase startup (Vault first), Keycloak env var for client secret; (4) configure-kong-jwt.sh made idempotent via template-based generation; (5) clearance=0 bug fixed in token validation.

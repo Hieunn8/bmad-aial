@@ -54,14 +54,31 @@ services:
       timeout: 3s
       retries: 20
 
+  openldap:
+    image: osixia/openldap:1.5.0
+    container_name: aial-openldap
+    environment:
+      LDAP_ORGANISATION: "AIAL"
+      LDAP_DOMAIN: "aial.local"
+      LDAP_ADMIN_PASSWORD: "admin"
+    volumes:
+      - ./ldap/bootstrap.ldif:/container/service/slapd/assets/config/bootstrap/ldif/custom/bootstrap.ldif:ro
+    command: ["--copy-service"]
+    ports: ["389:389"]
+    healthcheck:
+      test: ["CMD", "ldapsearch", "-x", "-H", "ldap://localhost", "-b", "dc=aial,dc=local", "-D", "cn=admin,dc=aial,dc=local", "-w", "admin"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   keycloak:
     image: quay.io/keycloak/keycloak:25.0
     container_name: aial-keycloak
     command: ["start-dev", "--import-realm"]
     environment:
-      # Dev-only admin credentials — production uses Vault-injected values
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
+      AIAL_KEYCLOAK_CLIENT_SECRET: ${AIAL_KEYCLOAK_CLIENT_SECRET:-dev-keycloak-secret}
     volumes:
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
     ports: ["8080:8080"]
@@ -69,6 +86,8 @@ services:
       vault:
         condition: service_healthy
       postgres:
+        condition: service_healthy
+      openldap:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "bash", "-lc", "exec 3<>/dev/tcp/127.0.0.1/8080"]

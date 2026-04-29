@@ -18,6 +18,9 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 
+# Generated infra config
+infra/kong/kong.yml
+
 # Project-specific
 dist/
 build/

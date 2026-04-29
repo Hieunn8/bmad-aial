@@ -107,6 +107,102 @@
       ]
     }
   ],
+  "components": {
+    "org.keycloak.storage.UserStorageProvider": [
+      {
+        "name": "aial-ldap",
+        "providerId": "ldap",
+        "config": {
+          "enabled": ["true"],
+          "vendor": ["other"],
+          "connectionUrl": ["ldap://aial-openldap:389"],
+          "bindDn": ["cn=admin,dc=aial,dc=local"],
+          "bindCredential": ["admin"],
+          "usersDn": ["ou=people,dc=aial,dc=local"],
+          "usernameLDAPAttribute": ["uid"],
+          "rdnLDAPAttribute": ["uid"],
+          "uuidLDAPAttribute": ["entryUUID"],
+          "userObjectClasses": ["inetOrgPerson"],
+          "editMode": ["READ_ONLY"],
+          "syncRegistrations": ["false"],
+          "importEnabled": ["true"],
+          "batchSizeForSync": ["1000"],
+          "fullSyncPeriod": ["-1"],
+          "changedSyncPeriod": ["-1"],
+          "searchScope": ["1"],
+          "trustEmail": ["true"]
+        },
+        "subComponents": {
+          "org.keycloak.storage.ldap.mappers.LDAPStorageMapper": [
+            {
+              "name": "username",
+              "providerId": "user-attribute-ldap-mapper",
+              "config": {
+                "ldap.attribute": ["uid"],
+                "user.model.attribute": ["username"],
+                "is.mandatory.in.ldap": ["true"],
+                "read.only": ["true"]
+              }
+            },
+            {
+              "name": "email",
+              "providerId": "user-attribute-ldap-mapper",
+              "config": {
+                "ldap.attribute": ["mail"],
+                "user.model.attribute": ["email"],
+                "is.mandatory.in.ldap": ["true"],
+                "read.only": ["true"]
+              }
+            },
+            {
+              "name": "first name",
+              "providerId": "user-attribute-ldap-mapper",
+              "config": {
+                "ldap.attribute": ["cn"],
+                "user.model.attribute": ["firstName"],
+                "is.mandatory.in.ldap": ["true"],
+                "read.only": ["true"]
+              }
+            },
+            {
+              "name": "last name",
+              "providerId": "user-attribute-ldap-mapper",
+              "config": {
+                "ldap.attribute": ["sn"],
+                "user.model.attribute": ["lastName"],
+                "is.mandatory.in.ldap": ["true"],
+                "read.only": ["true"]
+              }
+            },
+            {
+              "name": "department",
+              "providerId": "user-attribute-ldap-mapper",
+              "config": {
+                "ldap.attribute": ["departmentNumber"],
+                "user.model.attribute": ["department"],
+                "is.mandatory.in.ldap": ["false"],
+                "read.only": ["true"]
+              }
+            },
+            {
+              "name": "group-mapper",
+              "providerId": "group-ldap-mapper",
+              "config": {
+                "groups.dn": ["ou=groups,dc=aial,dc=local"],
+                "group.name.ldap.attribute": ["cn"],
+                "group.object.classes": ["groupOfNames"],
+                "membership.ldap.attribute": ["member"],
+                "membership.attribute.type": ["DN"],
+                "membership.user.ldap.attribute": ["uid"],
+                "mode": ["READ_ONLY"],
+                "drop.non.existing.groups.during.sync": ["false"]
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
   "users": [
     {
       "username": "dev-admin",

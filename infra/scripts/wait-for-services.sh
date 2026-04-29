@@ -34,6 +34,7 @@ check vault     "http://localhost:8200/v1/sys/health"
 check_tcp postgres localhost 5432
 check_tcp redis    localhost 6379
 check weaviate  "http://localhost:8081/v1/.well-known/ready"
+check_tcp openldap localhost 389
 check keycloak  "http://localhost:8080/"
 check_tcp cerbos   localhost 3592
 check kong      "http://localhost:8001/"

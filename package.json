@@ -1,0 +1,12 @@
+{
+  "name": "aial",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "@eslint/js": "^9.0.0"
+  }
+}

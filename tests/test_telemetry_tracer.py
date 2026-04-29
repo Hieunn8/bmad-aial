@@ -2,8 +2,9 @@
 
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-from aial_shared.telemetry.tracer import setup_tracing
+from aial_shared.telemetry.tracer import _DEFAULT_OTLP_ENDPOINT, setup_tracing
 
 
 class TestSetupTracing:
@@ -30,3 +31,12 @@ class TestSetupTracing:
             assert span.is_recording()
             ctx = span.get_span_context()
             assert ctx.trace_id != 0
+
+    def test_default_otlp_endpoint(self) -> None:
+        assert _DEFAULT_OTLP_ENDPOINT == "http://localhost:4317"
+
+    def test_otlp_exporter_always_attached(self) -> None:
+        provider = setup_tracing("otlp-test")
+        processors = provider._active_span_processor._span_processors
+        batch_processors = [p for p in processors if isinstance(p, BatchSpanProcessor)]
+        assert len(batch_processors) >= 1

@@ -78,11 +78,27 @@ class TestKeycloakRealmExport:
             assert "department" in user["attributes"], f"{user['username']} missing department"
             assert "clearance" in user["attributes"], f"{user['username']} missing clearance"
 
+    def test_ldap_federation_configured(self, realm: dict) -> None:
+        providers = realm.get("components", {}).get("org.keycloak.storage.UserStorageProvider", [])
+        assert len(providers) >= 1, "No LDAP user federation provider configured"
+        ldap = providers[0]
+        assert ldap["providerId"] == "ldap"
+        assert ldap["config"]["connectionUrl"] == ["ldap://aial-openldap:389"]
+
+    def test_ldap_federation_has_attribute_mappers(self, realm: dict) -> None:
+        providers = realm["components"]["org.keycloak.storage.UserStorageProvider"]
+        ldap = providers[0]
+        mappers = ldap["subComponents"]["org.keycloak.storage.ldap.mappers.LDAPStorageMapper"]
+        mapper_names = {m["name"] for m in mappers}
+        assert "username" in mapper_names
+        assert "email" in mapper_names
+        assert "department" in mapper_names
+
 
 class TestKongConfig:
     @pytest.fixture()
     def config(self) -> dict:
-        path = INFRA / "kong" / "kong.yml"
+        path = INFRA / "kong" / "kong.yml.tmpl"
         return yaml.safe_load(path.read_text(encoding="utf-8"))
 
     def test_format_version(self, config: dict) -> None:

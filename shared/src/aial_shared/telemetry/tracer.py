@@ -13,6 +13,9 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
 
+_DEFAULT_OTLP_ENDPOINT = "http://localhost:4317"
+
+
 def setup_tracing(
     service_name: str,
     *,
@@ -22,9 +25,9 @@ def setup_tracing(
     resource = Resource.create({"service.name": service_name})
     provider = TracerProvider(resource=resource)
 
-    if otlp_endpoint:
-        exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
-        provider.add_span_processor(BatchSpanProcessor(exporter))
+    endpoint = otlp_endpoint or _DEFAULT_OTLP_ENDPOINT
+    exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
+    provider.add_span_processor(BatchSpanProcessor(exporter))
 
     if console_export:
         provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))

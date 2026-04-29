@@ -69,7 +69,7 @@ claude-opus-4-6
 
 ### Debug Log References
 
-- `PYTHONPATH="shared/src;services;services/orchestration" python -m pytest tests/ -v` → 76 passed, 0 failed
+- `PYTHONPATH="shared/src;services;services/orchestration" python -m pytest tests/ -v` → 78 passed, 0 failed
 - Health endpoint: `GET /health` → 200 `{"status": "healthy"}`
 - Readiness endpoint: `GET /readiness` → 200 when postgres/redis/cerbos reachable, 503 when any down
 - OpenTelemetry: TracerProvider created with service.name resource, spans with trace_id
@@ -77,11 +77,11 @@ claude-opus-4-6
 
 ### Completion Notes List
 
-- Created shared telemetry module: `shared/src/aial_shared/telemetry/tracer.py` — `setup_tracing(service_name)` configures TracerProvider with service.name resource, OTLP exporter (when endpoint set), and optional console export. Called as first line in orchestration `main.py`.
+- Created shared telemetry module: `shared/src/aial_shared/telemetry/tracer.py` — `setup_tracing(service_name)` configures TracerProvider with service.name resource, OTLP exporter (default endpoint `localhost:4317`, overridable via parameter), and optional console export. Called as first line in orchestration `main.py`.
 - Created orchestration service skeleton: `services/orchestration/main.py` — FastAPI app with OpenTelemetry FastAPIInstrumentor, health router. Port 8090 matches Kong upstream.
 - Created health/readiness endpoints: `GET /health` returns `{"status": "healthy"}` (HTTP 200). `GET /readiness` checks TCP connectivity to PostgreSQL (5432), Redis (6379), Cerbos (3592) — returns 200 with all checks or 503 with per-dep status.
 - Created embedding client stub: `services/embedding/client.py` — `BGE_MODEL_NAME="BAAI/bge-m3"`, `DIMS=1024`. Immutable `EmbeddingResult` dataclass. `embed()` and `embed_batch()` raise NotImplementedError (Epic 2A implementation).
-- 76 tests total — 6 health/readiness, 4 tracer, 9 embedding, 57 existing — all pass.
+- 78 tests total — 6 health/readiness, 6 tracer (incl. OTLP default endpoint + exporter-always-attached), 9 embedding, 57 existing — all pass.
 
 ### File List
 
@@ -101,3 +101,4 @@ claude-opus-4-6
 ### Change Log
 
 - 2026-04-29: Implemented Story 1.4 — FastAPI orchestration service skeleton with health/readiness endpoints, OpenTelemetry instrumentation, shared telemetry setup_tracing module, and embedding client stub (bge-m3/1024).
+- 2026-04-29: Review fix — OTLP exporter now always attached with default endpoint `http://localhost:4317` (Tempo collector target). Spans are exported unconditionally; env var `OTEL_EXPORTER_OTLP_ENDPOINT` overrides the default. 2 new tests added (78 total).

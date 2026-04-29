@@ -1,0 +1,40 @@
+dn: ou=people,dc=aial,dc=local
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=groups,dc=aial,dc=local
+objectClass: organizationalUnit
+ou: groups
+
+dn: uid=dev-admin,ou=people,dc=aial,dc=local
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+cn: Dev Admin
+sn: Admin
+uid: dev-admin
+mail: admin@aial.local
+userPassword: admin
+departmentNumber: engineering
+
+dn: uid=dev-user,ou=people,dc=aial,dc=local
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+cn: Dev User
+sn: User
+uid: dev-user
+mail: user@aial.local
+userPassword: user
+departmentNumber: sales
+
+dn: cn=admins,ou=groups,dc=aial,dc=local
+objectClass: groupOfNames
+cn: admins
+member: uid=dev-admin,ou=people,dc=aial,dc=local
+
+dn: cn=users,ou=groups,dc=aial,dc=local
+objectClass: groupOfNames
+cn: users
+member: uid=dev-admin,ou=people,dc=aial,dc=local
+member: uid=dev-user,ou=people,dc=aial,dc=local

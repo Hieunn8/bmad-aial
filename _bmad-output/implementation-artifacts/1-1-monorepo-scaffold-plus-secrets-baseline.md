@@ -132,3 +132,4 @@ GPT-5
 ### Change Log
 
 - 2026-04-28: Implemented Story 1.1 Vault dev baseline, environment injection contract, bootstrap script, and smoke/failure verification tests.
+- 2026-04-29: Review fix — Added Node/ESLint toolchain: package.json + eslint.config.js + package-lock.json. Updated Makefile: `make install` now runs `npm install`, `make lint` now runs both Ruff and ESLint. Satisfies AC "Node packages installed" and "make lint runs Ruff + ESLint".

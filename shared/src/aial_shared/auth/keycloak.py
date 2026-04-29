@@ -77,7 +77,7 @@ def validate_token_claims(claims: dict[str, Any]) -> JWTClaims:
     if missing:
         raise TokenValidationError(f"Missing required claims: {sorted(missing)}")
 
-    empty = [c for c in REQUIRED_CLAIMS if not claims.get(c)]
+    empty = [c for c in REQUIRED_CLAIMS if claims.get(c) is None or claims.get(c) == ""]
     if empty:
         raise TokenValidationError(f"Empty required claims: {sorted(empty)}")
 
