@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import socket
 from typing import Any
 
@@ -24,19 +25,18 @@ async def health() -> dict[str, str]:
 
 @router.get("/readiness")
 async def readiness() -> JSONResponse:
-    checks: dict[str, Any] = {}
-    all_ok = True
-
-    for name, (host, port) in HEALTH_DEPS.items():
-        ok = _tcp_check(host, port)
-        checks[name] = "ok" if ok else "unreachable"
-        if not ok:
-            all_ok = False
-
-    status_code = 200 if all_ok else 503
+    loop = asyncio.get_running_loop()
+    items = list(HEALTH_DEPS.items())
+    results: list[bool] = await asyncio.gather(
+        *(loop.run_in_executor(None, _tcp_check, host, port) for _, (host, port) in items)
+    )
+    checks: dict[str, Any] = {
+        name: "ok" if ok else "unreachable" for (name, _), ok in zip(items, results, strict=False)
+    }
+    all_ok = all(results)
     return JSONResponse(
         content={"status": "ready" if all_ok else "not_ready", "checks": checks},
-        status_code=status_code,
+        status_code=200 if all_ok else 503,
     )
 
 

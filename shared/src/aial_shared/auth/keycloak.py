@@ -40,6 +40,7 @@ def _fetch_jwks(jwks_uri: str) -> jwt.PyJWKClient:
     return jwt.PyJWKClient(jwks_uri)
 
 
+@lru_cache(maxsize=4)
 def _get_well_known_config(issuer: str) -> dict[str, Any]:
     url = f"{issuer}/.well-known/openid-configuration"
     with urllib.request.urlopen(url, timeout=10) as resp:
@@ -83,7 +84,7 @@ def validate_token_claims(claims: dict[str, Any]) -> JWTClaims:
     roles = claims["roles"]
     if isinstance(roles, str):
         roles = [roles]
-    if not isinstance(roles, (list, tuple)):
+    if not isinstance(roles, list | tuple):
         raise TokenValidationError(f"roles must be a list, got {type(roles).__name__}")
     if not roles:
         raise TokenValidationError("Empty required claims: ['roles']")

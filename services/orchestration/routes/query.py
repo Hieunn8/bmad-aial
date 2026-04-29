@@ -63,5 +63,5 @@ async def chat_query(
     )
     return ChatQueryResponse(
         answer=result.get("final_response") or "stub",
-        trace_id=result["trace_id"],
+        trace_id=trace_id,
     )

@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 import os
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from aial_shared.auth.fastapi_deps import require_permission
 from aial_shared.telemetry.tracer import setup_tracing
@@ -22,8 +23,15 @@ setup_tracing(
 chat_query_auth = require_permission("api:chat", "default", "query")
 
 
+async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    if exc.status_code == 401:
+        return JSONResponse(status_code=401, content={"code": "AUTH_FAILED"})
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="AIAL Orchestration", version="0.1.0")
+    app.add_exception_handler(HTTPException, _http_exception_handler)
 
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 

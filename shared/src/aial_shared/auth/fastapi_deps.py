@@ -61,7 +61,7 @@ async def get_current_user(request: Request) -> JWTClaims:
         return validate_token_claims(raw_claims)
     except TokenValidationError as exc:
         logger.warning("Token claims validation failed: %s", exc)
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
+        raise HTTPException(status_code=401, detail="Invalid token") from exc
 
 
 CURRENT_USER_DEP = Depends(get_current_user)

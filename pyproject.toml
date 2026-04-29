@@ -22,7 +22,13 @@ dev = [
 asyncio_mode = "auto"
 testpaths = ["tests", "services", "shared"]
 pythonpath = ["services", "shared/src"]
-markers = ["requires_redis: integration test that requires a real Redis service"]
+markers = [
+    "requires_redis: integration test that requires a real Redis service",
+    "requires_oracle: integration test that requires a live Oracle database",
+    "security_gate: blocking security validation that should run before staging",
+    "e2e_gate: end-to-end integration test that requires the full infrastructure stack",
+    "walking_skeleton_gate: Epic 1 completion gate — all services must pass before Epic 2A starts",
+]
 
 [tool.ruff]
 target-version = "py312"

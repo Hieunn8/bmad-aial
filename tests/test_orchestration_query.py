@@ -89,3 +89,26 @@ class TestChatQueryEndpoint:
         )
 
         assert resp.status_code == 422
+
+    def test_missing_auth_header_returns_auth_failed_code(self, client: TestClient) -> None:
+        resp = client.post(
+            "/v1/chat/query",
+            json={"query": "test query", "session_id": str(uuid4())},
+        )
+        assert resp.status_code == 401
+        assert resp.json() == {"code": "AUTH_FAILED"}
+
+    @patch("aial_shared.auth.fastapi_deps.decode_jwt")
+    def test_invalid_jwt_returns_auth_failed_code(
+        self,
+        mock_decode: MagicMock,
+        client: TestClient,
+    ) -> None:
+        mock_decode.side_effect = Exception("invalid token signature")
+        resp = client.post(
+            "/v1/chat/query",
+            json={"query": "test query", "session_id": str(uuid4())},
+            headers={"Authorization": "Bearer bad-jwt"},
+        )
+        assert resp.status_code == 401
+        assert resp.json() == {"code": "AUTH_FAILED"}

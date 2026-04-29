@@ -109,6 +109,21 @@ services:
       timeout: 3s
       retries: 20
 
+  oracle-free:
+    image: gvenzl/oracle-free:23-slim-faststart
+    container_name: aial-oracle-free
+    profiles: ["oracle-vpd"]
+    environment:
+      ORACLE_PASSWORD: oracle
+      APP_USER: aial_bootstrap
+      APP_USER_PASSWORD: aial_bootstrap
+    ports: ["1521:1521"]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+
   langfuse-postgres:
     image: postgres:16
     container_name: aial-langfuse-postgres

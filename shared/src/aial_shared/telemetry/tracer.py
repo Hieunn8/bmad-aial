@@ -25,7 +25,8 @@ def setup_tracing(
     provider = TracerProvider(resource=resource)
 
     endpoint = otlp_endpoint or _DEFAULT_OTLP_ENDPOINT
-    exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
+    insecure = not endpoint.startswith("https")
+    exporter = OTLPSpanExporter(endpoint=endpoint, insecure=insecure)
     provider.add_span_processor(BatchSpanProcessor(exporter))
 
     if console_export:

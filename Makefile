@@ -1,4 +1,4 @@
-.PHONY: install dev test lint format infra-up infra-down seed-secrets init-schemas configure-kong-jwt
+.PHONY: install dev test lint format infra-up infra-down seed-secrets init-schemas configure-kong-jwt oracle-vpd-up oracle-vpd-test oracle-vpd-down walking-skeleton-gate
 
 install:
 	uv sync --all-packages
@@ -45,3 +45,20 @@ init-schemas:
 configure-kong-jwt:
 	bash infra/scripts/configure-kong-jwt.sh infra/kong
 	docker compose -f infra/docker-compose.dev.yml restart kong
+
+oracle-vpd-up:
+	docker compose --profile oracle-vpd -f infra/docker-compose.dev.yml up -d oracle-free
+
+oracle-vpd-test:
+	AIAL_RUN_ORACLE_VPD_TESTS=1 uv run pytest tests/test_oracle_vpd_smoke.py -m "requires_oracle and security_gate" -q
+
+oracle-vpd-down:
+	docker compose --profile oracle-vpd -f infra/docker-compose.dev.yml stop oracle-free
+
+walking-skeleton-gate:
+	@echo "Running Epic 1 Walking Skeleton Gate — requires full infra stack (make infra-up first)"
+	AIAL_RUN_E2E_TESTS=1 uv run pytest tests/test_e2e_walking_skeleton.py \
+		-m "walking_skeleton_gate" \
+		-v \
+		--timeout=60 \
+		-x

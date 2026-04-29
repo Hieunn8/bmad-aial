@@ -51,6 +51,6 @@ async def invoke_query_graph(
         principal=principal,
         trace_id=trace_id,
     )
-    config = {"configurable": {"thread_id": session_id}}
+    config = {"configurable": {"thread_id": f"{principal.sub}:{session_id}"}}
     result = await graph.ainvoke(initial_state, config=config)
     return AIALGraphState(result)
