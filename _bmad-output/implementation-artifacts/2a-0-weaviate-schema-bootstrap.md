@@ -1,6 +1,6 @@
 # Story 2A.0: Weaviate Schema Bootstrap
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -18,22 +18,22 @@ so that Epic 2A and Epic 3 share one collection definition, one migration path, 
 
 ## Tasks / Subtasks
 
-- [ ] Create the owned schema contract.
-  - [ ] Introduce or finalize `weaviate/schema.py` as the canonical bootstrap definition.
-  - [ ] Make ownership explicit in comments/docs if the repo layout could otherwise confuse future stories.
-- [ ] Define Phase 1 collection/property model.
-  - [ ] Follow Weaviate naming conventions: collection names `PascalCase`, singular.
-  - [ ] Follow property naming conventions: `camelCase`.
-  - [ ] Include `modelVersion`-style tracking aligned with `bge-m3`.
-- [ ] Align bootstrap with migration strategy.
-  - [ ] Ensure the bootstrap can be called before RAG service starts.
-  - [ ] Connect to or document `services/rag/migrations/` custom migration flow.
-- [ ] Establish shared consumption rules.
-  - [ ] Epic 2A consumes bootstrap for initial query-side needs.
-  - [ ] Epic 3 consumes the same contract and must not fork schema ownership.
-- [ ] Add verification.
-  - [ ] Smoke check collection creation/update in a dev Weaviate instance.
-  - [ ] Verify schema and embedding dimension assumptions remain compatible.
+- [x] Create the owned schema contract.
+  - [x] Introduce or finalize `weaviate/schema.py` as the canonical bootstrap definition.
+  - [x] Make ownership explicit in comments/docs if the repo layout could otherwise confuse future stories.
+- [x] Define Phase 1 collection/property model.
+  - [x] Follow Weaviate naming conventions: collection names `PascalCase`, singular.
+  - [x] Follow property naming conventions: `camelCase`.
+  - [x] Include `modelVersion`-style tracking aligned with `bge-m3`.
+- [x] Align bootstrap with migration strategy.
+  - [x] Ensure the bootstrap can be called before RAG service starts.
+  - [x] Connect to or document `services/rag/migrations/` custom migration flow.
+- [x] Establish shared consumption rules.
+  - [x] Epic 2A consumes bootstrap for initial query-side needs.
+  - [x] Epic 3 consumes the same contract and must not fork schema ownership.
+- [x] Add verification.
+  - [x] Smoke check collection creation/update in a dev Weaviate instance.
+  - [x] Verify schema and embedding dimension assumptions remain compatible.
 
 ## Dev Notes
 
@@ -91,10 +91,31 @@ so that Epic 2A and Epic 3 share one collection definition, one migration path, 
 
 ### Agent Model Used
 
-GPT-5
+claude-sonnet-4-6
 
 ### Debug Log References
 
+- Existing stub: `infra/weaviate_schema/schema.py` (1 collection, no properties beyond text, no modelVersion) — expanded.
+- Existing init script: `infra/scripts/init-weaviate-schema.py` — refactored to call `bootstrap_schema()`.
+- `infra/` added to `pythonpath` in `pyproject.toml` so tests can import `weaviate_schema`.
+- `requests` already available in environment (used by init script).
+
 ### Completion Notes List
 
+- Canonical schema at `infra/weaviate_schema/schema.py` with `SCHEMA_COLLECTIONS`, `BGE_MODEL_VERSION="bge-m3-v1"`, `EMBEDDING_DIMS=1024`, `get_collection_names()`, `bootstrap_schema()`.
+- Two collections: `QueryResultCache` (Epic 2A — semantic query cache) and `DocumentChunk` (Epic 3 — RAG chunks). Both use `vectorizer: none`, `cosine` distance, `camelCase` properties, and a `modelVersion` text property.
+- `bootstrap_schema()` is idempotent — skips existing collections, POSTs only missing ones.
+- Init script (`infra/scripts/init-weaviate-schema.py`) delegates fully to `bootstrap_schema()`.
+- `services/rag/migrations/__init__.py` documents the migration pattern and ownership boundary.
+- 30 new tests across 7 test classes covering: constants, inventory, naming conventions, vectorizer config, modelVersion presence, collection-specific properties, and idempotent bootstrap (all mocked, no live Weaviate required).
+- Total: 145 tests passed, 0 regression.
+
 ### File List
+
+- infra/weaviate_schema/__init__.py
+- infra/weaviate_schema/schema.py
+- infra/scripts/init-weaviate-schema.py
+- services/rag/__init__.py
+- services/rag/migrations/__init__.py
+- tests/test_weaviate_schema.py
+- pyproject.toml

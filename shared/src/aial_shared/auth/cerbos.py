@@ -34,7 +34,16 @@ class CerbosClient:
         resource_kind: str,
         resource_id: str,
         action: str,
+        *,
+        resource_attr: dict[str, str] | None = None,
     ) -> AuthzResult:
+        resource_entry: dict[str, Any] = {
+            "kind": resource_kind,
+            "id": resource_id,
+        }
+        if resource_attr:
+            resource_entry["attr"] = resource_attr
+
         payload = {
             "requestId": f"{principal.sub}:{resource_kind}:{action}",
             "principal": {
@@ -45,15 +54,7 @@ class CerbosClient:
                     "clearance": str(principal.clearance),
                 },
             },
-            "resources": [
-                {
-                    "resource": {
-                        "kind": resource_kind,
-                        "id": resource_id,
-                    },
-                    "actions": [action],
-                }
-            ],
+            "resources": [{"resource": resource_entry, "actions": [action]}],
         }
 
         url = f"{self._base_url}/api/check/resources"
@@ -77,8 +78,10 @@ class CerbosClient:
         resource_kind: str,
         resource_id: str,
         action: str,
+        *,
+        resource_attr: dict[str, str] | None = None,
     ) -> bool:
-        return self.check(principal, resource_kind, resource_id, action).allowed
+        return self.check(principal, resource_kind, resource_id, action, resource_attr=resource_attr).allowed
 
 
 def _extract_effect(result: dict[str, Any], action: str) -> str:

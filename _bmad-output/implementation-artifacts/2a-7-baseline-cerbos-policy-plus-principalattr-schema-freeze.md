@@ -1,6 +1,6 @@
 # Story 2A.7: Baseline Cerbos Policy + principal.attr Schema Freeze
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -18,22 +18,22 @@ so that Epic 2A can enforce governed query access now and Epic 4 can extend attr
 
 ## Tasks / Subtasks
 
-- [ ] Define the baseline principal contract.
-  - [ ] Freeze `principal.attr.department`.
-  - [ ] Freeze `principal.attr.clearance`.
-  - [ ] Clarify whether role claims remain separate from attrs in the Cerbos input payload.
-- [ ] Implement JWT mapping into the Cerbos request context.
-  - [ ] Map Keycloak JWT claims to the Cerbos principal payload.
-  - [ ] Fail safely when required attrs are missing or malformed.
-- [ ] Align policy fixtures and compile checks.
-  - [ ] Update `infra/cerbos/policies/` and `tests/` yaml fixtures.
-  - [ ] Ensure `cerbos compile ./policies` remains a required CI gate.
-- [ ] Add ADR and documentation updates.
-  - [ ] Record the freeze decision: `Cerbos principal.attr schema frozen at Epic 2A`.
-  - [ ] State explicitly that later epics may extend but must not rename/backfill the baseline JWT mapping.
-- [ ] Add verification coverage.
-  - [ ] Allowed case with matching baseline attrs.
-  - [ ] Deny case for department mismatch or insufficient clearance.
+- [x] Define the baseline principal contract.
+  - [x] Freeze `principal.attr.department`.
+  - [x] Freeze `principal.attr.clearance`.
+  - [x] Clarify whether role claims remain separate from attrs in the Cerbos input payload.
+- [x] Implement JWT mapping into the Cerbos request context.
+  - [x] Map Keycloak JWT claims to the Cerbos principal payload.
+  - [x] Fail safely when required attrs are missing or malformed.
+- [x] Align policy fixtures and compile checks.
+  - [x] Update `infra/cerbos/policies/` and `tests/` yaml fixtures.
+  - [x] Ensure `cerbos compile ./policies` remains a required CI gate.
+- [x] Add ADR and documentation updates.
+  - [x] Record the freeze decision: `Cerbos principal.attr schema frozen at Epic 2A`.
+  - [x] State explicitly that later epics may extend but must not rename/backfill the baseline JWT mapping.
+- [x] Add verification coverage.
+  - [x] Allowed case with matching baseline attrs.
+  - [x] Deny case for department mismatch or insufficient clearance.
 
 ## Dev Notes
 
@@ -93,10 +93,25 @@ so that Epic 2A can enforce governed query access now and Epic 4 can extend attr
 
 ### Agent Model Used
 
-GPT-5
+claude-sonnet-4-6
 
 ### Debug Log References
 
+- `CerbosClient.check()` updated to accept `resource_attr: dict[str, str] | None` (keyword-only).
+- Policy updated with domain-mismatch DENY rule using `R.attr.domain`.
+- 20 tests pass (10 new in test_cerbos_2a7_policy.py + 10 existing in test_auth_cerbos.py).
+
 ### Completion Notes List
 
+- `principal.attr` contract frozen: `department` and `clearance` always sent in every Cerbos check.
+- Policy rule added: DENY when `R.attr.domain != '' && R.attr.domain != P.attr.department`.
+- `CerbosClient.check()` and `is_allowed()` accept optional `resource_attr` for domain-specific enforcement.
+- ADR created at `docs/adr/ADR-2A7-cerbos-principal-attr-freeze.md`.
+- Roles remain separate from attrs in the Cerbos payload (as per Cerbos API design).
+
 ### File List
+
+- shared/src/aial_shared/auth/cerbos.py
+- infra/cerbos/policies/resource_api.yaml
+- tests/test_cerbos_2a7_policy.py
+- docs/adr/ADR-2A7-cerbos-principal-attr-freeze.md

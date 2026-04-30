@@ -1,6 +1,6 @@
 # Story 2A.2: Semantic Layer Bootstrap + Business Glossary API
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 

@@ -1,6 +1,6 @@
 # Story 2A.8: Query Lifecycle Audit Logging
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 

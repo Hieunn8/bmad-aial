@@ -1,6 +1,6 @@
 # Story 2A.3: SQL Generation Guardrails + Query Governor
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 

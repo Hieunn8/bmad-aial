@@ -21,7 +21,7 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests", "services", "shared"]
-pythonpath = ["services", "shared/src"]
+pythonpath = ["services", "shared/src", "infra"]
 markers = [
     "requires_redis: integration test that requires a real Redis service",
     "requires_oracle: integration test that requires a live Oracle database",

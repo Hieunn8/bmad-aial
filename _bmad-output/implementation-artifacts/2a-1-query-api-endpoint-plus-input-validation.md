@@ -1,6 +1,6 @@
 # Story 2A.1: Query API Endpoint + Input Validation
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -18,11 +18,11 @@ so that Epic 2A can progress safely with verifiable outcomes.
 
 ## Tasks / Subtasks
 
-- [ ] Chốt phạm vi và dependency của story từ epics/architecture.
-- [ ] Thiết kế thay đổi ở mức interface + data contract cho story này.
-- [ ] Triển khai theo TDD (RED → GREEN) với test cases map trực tiếp AC.
-- [ ] Bổ sung observability/security checks theo vùng tác động.
-- [ ] Tổng hợp evidence để chuyển trạng thái sang review/done.
+- [x] Chốt phạm vi và dependency của story từ epics/architecture.
+- [x] Thiết kế thay đổi ở mức interface + data contract cho story này.
+- [x] Triển khai theo TDD (RED → GREEN) với test cases map trực tiếp AC.
+- [x] Bổ sung observability/security checks theo vùng tác động.
+- [x] Tổng hợp evidence để chuyển trạng thái sang review/done.
 
 ## Dev Notes
 
@@ -51,6 +51,22 @@ so that Epic 2A can progress safely with verifiable outcomes.
 - Define unit test targets for core logic.
 - Define integration test targets for boundary/system behavior.
 - Define E2E expectations for critical user path impact (if applicable).
+
+## Dev Agent Record
+
+### Agent Model Used
+claude-sonnet-4-6
+
+### Completion Notes List
+- `ChatQueryStreamHandle` response: `{ request_id, status="streaming", trace_id }`.
+- `RequestValidationError` handler added to return HTTP 400 with `{ type: ".../errors/invalid-query", detail }`.
+- `GET /v1/chat/query/{request_id}/sql-explanation` stub returns FR-O5 placeholder (Epic 2B).
+- 6 tests pass (4 new + 2 existing auth tests).
+
+### File List
+- services/orchestration/routes/query.py
+- services/orchestration/main.py
+- tests/test_orchestration_query.py
 
 ### References
 

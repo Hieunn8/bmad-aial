@@ -1,4 +1,4 @@
-"""Tests for the orchestration chat query endpoint."""
+"""Tests for the orchestration chat query endpoint — Story 2A.1."""
 
 from __future__ import annotations
 
@@ -36,11 +36,19 @@ def client() -> TestClient:
     return TestClient(app)
 
 
+def _auth_mocks(mock_cerbos_cls: MagicMock, mock_validate: MagicMock, mock_decode: MagicMock, claims: JWTClaims) -> None:
+    mock_decode.return_value = claims.raw
+    mock_validate.return_value = claims
+    mock_cerbos = MagicMock()
+    mock_cerbos.check.return_value = MagicMock(allowed=True)
+    mock_cerbos_cls.return_value = mock_cerbos
+
+
 class TestChatQueryEndpoint:
     @patch("aial_shared.auth.fastapi_deps.decode_jwt")
     @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
     @patch("aial_shared.auth.fastapi_deps.CerbosClient")
-    def test_returns_stub_answer_and_trace_id(
+    def test_returns_stream_handle_with_request_id_and_trace_id(
         self,
         mock_cerbos_cls: MagicMock,
         mock_validate: MagicMock,
@@ -48,27 +56,24 @@ class TestChatQueryEndpoint:
         client: TestClient,
         sample_claims: JWTClaims,
     ) -> None:
-        mock_decode.return_value = sample_claims.raw
-        mock_validate.return_value = sample_claims
-        mock_cerbos = MagicMock()
-        mock_cerbos.check.return_value = MagicMock(allowed=True)
-        mock_cerbos_cls.return_value = mock_cerbos
+        _auth_mocks(mock_cerbos_cls, mock_validate, mock_decode, sample_claims)
 
         resp = client.post(
             "/v1/chat/query",
-            json={"query": "test query", "session_id": str(uuid4())},
+            json={"query": "Doanh thu HCM tháng 3?", "session_id": str(uuid4())},
             headers={"Authorization": "Bearer fake-jwt"},
         )
 
         assert resp.status_code == 200
         body = resp.json()
-        assert body["answer"] == "stub"
+        assert body["status"] == "streaming"
+        UUID(body["request_id"])
         UUID(body["trace_id"])
 
     @patch("aial_shared.auth.fastapi_deps.decode_jwt")
     @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
     @patch("aial_shared.auth.fastapi_deps.CerbosClient")
-    def test_rejects_empty_query(
+    def test_empty_query_returns_400_invalid_query(
         self,
         mock_cerbos_cls: MagicMock,
         mock_validate: MagicMock,
@@ -76,11 +81,7 @@ class TestChatQueryEndpoint:
         client: TestClient,
         sample_claims: JWTClaims,
     ) -> None:
-        mock_decode.return_value = sample_claims.raw
-        mock_validate.return_value = sample_claims
-        mock_cerbos = MagicMock()
-        mock_cerbos.check.return_value = MagicMock(allowed=True)
-        mock_cerbos_cls.return_value = mock_cerbos
+        _auth_mocks(mock_cerbos_cls, mock_validate, mock_decode, sample_claims)
 
         resp = client.post(
             "/v1/chat/query",
@@ -88,7 +89,32 @@ class TestChatQueryEndpoint:
             headers={"Authorization": "Bearer fake-jwt"},
         )
 
-        assert resp.status_code == 422
+        assert resp.status_code == 400
+        body = resp.json()
+        assert "invalid-query" in body.get("type", "")
+        assert "detail" in body
+
+    @patch("aial_shared.auth.fastapi_deps.decode_jwt")
+    @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
+    @patch("aial_shared.auth.fastapi_deps.CerbosClient")
+    def test_query_too_long_returns_400(
+        self,
+        mock_cerbos_cls: MagicMock,
+        mock_validate: MagicMock,
+        mock_decode: MagicMock,
+        client: TestClient,
+        sample_claims: JWTClaims,
+    ) -> None:
+        _auth_mocks(mock_cerbos_cls, mock_validate, mock_decode, sample_claims)
+
+        resp = client.post(
+            "/v1/chat/query",
+            json={"query": "x" * 2001, "session_id": str(uuid4())},
+            headers={"Authorization": "Bearer fake-jwt"},
+        )
+
+        assert resp.status_code == 400
+        assert "invalid-query" in resp.json().get("type", "")
 
     def test_missing_auth_header_returns_auth_failed_code(self, client: TestClient) -> None:
         resp = client.post(
@@ -112,3 +138,28 @@ class TestChatQueryEndpoint:
         )
         assert resp.status_code == 401
         assert resp.json() == {"code": "AUTH_FAILED"}
+
+
+class TestSqlExplanationStub:
+    @patch("aial_shared.auth.fastapi_deps.decode_jwt")
+    @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
+    @patch("aial_shared.auth.fastapi_deps.CerbosClient")
+    def test_sql_explanation_returns_placeholder(
+        self,
+        mock_cerbos_cls: MagicMock,
+        mock_validate: MagicMock,
+        mock_decode: MagicMock,
+        client: TestClient,
+        sample_claims: JWTClaims,
+    ) -> None:
+        _auth_mocks(mock_cerbos_cls, mock_validate, mock_decode, sample_claims)
+
+        resp = client.get(
+            f"/v1/chat/query/{uuid4()}/sql-explanation",
+            headers={"Authorization": "Bearer fake-jwt"},
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "Giải thích câu truy vấn" in body.get("message", "")
+        assert body.get("status") == "not_implemented"

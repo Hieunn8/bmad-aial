@@ -1,6 +1,6 @@
 # Story 2A.6: Short-term Session Memory + Per-Turn Security
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
