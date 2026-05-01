@@ -1,6 +1,6 @@
 # Story 2B.4: Chart Reveal + Data Freshness Signals (UX-DR9)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 

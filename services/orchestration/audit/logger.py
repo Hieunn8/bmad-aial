@@ -17,7 +17,7 @@ from typing import Any, Protocol
 _SENSITIVE_TIERS = frozenset({"PII_TIER_1", "PII_TIER_2"})
 
 
-@dataclass
+@dataclass(frozen=True)
 class AuditEvent:
     request_id: str
     user_id: str

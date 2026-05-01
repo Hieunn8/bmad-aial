@@ -1,6 +1,6 @@
 # Story 2A.9: Onboarding Shell + First-Query Scaffold
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 

@@ -1,6 +1,6 @@
 # Story 2A.5: Streaming Chat UI + SSE Transport
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 

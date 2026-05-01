@@ -1,6 +1,6 @@
 # Story 2B.2: Citation Badge Component (UX-DR10 — BUILD HERE)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 

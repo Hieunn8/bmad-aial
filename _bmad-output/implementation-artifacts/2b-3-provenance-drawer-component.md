@@ -1,6 +1,6 @@
 # Story 2B.3: Provenance Drawer Component (UX-DR11 — BUILD HERE)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 

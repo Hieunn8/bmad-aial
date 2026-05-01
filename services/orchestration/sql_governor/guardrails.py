@@ -1,14 +1,18 @@
 """SQL Guardrails — two-layer AST + regex blocklist, plus query governor.
 
 Layer 1 — AST (sqlglot Oracle dialect): blocks non-SELECT statements.
+  Security invariant: parse failure → DENY (fail-closed, never fail-open).
 Layer 2 — Regex blocklist: blocks dangerous Oracle-specific patterns.
 Governor — appends FETCH FIRST 50000 ROWS ONLY when absent.
 """
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 try:
     import sqlglot
@@ -60,8 +64,11 @@ class SqlGuardrails:
                         cls = getattr(exp, blocked_type, None)
                         if cls and isinstance(stmt, cls):
                             return SqlGuardResult(allowed=False, code="SQL_UNSAFE_OPERATION", reason=blocked_type)
-            except Exception:
-                pass
+            except Exception as exc:
+                # Fail-closed: unparseable SQL is treated as unsafe.
+                # Do not fall through — a parse error could indicate obfuscated DDL/DML.
+                logger.warning("sqlglot parse failed, denying SQL: %s", exc)
+                return SqlGuardResult(allowed=False, code="SQL_PARSE_ERROR", reason=str(exc))
 
         # Layer 2: Regex blocklist — always runs
         for pattern in _BLOCKED_PATTERNS:

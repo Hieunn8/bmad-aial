@@ -1,6 +1,6 @@
 # Story 2B.1: Full SQL Explanation (FR-O5)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 

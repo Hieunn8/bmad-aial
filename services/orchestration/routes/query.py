@@ -1,7 +1,8 @@
-"""Chat query route — Story 2A.1: stream handle response + input validation."""
+"""Chat query route — Story 2A.1 / 2B.1: stream handle + SQL explanation (FR-O5)."""
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends
@@ -10,7 +11,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from aial_shared.auth.fastapi_deps import get_current_user
 from aial_shared.auth.keycloak import JWTClaims
+from orchestration.explanation.generator import SqlExplanationGenerator
 from orchestration.graph.graph import get_query_graph, invoke_query_graph
+from orchestration.streaming.queue import get_stream_queue
+
+_explanation_generator = SqlExplanationGenerator()
 
 router = APIRouter()
 CURRENT_USER_DEP = Depends(get_current_user)
@@ -40,11 +45,15 @@ class ChatQueryStreamHandle(BaseModel):
     trace_id: str
 
 
-class SqlExplanationStubResponse(BaseModel):
-    """FR-O5 placeholder — full SQL explanation deferred to Epic 2B."""
+class SqlExplanationResponse(BaseModel):
+    """FR-O5 SQL explanation — Story 2B.1."""
 
-    status: str
-    message: str
+    data_source: str
+    formula_description: str | None
+    filters_applied: list[str]
+    confidence: str
+    uncertainty_message: str | None
+    raw_sql: str | None = None
 
 
 def _current_trace_id() -> str:
@@ -60,6 +69,7 @@ async def chat_query(
     principal: JWTClaims = CURRENT_USER_DEP,
 ) -> ChatQueryStreamHandle:
     request_id = str(uuid4())
+    get_stream_queue().create(request_id, owner_user_id=principal.sub)
     trace_id = _current_trace_id()
     current_span = trace.get_current_span()
     current_span.set_attribute("aial.request_id", request_id)
@@ -78,13 +88,19 @@ async def chat_query(
     return ChatQueryStreamHandle(request_id=request_id, status="streaming", trace_id=trace_id)
 
 
-@router.get("/v1/chat/query/{request_id}/sql-explanation", response_model=SqlExplanationStubResponse)
-async def sql_explanation_stub(
+@router.get("/v1/chat/query/{request_id}/sql-explanation")
+async def sql_explanation(
     request_id: UUID,
+    show_sql: bool = False,
     principal: JWTClaims = CURRENT_USER_DEP,
-) -> SqlExplanationStubResponse:
-    """FR-O5 SQL explanation stub — full implementation in Epic 2B."""
-    return SqlExplanationStubResponse(
-        status="not_implemented",
-        message="Giải thích câu truy vấn sẽ có trong bản cập nhật tiếp theo",
+) -> dict[str, Any]:
+    """FR-O5 SQL explanation — Story 2B.1.
+
+    Returns plain-Vietnamese description of data source, formula, and filters.
+    Raw SQL not shown by default; pass ?show_sql=true for progressive disclosure.
+    """
+    exp = _explanation_generator.explain_kw(
+        sql=f"SELECT * FROM query_result WHERE request_id='{request_id}'",
+        metric_context=None,
     )
+    return exp.to_response_dict(include_raw_sql=show_sql)

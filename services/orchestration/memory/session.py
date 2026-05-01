@@ -9,8 +9,11 @@ Security invariants:
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass, field
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 _TTL_SECONDS = 86_400  # 24 hours
 
@@ -53,4 +56,14 @@ class SessionMemoryStore:
         raw = self._redis.lrange(key, 0, -1)
         if not raw:
             return []
-        return [json.loads(item) for item in raw]
+        result = []
+        for item in raw:
+            try:
+                turn = json.loads(item)
+                if isinstance(turn, dict) and "user" in turn and "assistant" in turn:
+                    result.append({"user": str(turn["user"]), "assistant": str(turn["assistant"])})
+                else:
+                    logger.warning("Skipping malformed session turn: unexpected structure")
+            except json.JSONDecodeError:
+                logger.warning("Skipping corrupted session turn in Redis")
+        return result

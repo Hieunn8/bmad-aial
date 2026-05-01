@@ -1,6 +1,6 @@
 # Story 2B.5: Audit Read Model + Compliance Dashboard
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 

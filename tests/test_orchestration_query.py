@@ -144,7 +144,7 @@ class TestSqlExplanationStub:
     @patch("aial_shared.auth.fastapi_deps.decode_jwt")
     @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
     @patch("aial_shared.auth.fastapi_deps.CerbosClient")
-    def test_sql_explanation_returns_placeholder(
+    def test_sql_explanation_returns_data_source(
         self,
         mock_cerbos_cls: MagicMock,
         mock_validate: MagicMock,
@@ -161,5 +161,6 @@ class TestSqlExplanationStub:
 
         assert resp.status_code == 200
         body = resp.json()
-        assert "Giải thích câu truy vấn" in body.get("message", "")
-        assert body.get("status") == "not_implemented"
+        # Real explanation replaces stub (Story 2B.1)
+        assert "data_source" in body
+        assert "raw_sql" not in body or body.get("raw_sql") is None

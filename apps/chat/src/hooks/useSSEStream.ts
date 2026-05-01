@@ -110,14 +110,8 @@ export function useSSEStream<T extends SSEEvent = SSEEvent>(
     }
   }, []);
 
-  // ============================================================
-  // STUB: connect — scaffolded interface, not wired to backend
-  // Full implementation: Epic 2A / Story 2A.5
-  // ============================================================
   const connect = useCallback(() => {
-    // Cancel any in-flight connection
     abortControllerRef.current?.abort();
-
     if (retryTimeoutRef.current) {
       clearTimeout(retryTimeoutRef.current);
       retryTimeoutRef.current = null;
@@ -126,43 +120,74 @@ export function useSSEStream<T extends SSEEvent = SSEEvent>(
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    setState({
-      status: 'connecting',
-      events: [],
-      error: null,
-      traceId: null,
-    } as StreamState<T>);
-
-    // STUB: In Story 1.7, we do NOT open a real SSE connection.
-    // The interface (connect/abort/reset + state shape) is defined here.
-    // Epic 2A will implement the actual fetch + ReadableStream parsing below:
-    //
-    // fetch(urlRef.current, {
-    //   headers: {
-    //     Authorization: `Bearer ${tokenRef.current}`,
-    //     Accept: 'text/event-stream',
-    //   },
-    //   signal: controller.signal,
-    // })
-    //   .then(response => {
-    //     if (!response.ok) throw new Error(`SSE error: ${response.status}`);
-    //     // parse SSE events from response.body ReadableStream...
-    //   })
-    //   .catch(err => { /* handle error + exponential backoff reconnect */ });
-
-    console.debug('[useSSEStream] STUB — connect called for URL:', urlRef.current);
-    console.debug('[useSSEStream] Full SSE implementation deferred to Epic 2A / Story 2A.5');
-
-    // Immediately move to 'idle' in stub mode (no actual connection)
     if (isMountedRef.current) {
-      setState({
-        status: 'idle',
-        events: [],
-        error: null,
-        traceId: null,
-      } as StreamState<T>);
+      setState({ status: 'connecting', events: [], error: null, traceId: null } as StreamState<T>);
     }
-  }, []);
+
+    const headers: Record<string, string> = { Accept: 'text/event-stream' };
+    if (tokenRef.current) {
+      headers['Authorization'] = `Bearer ${tokenRef.current}`;
+    }
+
+    fetch(urlRef.current, { headers, signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) throw new Error(`SSE error: ${response.status}`);
+        if (!response.body) throw new Error('No response body');
+        if (isMountedRef.current) setStatus('streaming');
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data:')) continue;
+            try {
+              const event = JSON.parse(trimmed.slice(5).trim()) as T;
+              if (isMountedRef.current) {
+                setState(prev => ({
+                  ...prev,
+                  events: [...prev.events, event],
+                  traceId: (event as unknown as { trace_id?: string }).trace_id ?? prev.traceId,
+                }));
+              }
+              onEvent?.(event);
+              if ((event as unknown as { type: string }).type === 'done') {
+                if (isMountedRef.current) setStatus('done');
+                retryCountRef.current = 0;
+                onClose?.();
+                return;
+              }
+            } catch {
+              // malformed SSE line — skip
+            }
+          }
+        }
+        if (isMountedRef.current) setStatus('done');
+        retryCountRef.current = 0;
+        onClose?.();
+      })
+      .catch(err => {
+        if ((err as Error).name === 'AbortError') return;
+        const errorEvent: SSEErrorEvent = { type: 'error', code: 'STREAM_ERROR', message: (err as Error).message };
+        onError?.(errorEvent);
+        if (retryCountRef.current < maxRetries && isMountedRef.current) {
+          const delay = computeBackoffDelay(retryCountRef.current, baseRetryDelay);
+          retryCountRef.current += 1;
+          retryTimeoutRef.current = setTimeout(() => { if (isMountedRef.current) connect(); }, delay);
+          if (isMountedRef.current) setStatus('reconnecting');
+        } else if (isMountedRef.current) {
+          setState(prev => ({ ...prev, status: 'error', error: errorEvent }));
+        }
+      });
+  }, [maxRetries, baseRetryDelay, onEvent, onClose, onError, setStatus]);
 
   const abort = useCallback(() => {
     abortControllerRef.current?.abort();
@@ -191,9 +216,8 @@ export function useSSEStream<T extends SSEEvent = SSEEvent>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally only on mount
 
-  // Cleanup on unmount
+  // Cleanup on unmount — isMountedRef is true at declaration, set false on cleanup
   useEffect(() => {
-    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       abortControllerRef.current?.abort();
@@ -202,13 +226,6 @@ export function useSSEStream<T extends SSEEvent = SSEEvent>(
       }
     };
   }, []);
-
-  // Suppress unused var warnings for stub
-  void maxRetries;
-  void baseRetryDelay;
-  void onEvent;
-  void onError;
-  void computeBackoffDelay;
 
   return { state, connect, abort, reset };
 }
