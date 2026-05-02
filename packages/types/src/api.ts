@@ -45,7 +45,7 @@ export interface ApiListMeta extends ApiMeta {
 // SSE Event Types — §FMT-2
 // ============================================================
 
-export type SSEEventType = 'chunk' | 'tool_call' | 'done' | 'error';
+export type SSEEventType = 'chunk' | 'tool_call' | 'done' | 'error' | 'thinking' | 'step' | 'row';
 
 export interface SSEChunkEvent {
   type: 'chunk';
@@ -63,17 +63,38 @@ export interface SSEToolCallEvent {
 
 export interface SSEDoneEvent {
   type: 'done';
-  query_id: string;
-  sources: SSESource[];
-  generated_at: string;
   trace_id: string;
+  answer?: string;
+  query_id?: string;
+  sources?: SSESource[];
+  generated_at?: string;
+}
+
+export interface SSEThinkingEvent {
+  type: 'thinking';
+  phase: 1 | 2;
+  message: string;
+}
+
+export interface SSEStepEvent {
+  type: 'step';
+  step: number;
+  total: number;
+  description: string;
+}
+
+export interface SSERowEvent {
+  type: 'row';
+  rows: Record<string, unknown>[];
+  chunk_index: number;
 }
 
 export interface SSEErrorEvent {
   type: 'error';
-  error_code: 'timeout' | 'permission-denied' | 'llm-unavailable';
+  /** Semantic error category for UI routing */
+  error_code: 'timeout' | 'permission-denied' | 'llm-unavailable' | 'stream-error';
   message: string;
-  trace_id: string;
+  trace_id?: string;
 }
 
 export interface SSESource {
@@ -82,13 +103,20 @@ export interface SSESource {
   page: number;
 }
 
-export type SSEEvent = SSEChunkEvent | SSEToolCallEvent | SSEDoneEvent | SSEErrorEvent;
+export type SSEEvent =
+  | SSEChunkEvent
+  | SSEToolCallEvent
+  | SSEDoneEvent
+  | SSEThinkingEvent
+  | SSEStepEvent
+  | SSERowEvent
+  | SSEErrorEvent;
 
 // ============================================================
 // Stream State — for useSSEStream hook
 // ============================================================
 
-export type StreamStatus = 'idle' | 'connecting' | 'thinking' | 'streaming' | 'done' | 'error';
+export type StreamStatus = 'idle' | 'connecting' | 'thinking' | 'streaming' | 'done' | 'error' | 'reconnecting';
 
 export interface StreamState<T = SSEEvent> {
   status: StreamStatus;

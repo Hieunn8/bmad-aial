@@ -1,6 +1,6 @@
 # Story 3.5: Admin Document Management (FR-R5)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 

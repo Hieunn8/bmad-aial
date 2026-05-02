@@ -1,6 +1,6 @@
 # Story 3.1: Document Ingestion Pipeline (FR-R1)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 

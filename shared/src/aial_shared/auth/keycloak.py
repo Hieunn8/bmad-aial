@@ -1,7 +1,9 @@
 """Keycloak JWT validation helpers.
 
 Decodes and validates JWTs issued by Keycloak for the AIAL platform.
-Enforces the principal attribute contract: sub, email, department, roles[], clearance.
+Enforces the principal attribute contract:
+  Required (Epic 2A freeze): sub, email, department, roles[], clearance
+  Optional extensions (Epic 4 ABAC): region, approval_authority
 """
 
 from __future__ import annotations
@@ -25,6 +27,9 @@ class JWTClaims:
     roles: tuple[str, ...]
     clearance: int
     raw: dict[str, Any]
+    # Epic 4 ABAC extensions — default-safe, never break Epic 2A code paths
+    region: str = ""
+    approval_authority: bool = False
 
     @property
     def is_admin(self) -> bool:
@@ -101,4 +106,6 @@ def validate_token_claims(claims: dict[str, Any]) -> JWTClaims:
         roles=tuple(str(r) for r in roles),
         clearance=clearance,
         raw=claims,
+        region=str(claims.get("region", "")),
+        approval_authority=bool(claims.get("approval_authority", False)),
     )

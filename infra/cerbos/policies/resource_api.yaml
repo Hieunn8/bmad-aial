@@ -1,14 +1,25 @@
 ---
 # principal.attr contract frozen at Epic 2A (ADR-2A7).
-# Required attrs: department (string), clearance (string).
-# Later epics MAY ADD new attrs but MUST NOT rename or remove these two.
+# Epic 4 ABAC extension: region + approval_authority ADDED (ADR-4A1).
+# Never rename or remove: department, clearance.
 apiVersion: api.cerbos.dev/v1
 resourcePolicy:
   version: default
   resource: api:chat
   rules:
-    # DENY if resource specifies a data domain and user's department doesn't match.
-    # This enforces row-level tenant isolation at the policy layer.
+    # --- Epic 4: Region mismatch → DENY (FR-A2) ---
+    - actions: ["query"]
+      effect: EFFECT_DENY
+      roles: ["admin", "user"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: "R.attr.region != ''"
+              - expr: "P.attr.region != ''"
+              - expr: "R.attr.region != P.attr.region"
+
+    # --- Epic 2A: Department/domain mismatch → DENY (ADR-2A7) ---
     - actions: ["query"]
       effect: EFFECT_DENY
       roles: ["admin", "user"]
@@ -19,8 +30,15 @@ resourcePolicy:
               - expr: "R.attr.domain != ''"
               - expr: "R.attr.domain != P.attr.department"
 
-    # ALLOW if role is authorized AND principal attrs are present.
-    # Domain-unrestricted resources (no R.attr.domain) pass through here.
+    # --- Epic 4: Users with approval_authority bypass approval queue for sensitive data ---
+    - actions: ["query_sensitive"]
+      effect: EFFECT_ALLOW
+      roles: ["admin", "user"]
+      condition:
+        match:
+          expr: "P.attr.approval_authority == true"
+
+    # --- Base ALLOW: role authorized + required attrs present ---
     - actions: ["query"]
       effect: EFFECT_ALLOW
       roles: ["admin", "user"]
@@ -31,7 +49,7 @@ resourcePolicy:
               - expr: "P.attr.department != ''"
               - expr: "P.attr.clearance != ''"
 
-    # Unconditional deny for viewer role on query.
+    # --- Unconditional deny for viewer role ---
     - actions: ["query"]
       effect: EFFECT_DENY
       roles: ["viewer"]

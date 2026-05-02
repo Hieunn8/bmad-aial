@@ -176,7 +176,7 @@ export function useSSEStream<T extends SSEEvent = SSEEvent>(
       })
       .catch(err => {
         if ((err as Error).name === 'AbortError') return;
-        const errorEvent: SSEErrorEvent = { type: 'error', code: 'STREAM_ERROR', message: (err as Error).message };
+        const errorEvent: SSEErrorEvent = { type: 'error', error_code: 'stream-error', message: (err as Error).message };
         onError?.(errorEvent);
         if (retryCountRef.current < maxRetries && isMountedRef.current) {
           const delay = computeBackoffDelay(retryCountRef.current, baseRetryDelay);

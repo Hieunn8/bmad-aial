@@ -1,7 +1,11 @@
 """SSE stream endpoint — Story 2A.5.
 
 GET /v1/chat/stream/{request_id} — returns text/event-stream.
-Emits: thinking → step(s) → done events for the given request.
+
+Security invariants:
+  - Only serves streams for request_ids pre-registered via POST /v1/chat/query.
+  - Ownership verified before any event is emitted.
+  - Unknown request_ids → 404, not a synthetic stream.
 """
 
 from __future__ import annotations
@@ -9,7 +13,7 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from opentelemetry import trace
 
@@ -35,21 +39,16 @@ _WALKING_SKELETON_STEPS = [
 
 async def _event_generator(request_id: str) -> AsyncGenerator[str, None]:
     queue = get_stream_queue()
-    trace_id = request_id
 
-    # Emit thinking pulse
     yield make_thinking_event(phase=1, message="Đang phân tích...").to_sse()
 
-    # Drain any queued events pushed by LangGraph
     for event in queue.drain(request_id):
         yield event.to_sse()
 
-    # Emit walking-skeleton step narration
     for i, description in enumerate(_WALKING_SKELETON_STEPS, start=1):
         yield make_step_event(step=i, total=len(_WALKING_SKELETON_STEPS), description=description).to_sse()
 
-    # Emit done
-    yield make_done_event(trace_id=trace_id, answer="stub").to_sse()
+    yield make_done_event(trace_id=request_id, answer="stub").to_sse()
 
     queue.close(request_id)
     queue.cleanup(request_id)
@@ -60,8 +59,6 @@ async def stream_query_result(
     request_id: UUID,
     principal: JWTClaims = CURRENT_USER_DEP,
 ) -> StreamingResponse:
-    from fastapi import HTTPException
-
     span = trace.get_current_span()
     span.set_attribute("aial.request_id", str(request_id))
     span.set_attribute("aial.user_id", principal.sub)
@@ -69,9 +66,14 @@ async def stream_query_result(
     queue = get_stream_queue()
     req_id_str = str(request_id)
 
-    # If the request was pre-registered, verify ownership.
-    # Unknown request_ids are allowed (walking skeleton creates queue lazily).
-    if req_id_str in queue._owners and not queue.verify_owner(req_id_str, principal.sub):
+    # Strict: only serve pre-registered request_ids (created by POST /v1/chat/query)
+    if req_id_str not in queue._owners:
+        raise HTTPException(
+            status_code=404,
+            detail="Stream not found — submit a query first via POST /v1/chat/query",
+        )
+
+    if not queue.verify_owner(req_id_str, principal.sub):
         raise HTTPException(status_code=403, detail="Stream does not belong to this user")
 
     return StreamingResponse(

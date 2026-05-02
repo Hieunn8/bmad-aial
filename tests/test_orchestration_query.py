@@ -153,14 +153,20 @@ class TestSqlExplanationStub:
         sample_claims: JWTClaims,
     ) -> None:
         _auth_mocks(mock_cerbos_cls, mock_validate, mock_decode, sample_claims)
+        # Must pre-register explanation (owned by caller) — endpoint returns 404 for unknown IDs
+        from orchestration.explanation.generator import SqlExplanationGenerator
+        from orchestration.routes.query import _explanation_store
+        req_id = str(uuid4())
+        gen = SqlExplanationGenerator()
+        exp = gen.explain_kw(sql="SELECT revenue FROM sales_summary")
+        _explanation_store[req_id] = (sample_claims.sub, exp)
 
         resp = client.get(
-            f"/v1/chat/query/{uuid4()}/sql-explanation",
+            f"/v1/chat/query/{req_id}/sql-explanation",
             headers={"Authorization": "Bearer fake-jwt"},
         )
 
         assert resp.status_code == 200
         body = resp.json()
-        # Real explanation replaces stub (Story 2B.1)
         assert "data_source" in body
-        assert "raw_sql" not in body or body.get("raw_sql") is None
+        assert body.get("raw_sql") is None

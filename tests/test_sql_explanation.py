@@ -116,7 +116,7 @@ class TestSqlExplanationEndpoint:
     @patch("aial_shared.auth.fastapi_deps.decode_jwt")
     @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
     @patch("aial_shared.auth.fastapi_deps.CerbosClient")
-    def test_explanation_endpoint_returns_structure(
+    def test_unknown_request_id_returns_404(
         self,
         mock_cerbos_cls: MagicMock,
         mock_validate: MagicMock,
@@ -125,15 +125,70 @@ class TestSqlExplanationEndpoint:
         sample_claims: JWTClaims,
     ) -> None:
         _auth(mock_cerbos_cls, mock_validate, mock_decode, sample_claims)
-
+        # Unregistered UUID — must return 404, not a fabricated explanation
         resp = client.get(
             f"/v1/chat/query/{uuid4()}/sql-explanation",
             headers={"Authorization": "Bearer fake-jwt"},
         )
+        assert resp.status_code == 404, (
+            "Explanation endpoint must return 404 for unregistered request_ids, "
+            "not a fabricated provenance response"
+        )
+
+    @patch("aial_shared.auth.fastapi_deps.decode_jwt")
+    @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
+    @patch("aial_shared.auth.fastapi_deps.CerbosClient")
+    def test_registered_explanation_returns_real_structure(
+        self,
+        mock_cerbos_cls: MagicMock,
+        mock_validate: MagicMock,
+        mock_decode: MagicMock,
+        client: TestClient,
+        sample_claims: JWTClaims,
+    ) -> None:
+        _auth(mock_cerbos_cls, mock_validate, mock_decode, sample_claims)
+        # Register an explanation manually (simulates graph completion)
+        from orchestration.explanation.generator import SqlExplanationGenerator
+        from orchestration.routes.query import _explanation_store
+        req_id = str(uuid4())
+        gen = SqlExplanationGenerator()
+        exp = gen.explain_kw(sql="SELECT SUM(revenue) FROM sales WHERE year=2024")
+        _explanation_store[req_id] = (sample_claims.sub, exp)
+
+        resp = client.get(
+            f"/v1/chat/query/{req_id}/sql-explanation",
+            headers={"Authorization": "Bearer fake-jwt"},
+        )
         assert resp.status_code == 200
         body = resp.json()
-        # Now returns real explanation structure, not just "not_implemented"
-        assert "data_source" in body or body.get("status") == "not_implemented"
+        assert "data_source" in body
+        # Must NOT be the old stub response
+        assert body.get("status") != "not_implemented", "Stub response still returned — not replaced"
+
+    @patch("aial_shared.auth.fastapi_deps.decode_jwt")
+    @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
+    @patch("aial_shared.auth.fastapi_deps.CerbosClient")
+    def test_explanation_owned_by_different_user_returns_403(
+        self,
+        mock_cerbos_cls: MagicMock,
+        mock_validate: MagicMock,
+        mock_decode: MagicMock,
+        client: TestClient,
+        sample_claims: JWTClaims,
+    ) -> None:
+        _auth(mock_cerbos_cls, mock_validate, mock_decode, sample_claims)
+        from orchestration.explanation.generator import SqlExplanationGenerator
+        from orchestration.routes.query import _explanation_store
+        req_id = str(uuid4())
+        gen = SqlExplanationGenerator()
+        exp = gen.explain_kw(sql="SELECT 1 FROM dual")
+        _explanation_store[req_id] = ("other-user-id", exp)  # owned by someone else
+
+        resp = client.get(
+            f"/v1/chat/query/{req_id}/sql-explanation",
+            headers={"Authorization": "Bearer fake-jwt"},
+        )
+        assert resp.status_code == 403
 
     @patch("aial_shared.auth.fastapi_deps.decode_jwt")
     @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
@@ -147,11 +202,18 @@ class TestSqlExplanationEndpoint:
         sample_claims: JWTClaims,
     ) -> None:
         _auth(mock_cerbos_cls, mock_validate, mock_decode, sample_claims)
+        from orchestration.explanation.generator import SqlExplanationGenerator
+        from orchestration.routes.query import _explanation_store
+        req_id = str(uuid4())
+        gen = SqlExplanationGenerator()
+        exp = gen.explain_kw(sql="SELECT revenue FROM sales")
+        _explanation_store[req_id] = (sample_claims.sub, exp)
 
         resp = client.get(
-            f"/v1/chat/query/{uuid4()}/sql-explanation",
+            f"/v1/chat/query/{req_id}/sql-explanation",
             headers={"Authorization": "Bearer fake-jwt"},
         )
+        assert resp.status_code == 200
         body = resp.json()
-        # raw_sql should NOT be present in default response
-        assert "raw_sql" not in body or body.get("raw_sql") is None
+        # raw_sql must NOT be present in default response (progressive disclosure)
+        assert body.get("raw_sql") is None, "raw_sql must be None by default (FR-O5 progressive disclosure)"

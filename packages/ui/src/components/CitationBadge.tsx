@@ -38,7 +38,10 @@ export function CitationBadge({ citation }: CitationBadgeProps): React.JSX.Eleme
         aria-expanded={open}
         aria-haspopup="true"
         onClick={() => setOpen(v => !v)}
+        onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
         style={{
           display: 'inline-flex',
           alignItems: 'center',

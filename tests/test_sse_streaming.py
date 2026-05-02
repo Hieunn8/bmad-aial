@@ -106,6 +106,25 @@ class TestStreamEndpoint:
     @patch("aial_shared.auth.fastapi_deps.decode_jwt")
     @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
     @patch("aial_shared.auth.fastapi_deps.CerbosClient")
+    def test_stream_unknown_request_id_returns_404(
+        self,
+        mock_cerbos_cls: MagicMock,
+        mock_validate: MagicMock,
+        mock_decode: MagicMock,
+        client: TestClient,
+        sample_claims: JWTClaims,
+    ) -> None:
+        _auth(mock_cerbos_cls, mock_validate, mock_decode, sample_claims)
+        # Unknown UUID (not pre-registered via POST /v1/chat/query) → 404, not a synthetic stream
+        resp = client.get(
+            f"/v1/chat/stream/{uuid4()}",
+            headers={"Authorization": "Bearer fake-jwt"},
+        )
+        assert resp.status_code == 404, "Stream endpoint must return 404 for unregistered request_ids"
+
+    @patch("aial_shared.auth.fastapi_deps.decode_jwt")
+    @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
+    @patch("aial_shared.auth.fastapi_deps.CerbosClient")
     def test_stream_endpoint_returns_event_stream_content_type(
         self,
         mock_cerbos_cls: MagicMock,
@@ -115,8 +134,11 @@ class TestStreamEndpoint:
         sample_claims: JWTClaims,
     ) -> None:
         _auth(mock_cerbos_cls, mock_validate, mock_decode, sample_claims)
-
+        # Pre-register the request_id (simulates POST /v1/chat/query)
+        from orchestration.streaming.queue import get_stream_queue
         request_id = str(uuid4())
+        get_stream_queue().create(request_id, owner_user_id=sample_claims.sub)
+
         resp = client.get(
             f"/v1/chat/stream/{request_id}",
             headers={"Authorization": "Bearer fake-jwt"},
@@ -136,8 +158,10 @@ class TestStreamEndpoint:
         sample_claims: JWTClaims,
     ) -> None:
         _auth(mock_cerbos_cls, mock_validate, mock_decode, sample_claims)
-
+        from orchestration.streaming.queue import get_stream_queue
         request_id = str(uuid4())
+        get_stream_queue().create(request_id, owner_user_id=sample_claims.sub)
+
         resp = client.get(
             f"/v1/chat/stream/{request_id}",
             headers={"Authorization": "Bearer fake-jwt"},

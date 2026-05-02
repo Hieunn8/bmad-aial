@@ -56,6 +56,9 @@ class CerbosClient:
             },
             "resources": [{"resource": resource_entry, "actions": [action]}],
         }
+        # Epic 4 ABAC attrs — extend without renaming Epic 2A attrs (ADR-2A7 freeze)
+        payload["principal"]["attr"]["region"] = principal.region
+        payload["principal"]["attr"]["approval_authority"] = principal.approval_authority
 
         url = f"{self._base_url}/api/check/resources"
         data = json.dumps(payload).encode("utf-8")

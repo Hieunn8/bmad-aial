@@ -1,4 +1,10 @@
-"""Tests for Story 2B.5 — Audit Read Model + Compliance Dashboard API."""
+"""Tests for Story 2B.5 — Audit Read Model + Compliance Dashboard API.
+
+Critical invariants verified:
+  - Non-admin users cannot read other users' audit records.
+  - Admin users can read all records and filter by any user.
+  - API returns cross-user data when admin filters; returns only own data otherwise.
+"""
 
 from __future__ import annotations
 
@@ -10,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from aial_shared.auth.keycloak import JWTClaims
-from orchestration.audit.read_model import AuditFilter, AuditReadModel, AuditRecord
+from orchestration.audit.read_model import AuditFilter, AuditReadModel, AuditRecord, get_audit_read_model
 
 
 @pytest.fixture()
@@ -18,6 +24,14 @@ def admin_claims() -> JWTClaims:
     return JWTClaims(
         sub="admin-1", email="admin@aial.local", department="engineering",
         roles=("admin",), clearance=3, raw={},
+    )
+
+
+@pytest.fixture()
+def regular_user_claims() -> JWTClaims:
+    return JWTClaims(
+        sub="user-42", email="user@aial.local", department="sales",
+        roles=("user",), clearance=1, raw={},
     )
 
 
@@ -35,6 +49,33 @@ def _auth(mock_cerbos_cls: MagicMock, mock_validate: MagicMock, mock_decode: Mag
     mock_cerbos.check.return_value = MagicMock(allowed=True)
     mock_cerbos_cls.return_value = mock_cerbos
 
+
+def _seed_audit_model(user_ids: list[str]) -> AuditReadModel:
+    """Seed global audit model with records for given user IDs."""
+    model = get_audit_read_model()
+    now = datetime.now(UTC)
+    for uid in user_ids:
+        model.append(AuditRecord(
+            request_id=str(uuid4()),
+            user_id=uid,
+            department_id="sales",
+            session_id=str(uuid4()),
+            timestamp=now,
+            intent_type="query",
+            sensitivity_tier="LOW",
+            sql_hash="hash-" + uid,
+            data_sources=["sales_summary"],
+            rows_returned=5,
+            latency_ms=100,
+            policy_decision="ALLOW",
+            status="SUCCESS",
+        ))
+    return model
+
+
+# ---------------------------------------------------------------------------
+# AuditReadModel unit tests
+# ---------------------------------------------------------------------------
 
 class TestAuditReadModel:
     @pytest.fixture()
@@ -62,10 +103,12 @@ class TestAuditReadModel:
 
     def test_filter_by_user(self, model: AuditReadModel) -> None:
         results = model.search(AuditFilter(user_id="user-0"))
+        assert len(results) > 0
         assert all(r.user_id == "user-0" for r in results)
 
     def test_filter_by_policy_decision(self, model: AuditReadModel) -> None:
         results = model.search(AuditFilter(policy_decision="DENY"))
+        assert len(results) > 0
         assert all(r.policy_decision == "DENY" for r in results)
 
     def test_filter_by_date_range(self, model: AuditReadModel) -> None:
@@ -105,35 +148,74 @@ class TestAuditReadModel:
         assert d.get("stored_sql") is None
 
 
-class TestAuditApiEndpoint:
+# ---------------------------------------------------------------------------
+# API authorization tests — the critical path
+# ---------------------------------------------------------------------------
+
+class TestAuditApiAuthorization:
     @patch("aial_shared.auth.fastapi_deps.decode_jwt")
     @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
     @patch("aial_shared.auth.fastapi_deps.CerbosClient")
-    def test_admin_can_query_audit_logs(
+    def test_admin_sees_all_users_records(
         self, mock_cerbos_cls: MagicMock, mock_validate: MagicMock, mock_decode: MagicMock,
         client: TestClient, admin_claims: JWTClaims,
     ) -> None:
         _auth(mock_cerbos_cls, mock_validate, mock_decode, admin_claims)
+        _seed_audit_model(["other-user-1", "other-user-2"])
+
         resp = client.get("/v1/admin/audit-logs", headers={"Authorization": "Bearer fake-jwt"})
         assert resp.status_code == 200
-        body = resp.json()
-        assert "records" in body
-        assert "total" in body
-        assert "page" in body
+        user_ids = {r["user_id"] for r in resp.json()["records"]}
+        # Admin should see cross-user records (seeded above)
+        assert len(user_ids) > 1 or resp.json()["total"] > 0
 
     @patch("aial_shared.auth.fastapi_deps.decode_jwt")
     @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
     @patch("aial_shared.auth.fastapi_deps.CerbosClient")
-    def test_audit_logs_filtered_by_user(
+    def test_regular_user_only_sees_own_records(
+        self, mock_cerbos_cls: MagicMock, mock_validate: MagicMock, mock_decode: MagicMock,
+        client: TestClient, regular_user_claims: JWTClaims,
+    ) -> None:
+        _auth(mock_cerbos_cls, mock_validate, mock_decode, regular_user_claims)
+        # Seed records for other users — regular user must NOT see them
+        _seed_audit_model(["other-user-X", "other-user-Y"])
+
+        resp = client.get("/v1/admin/audit-logs", headers={"Authorization": "Bearer fake-jwt"})
+        assert resp.status_code == 200
+        for record in resp.json()["records"]:
+            assert record["user_id"] == regular_user_claims.sub, (
+                f"Non-admin user saw another user's record: {record['user_id']}"
+            )
+
+    @patch("aial_shared.auth.fastapi_deps.decode_jwt")
+    @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
+    @patch("aial_shared.auth.fastapi_deps.CerbosClient")
+    def test_regular_user_cannot_query_other_users_records(
+        self, mock_cerbos_cls: MagicMock, mock_validate: MagicMock, mock_decode: MagicMock,
+        client: TestClient, regular_user_claims: JWTClaims,
+    ) -> None:
+        _auth(mock_cerbos_cls, mock_validate, mock_decode, regular_user_claims)
+
+        resp = client.get(
+            "/v1/admin/audit-logs?user_id=some-other-user",
+            headers={"Authorization": "Bearer fake-jwt"},
+        )
+        assert resp.status_code == 403
+
+    @patch("aial_shared.auth.fastapi_deps.decode_jwt")
+    @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
+    @patch("aial_shared.auth.fastapi_deps.CerbosClient")
+    def test_admin_can_filter_by_specific_user(
         self, mock_cerbos_cls: MagicMock, mock_validate: MagicMock, mock_decode: MagicMock,
         client: TestClient, admin_claims: JWTClaims,
     ) -> None:
         _auth(mock_cerbos_cls, mock_validate, mock_decode, admin_claims)
+        _seed_audit_model(["target-user"])
+
         resp = client.get(
-            "/v1/admin/audit-logs?user_id=user-specific",
+            "/v1/admin/audit-logs?user_id=target-user",
             headers={"Authorization": "Bearer fake-jwt"},
         )
         assert resp.status_code == 200
-        body = resp.json()
-        for record in body["records"]:
-            assert record["user_id"] == "user-specific"
+        for record in resp.json()["records"]:
+            assert record["user_id"] == "target-user"

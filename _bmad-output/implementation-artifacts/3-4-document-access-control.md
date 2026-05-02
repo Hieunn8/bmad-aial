@@ -1,6 +1,6 @@
 # Story 3.4: Document Access Control (FR-R4)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 

@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-04-28T15:26:38+07:00"
-last_updated: "2026-04-29T17:00:00+07:00"
+last_updated: "2026-05-01T00:00:00+07:00"
 project: "AIAL"
 project_key: "NOKEY"
 tracking_system: "file-system"
@@ -51,40 +51,40 @@ development_status:
   1-6-observability-minimal-stack: done
   1-7-frontend-shell-plus-design-tokens-plus-accessibility-foundation: done
   1-8-oracle-vpd-smoke-test: in-progress
-  1-9-e2e-walking-skeleton-gate: review
+  1-9-e2e-walking-skeleton-gate: done
   epic-1-retrospective: optional
-  epic-2a: in-progress
-  2a-0-weaviate-schema-bootstrap: review
+  epic-2a: done
+  2a-0-weaviate-schema-bootstrap: done
   2a-1-query-api-endpoint-plus-input-validation: done
   2a-2-semantic-layer-bootstrap-plus-business-glossary-api: done
   2a-3-sql-generation-guardrails-plus-query-governor: done
-  2a-4-oracle-execution-with-identity-passthrough-plus-vpd-enforcement: in-progress
+  2a-4-oracle-execution-with-identity-passthrough-plus-vpd-enforcement: done
   2a-5-streaming-chat-ui-plus-sse-transport: done
   2a-6-short-term-session-memory-plus-per-turn-security: done
   2a-7-baseline-cerbos-policy-plus-principalattr-schema-freeze: done
   2a-8-query-lifecycle-audit-logging: done
   2a-9-onboarding-shell-plus-first-query-scaffold: done
   epic-2a-retrospective: optional
-  epic-2b: in-progress
-  2b-1-full-sql-explanation: review
-  2b-2-citation-badge-component: review
-  2b-3-provenance-drawer-component: review
-  2b-4-chart-reveal-plus-data-freshness-signals: review
-  2b-5-audit-read-model-plus-compliance-dashboard: review
+  epic-2b: done
+  2b-1-full-sql-explanation: done
+  2b-2-citation-badge-component: done
+  2b-3-provenance-drawer-component: done
+  2b-4-chart-reveal-plus-data-freshness-signals: done
+  2b-5-audit-read-model-plus-compliance-dashboard: done
   epic-2b-retrospective: optional
-  epic-3: backlog
-  3-1-document-ingestion-pipeline: ready-for-dev
-  3-2-pre-retrieval-policy-filtering: ready-for-dev
-  3-3-hybrid-answer-composition-with-citations: ready-for-dev
-  3-4-document-access-control: ready-for-dev
-  3-5-admin-document-management: ready-for-dev
+  epic-3: done
+  3-1-document-ingestion-pipeline: done
+  3-2-pre-retrieval-policy-filtering: done
+  3-3-hybrid-answer-composition-with-citations: done
+  3-4-document-access-control: done
+  3-5-admin-document-management: done
   epic-3-retrospective: optional
-  epic-4: backlog
-  4-1-full-abac-extension: ready-for-dev
-  4-2-column-level-security: ready-for-dev
-  4-3-pii-masking-with-presidio: ready-for-dev
-  4-4-query-approval-workflow: ready-for-dev
-  4-5-trust-and-permission-ui-components: ready-for-dev
+  epic-4: in-progress
+  4-1-full-abac-extension: review
+  4-2-column-level-security: review
+  4-3-pii-masking-with-presidio: review
+  4-4-query-approval-workflow: review
+  4-5-trust-and-permission-ui-components: review
   epic-4-retrospective: optional
   epic-5a: backlog
   5a-1-user-and-role-management: ready-for-dev

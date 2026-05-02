@@ -1,6 +1,6 @@
 # Story 3.3: Hybrid Answer Composition with Citations (FR-R3)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 

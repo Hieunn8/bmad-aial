@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from aial_shared.auth.fastapi_deps import require_permission
 from aial_shared.telemetry.tracer import setup_tracing
 from orchestration.routes.admin import router as admin_router
+from orchestration.routes.documents import router as documents_router
 from orchestration.routes.glossary import router as glossary_router
 from orchestration.routes.health import router as health_router
 from orchestration.routes.onboarding import router as onboarding_router
@@ -58,6 +59,7 @@ def create_app() -> FastAPI:
     app.include_router(stream_router, dependencies=[Depends(chat_query_auth)])
     app.include_router(onboarding_router, dependencies=[Depends(chat_query_auth)])
     app.include_router(admin_router, dependencies=[Depends(chat_query_auth)])
+    app.include_router(documents_router, dependencies=[Depends(chat_query_auth)])
 
     return app
 

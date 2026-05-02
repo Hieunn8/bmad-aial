@@ -1,6 +1,6 @@
 # Story 3.2: Pre-retrieval Policy Filtering (FR-R2)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 

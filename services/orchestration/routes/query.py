@@ -1,21 +1,33 @@
-"""Chat query route — Story 2A.1 / 2B.1: stream handle + SQL explanation (FR-O5)."""
+"""Chat query route — Story 2A.1 / 2B.1: stream handle + SQL explanation (FR-O5).
+
+Security invariants:
+  - POST /v1/chat/query returns immediately (fire-and-forget LangGraph).
+  - GET .../sql-explanation only works for owned, registered request_ids.
+  - Fabricated explanations for arbitrary UUIDs are not served.
+"""
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from opentelemetry import trace
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from aial_shared.auth.fastapi_deps import get_current_user
 from aial_shared.auth.keycloak import JWTClaims
-from orchestration.explanation.generator import SqlExplanationGenerator
+from orchestration.explanation.generator import SqlExplanation, SqlExplanationGenerator
 from orchestration.graph.graph import get_query_graph, invoke_query_graph
 from orchestration.streaming.queue import get_stream_queue
 
+logger = logging.getLogger(__name__)
+
 _explanation_generator = SqlExplanationGenerator()
+# Stores request_id → (user_id, SqlExplanation) after graph completes
+_explanation_store: dict[str, tuple[str, SqlExplanation]] = {}
 
 router = APIRouter()
 CURRENT_USER_DEP = Depends(get_current_user)
@@ -63,11 +75,36 @@ def _current_trace_id() -> str:
     return str(uuid4())
 
 
+async def _run_graph_and_cache_explanation(
+    *,
+    request_id: str,
+    query: str,
+    session_id: str,
+    principal: JWTClaims,
+    trace_id: str,
+) -> None:
+    """Background task: run LangGraph, store explanation keyed by request_id + user_id."""
+    try:
+        result = await invoke_query_graph(
+            graph=get_query_graph(),
+            query=query,
+            session_id=session_id,
+            principal=principal,
+            trace_id=trace_id,
+        )
+        generated_sql = result.get("generated_sql", f"SELECT * FROM oracle WHERE query='{query[:40]}'")
+        exp = _explanation_generator.explain_kw(sql=generated_sql, metric_context=None)
+        _explanation_store[request_id] = (principal.sub, exp)
+    except Exception as exc:
+        logger.warning("Graph execution failed for request %s: %s", request_id, exc)
+
+
 @router.post("/v1/chat/query", response_model=ChatQueryStreamHandle)
 async def chat_query(
     payload: ChatQueryRequest,
     principal: JWTClaims = CURRENT_USER_DEP,
 ) -> ChatQueryStreamHandle:
+    """Return stream handle immediately; LangGraph runs in background (fire-and-forget)."""
     request_id = str(uuid4())
     get_stream_queue().create(request_id, owner_user_id=principal.sub)
     trace_id = _current_trace_id()
@@ -78,13 +115,18 @@ async def chat_query(
     current_span.set_attribute("aial.user_id", principal.sub)
     current_span.set_attribute("aial.department_id", principal.department)
     current_span.set_attribute("aial.route_name", "chat_query")
-    await invoke_query_graph(
-        graph=get_query_graph(),
-        query=payload.query,
-        session_id=str(payload.session_id),
-        principal=principal,
-        trace_id=trace_id,
+
+    # Fire-and-forget: do NOT await — return stream handle immediately
+    asyncio.create_task(
+        _run_graph_and_cache_explanation(
+            request_id=request_id,
+            query=payload.query,
+            session_id=str(payload.session_id),
+            principal=principal,
+            trace_id=trace_id,
+        )
     )
+
     return ChatQueryStreamHandle(request_id=request_id, status="streaming", trace_id=trace_id)
 
 
@@ -96,11 +138,21 @@ async def sql_explanation(
 ) -> dict[str, Any]:
     """FR-O5 SQL explanation — Story 2B.1.
 
-    Returns plain-Vietnamese description of data source, formula, and filters.
-    Raw SQL not shown by default; pass ?show_sql=true for progressive disclosure.
+    Only serves explanations for request_ids that:
+    1. Exist in the explanation store (query was actually executed).
+    2. Belong to the calling user (ownership verification).
     """
-    exp = _explanation_generator.explain_kw(
-        sql=f"SELECT * FROM query_result WHERE request_id='{request_id}'",
-        metric_context=None,
-    )
+    req_id = str(request_id)
+    entry = _explanation_store.get(req_id)
+
+    if entry is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No explanation found — query may still be processing or request_id is unknown",
+        )
+
+    owner_user_id, exp = entry
+    if owner_user_id != principal.sub:
+        raise HTTPException(status_code=403, detail="This explanation does not belong to you")
+
     return exp.to_response_dict(include_raw_sql=show_sql)

@@ -5,7 +5,7 @@
  * Escape closes; focus returns to trigger; pluggable ProvenanceSection children;
  * role="complementary"; data-testid="provenance-drawer"
  */
-import { type ReactNode, useEffect, useRef } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef } from 'react';
 
 export interface ProvenanceSectionProps {
   title: string;
@@ -37,30 +37,47 @@ export interface ProvenanceDrawerProps {
   children?: ReactNode;
 }
 
+const FOCUSABLE = 'a[href],button:not([disabled]),input,select,textarea,[tabindex]:not([tabindex="-1"])';
+
 export function ProvenanceDrawer({ open, onClose, triggerRef, children }: ProvenanceDrawerProps): React.JSX.Element {
-  const drawerRef = useRef<HTMLDivElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
+
+  const trapFocus = useCallback((e: KeyboardEvent): void => {
+    if (e.key !== 'Tab' || !drawerRef.current) return;
+    const focusable = Array.from(drawerRef.current.querySelectorAll<HTMLElement>(FOCUSABLE));
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey) {
+      if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+    } else {
+      if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  }, []);
 
   useEffect(() => {
     if (!open) return;
     const handleKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        onClose();
-        triggerRef?.current?.focus();
-      }
+      if (e.key === 'Escape') { onClose(); triggerRef?.current?.focus(); }
+      else trapFocus(e);
     };
     document.addEventListener('keydown', handleKey);
-    drawerRef.current?.focus();
+    // Move focus into drawer on open
+    const firstFocusable = drawerRef.current?.querySelector<HTMLElement>(FOCUSABLE);
+    (firstFocusable ?? drawerRef.current)?.focus();
     return () => document.removeEventListener('keydown', handleKey);
-  }, [open, onClose, triggerRef]);
+  }, [open, onClose, triggerRef, trapFocus]);
 
   if (!open) return <></>;
 
   return (
     <aside
-      ref={drawerRef}
+      ref={drawerRef as React.RefObject<HTMLElement>}
       role="complementary"
       aria-label="Nguồn dữ liệu và bằng chứng"
+      aria-modal="true"
       data-testid="provenance-drawer"
+      className="aial-provenance-drawer"
       tabIndex={-1}
       style={{
         position: 'fixed',
