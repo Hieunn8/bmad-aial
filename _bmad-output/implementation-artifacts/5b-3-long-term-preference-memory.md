@@ -1,6 +1,6 @@
 # Story 5B.3: Long-term Preference Memory (FR-M3)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -68,4 +68,15 @@ cx/gpt-5.3-codex
 
 ### Completion Notes List
 
+- Added private saved-template storage and preference-learning opt-out controls per user.
+- Added KPI usage tracking and top suggestion generation for frequently used metrics and saved templates.
+- Added user-facing suggestions and template list/save APIs.
+- Kept preference storage free of raw Oracle values by validating query intent and filters before persistence.
+- Verified with `python -m pytest tests/test_semantic_memory_5b.py -q`.
+
 ### File List
+
+- `services/orchestration/memory/long_term.py`
+- `services/orchestration/routes/memory.py`
+- `services/orchestration/routes/query.py`
+- `tests/test_semantic_memory_5b.py`

@@ -1,6 +1,6 @@
 # Story 5B.1: Semantic Layer & KPI Management UI (FR-AD1 + FR-S2)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -68,4 +68,18 @@ cx/gpt-5.3-codex
 
 ### Completion Notes List
 
+- Added semantic layer version service with immutable KPI versions, active-version tracking, diff generation, rollback, and cache invalidation timestamps.
+- Extended admin API with publish/list-version/diff/rollback endpoints guarded for `admin` and `data_owner`.
+- Preserved the Story 2A.2 glossary read contract while switching reads to the active semantic definition.
+- Wired semantic context into the live query path so subsequent requests can consume the active KPI formula set.
+- Verified with `python -m pytest tests/test_semantic_memory_5b.py tests/test_glossary.py tests/test_orchestration_query.py -q`.
+
 ### File List
+
+- `services/orchestration/semantic/management.py`
+- `services/orchestration/routes/admin.py`
+- `services/orchestration/routes/glossary.py`
+- `services/orchestration/routes/query.py`
+- `services/orchestration/graph/state.py`
+- `services/orchestration/graph/graph.py`
+- `tests/test_semantic_memory_5b.py`

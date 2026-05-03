@@ -38,6 +38,7 @@ def apply_column_security(
 ) -> list[dict[str, Any]] | tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Apply column masking per clearance level.
 
+    INTERNAL (≥1): replace value with '***' for clearance < 1.
     CONFIDENTIAL (≥2): replace value with '***' for clearance < 2.
     SECRET (≥3): exclude column entirely (name AND value) for clearance < 3.
     Untagged columns default to PUBLIC — no restriction.
@@ -54,6 +55,9 @@ def apply_column_security(
                 audit_records.append({"field": col, "action": "excluded"})
                 continue
             elif sensitivity == ColumnSensitivity.CONFIDENTIAL and user_clearance < 2:
+                new_row[col] = "***"
+                audit_records.append({"field": col, "action": "masked"})
+            elif sensitivity == ColumnSensitivity.INTERNAL and user_clearance < 1:
                 new_row[col] = "***"
                 audit_records.append({"field": col, "action": "masked"})
             else:

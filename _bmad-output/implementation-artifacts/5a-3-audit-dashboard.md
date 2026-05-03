@@ -1,6 +1,6 @@
 # Story 5A.3: Audit Dashboard (FR-AD4)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -68,4 +68,16 @@ cx/gpt-5.3-codex
 
 ### Completion Notes List
 
+- Extended audit filtering to support `action` and `data_source` filters in addition to existing user/date/policy filters.
+- Added request lifecycle lookup by `request_id` with denial reason and Cerbos rule visibility for investigations.
+- Added CSV export endpoint constrained to UI-safe fields and logged export actions back into the audit model.
+- Preserved read-only behavior by building on the append-only audit read model without edit/delete endpoints.
+- Verified with `python -m pytest tests/test_user_role_management.py tests/test_audit_api.py -q`.
+
 ### File List
+
+- `services/orchestration/audit/read_model.py`
+- `services/orchestration/routes/admin.py`
+- `services/orchestration/admin_control/user_role_management.py`
+- `tests/test_audit_api.py`
+- `tests/test_user_role_management.py`

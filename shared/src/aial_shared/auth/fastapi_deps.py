@@ -37,6 +37,10 @@ def _get_cerbos_client() -> CerbosClient:
     return CerbosClient(base_url=_CERBOS_URL)
 
 
+def get_cerbos_client() -> CerbosClient:
+    return _get_cerbos_client()
+
+
 def reset_cerbos_client_cache() -> None:
     _get_cerbos_client.cache_clear()
 
@@ -58,14 +62,23 @@ async def get_current_user(request: Request) -> JWTClaims:
         raise HTTPException(status_code=401, detail="Invalid token") from exc
 
     try:
-        return validate_token_claims(raw_claims)
+        principal = validate_token_claims(raw_claims)
     except TokenValidationError as exc:
         logger.warning("Token claims validation failed: %s", exc)
         raise HTTPException(status_code=401, detail="Invalid token") from exc
+    try:
+        from orchestration.admin_control.user_role_management import get_user_role_management_service
+
+        return get_user_role_management_service().resolve_runtime_principal(principal)
+    except PermissionError as exc:
+        logger.info("Principal denied by admin control state: %s", exc)
+        raise HTTPException(status_code=403, detail="User account is disabled") from exc
+    except ImportError:
+        return principal
 
 
 CURRENT_USER_DEP = Depends(get_current_user)
-CERBOS_CLIENT_DEP = Depends(_get_cerbos_client)
+CERBOS_CLIENT_DEP = Depends(get_cerbos_client)
 
 
 def require_permission(

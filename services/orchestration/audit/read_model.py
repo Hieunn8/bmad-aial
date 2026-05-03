@@ -30,6 +30,8 @@ class AuditRecord:
     status: str
     denial_reason: str | None = None
     stored_sql: str | None = None
+    cerbos_rule: str | None = None
+    metadata: dict[str, Any] | None = None
 
     def to_response_dict(self) -> dict[str, Any]:
         return {
@@ -48,6 +50,8 @@ class AuditRecord:
             "policy_decision": self.policy_decision,
             "status": self.status,
             "denial_reason": self.denial_reason,
+            "cerbos_rule": self.cerbos_rule,
+            "metadata": self.metadata or {},
         }
 
 
@@ -60,6 +64,8 @@ class AuditFilter:
     policy_decision: str | None = None
     status: str | None = None
     request_id: str | None = None
+    action: str | None = None
+    data_source: str | None = None
 
 
 class AuditReadModel:
@@ -76,6 +82,15 @@ class AuditReadModel:
         page: int = 1,
         page_size: int = 50,
     ) -> list[AuditRecord]:
+        results = self.search_all(audit_filter)
+        results.sort(key=lambda r: r.timestamp, reverse=True)
+        start = (page - 1) * page_size
+        return results[start : start + page_size]
+
+    def count(self, audit_filter: AuditFilter) -> int:
+        return len(self.search_all(audit_filter))
+
+    def search_all(self, audit_filter: AuditFilter) -> list[AuditRecord]:
         results = list(self._records)
 
         if audit_filter.request_id:
@@ -88,17 +103,15 @@ class AuditReadModel:
             results = [r for r in results if r.policy_decision == audit_filter.policy_decision]
         if audit_filter.status:
             results = [r for r in results if r.status == audit_filter.status]
+        if audit_filter.action:
+            results = [r for r in results if r.intent_type == audit_filter.action]
+        if audit_filter.data_source:
+            results = [r for r in results if audit_filter.data_source in r.data_sources]
         if audit_filter.date_from:
             results = [r for r in results if r.timestamp >= audit_filter.date_from]
         if audit_filter.date_to:
             results = [r for r in results if r.timestamp <= audit_filter.date_to]
-
-        results.sort(key=lambda r: r.timestamp, reverse=True)
-        start = (page - 1) * page_size
-        return results[start : start + page_size]
-
-    def count(self, audit_filter: AuditFilter) -> int:
-        return len(self.search(audit_filter, page=1, page_size=10_000))
+        return results
 
 
 # Module-level in-memory store (replaced by DB in Epic 5A)

@@ -1,6 +1,6 @@
 # Story 4.1: Full ABAC Extension (FR-A2 Full)
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 

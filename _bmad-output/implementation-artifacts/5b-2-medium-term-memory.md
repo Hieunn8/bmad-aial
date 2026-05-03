@@ -1,6 +1,6 @@
 # Story 5B.2: Medium-term Memory (FR-M2)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -68,4 +68,17 @@ cx/gpt-5.3-codex
 
 ### Completion Notes List
 
+- Added long-term conversation memory service with session summaries scoped by `user_id`, `department_id`, `session_id`, `sensitivity_level`, and expiry.
+- Added context retrieval limited to the last relevant summaries under the caller's current clearance with selective recall thresholding.
+- Added memory summary API endpoints plus query-path integration so new requests can load medium-term context.
+- Enforced zero raw-value storage for summaries by rejecting unsafe content at write time.
+- Verified with `python -m pytest tests/test_semantic_memory_5b.py tests/test_orchestration_query.py tests/test_session_memory.py -q`.
+
 ### File List
+
+- `services/orchestration/memory/long_term.py`
+- `services/orchestration/routes/memory.py`
+- `services/orchestration/routes/query.py`
+- `services/orchestration/graph/state.py`
+- `services/orchestration/graph/graph.py`
+- `tests/test_semantic_memory_5b.py`

@@ -1,6 +1,6 @@
 # Story 5A.1: User & Role Management (FR-AD2)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -68,4 +68,14 @@ cx/gpt-5.3-codex
 
 ### Completion Notes List
 
+- Added admin-only user and role management API under `/v1/admin` with role creation, user CRUD, LDAP sync status/run endpoints, and bulk CSV import preview/commit.
+- Implemented in-memory admin control service for walking skeleton scope with soft-delete retention, session revoke marker, schema allowlist persistence seam, and LDAP sync state.
+- Added audit trail entries for role create, user create/update/delete, LDAP sync, and bulk import operations.
+- Verified with focused pytest suites covering new story behavior and regression on existing admin surfaces.
+
 ### File List
+
+- services/orchestration/admin_control/__init__.py
+- services/orchestration/admin_control/user_role_management.py
+- services/orchestration/routes/admin.py
+- tests/test_user_role_management.py

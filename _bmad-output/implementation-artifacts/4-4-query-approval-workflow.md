@@ -1,6 +1,6 @@
 # Story 4.4: Query Approval Workflow (FR-A7)
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 

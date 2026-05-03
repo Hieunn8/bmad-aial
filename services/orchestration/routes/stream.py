@@ -45,6 +45,10 @@ async def _event_generator(request_id: str) -> AsyncGenerator[str, None]:
     for event in queue.drain(request_id):
         yield event.to_sse()
 
+    if queue.is_closed(request_id):
+        queue.cleanup(request_id)
+        return
+
     for i, description in enumerate(_WALKING_SKELETON_STEPS, start=1):
         yield make_step_event(step=i, total=len(_WALKING_SKELETON_STEPS), description=description).to_sse()
 

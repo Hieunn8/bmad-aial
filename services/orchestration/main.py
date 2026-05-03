@@ -15,6 +15,7 @@ from orchestration.routes.admin import router as admin_router
 from orchestration.routes.documents import router as documents_router
 from orchestration.routes.glossary import router as glossary_router
 from orchestration.routes.health import router as health_router
+from orchestration.routes.memory import router as memory_router
 from orchestration.routes.onboarding import router as onboarding_router
 from orchestration.routes.query import _INVALID_QUERY_TYPE, router as query_router
 from orchestration.routes.stream import router as stream_router
@@ -58,8 +59,9 @@ def create_app() -> FastAPI:
     app.include_router(glossary_router, dependencies=[Depends(chat_query_auth)])
     app.include_router(stream_router, dependencies=[Depends(chat_query_auth)])
     app.include_router(onboarding_router, dependencies=[Depends(chat_query_auth)])
-    app.include_router(admin_router, dependencies=[Depends(chat_query_auth)])
-    app.include_router(documents_router, dependencies=[Depends(chat_query_auth)])
+    app.include_router(memory_router, dependencies=[Depends(chat_query_auth)])
+    app.include_router(admin_router)
+    app.include_router(documents_router)
 
     return app
 

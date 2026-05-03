@@ -1,6 +1,6 @@
 # Story 4.3: PII Masking with Presidio (FR-A5)
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 

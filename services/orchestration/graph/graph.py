@@ -44,12 +44,18 @@ async def invoke_query_graph(
     session_id: str,
     principal: JWTClaims,
     trace_id: str,
+    semantic_context: list[dict[str, Any]] | None = None,
+    memory_context: dict[str, Any] | None = None,
+    preference_context: list[dict[str, Any]] | None = None,
 ) -> AIALGraphState:
     initial_state = build_initial_state(
         query=query,
         session_id=session_id,
         principal=principal,
         trace_id=trace_id,
+        semantic_context=semantic_context,
+        memory_context=memory_context,
+        preference_context=preference_context,
     )
     config = {"configurable": {"thread_id": f"{principal.sub}:{session_id}"}}
     result = await graph.ainvoke(initial_state, config=config)

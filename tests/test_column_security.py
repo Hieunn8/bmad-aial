@@ -28,6 +28,18 @@ class TestColumnMasking:
         result = apply_column_security(rows, schema=schema, user_clearance=1)
         assert result[0]["salary"] == "***"
 
+    def test_internal_column_masked_for_public_clearance(self) -> None:
+        schema = {"ops_note": ColumnSensitivity.INTERNAL}
+        rows = [{"ops_note": "internal only"}]
+        result = apply_column_security(rows, schema=schema, user_clearance=0)
+        assert result[0]["ops_note"] == "***"
+
+    def test_internal_column_visible_for_internal_clearance(self) -> None:
+        schema = {"ops_note": ColumnSensitivity.INTERNAL}
+        rows = [{"ops_note": "internal only"}]
+        result = apply_column_security(rows, schema=schema, user_clearance=1)
+        assert result[0]["ops_note"] == "internal only"
+
     def test_confidential_column_visible_for_sufficient_clearance(self) -> None:
         schema = {"salary": ColumnSensitivity.CONFIDENTIAL}
         rows = [{"salary": 50000}]

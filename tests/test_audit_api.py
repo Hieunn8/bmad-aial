@@ -111,6 +111,12 @@ class TestAuditReadModel:
         assert len(results) > 0
         assert all(r.policy_decision == "DENY" for r in results)
 
+    def test_filter_by_action_and_data_source(self, model: AuditReadModel) -> None:
+        results = model.search(AuditFilter(action="query", data_source="sales_summary"))
+        assert len(results) > 0
+        assert all(r.intent_type == "query" for r in results)
+        assert all("sales_summary" in r.data_sources for r in results)
+
     def test_filter_by_date_range(self, model: AuditReadModel) -> None:
         now = datetime.now(UTC)
         results = model.search(AuditFilter(

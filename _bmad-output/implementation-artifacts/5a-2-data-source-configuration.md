@@ -1,6 +1,6 @@
 # Story 5A.2: Data Source Configuration (FR-AD3)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -68,4 +68,16 @@ cx/gpt-5.3-codex
 
 ### Completion Notes List
 
+- Added admin API endpoints for Oracle data source create/list/get/update with runtime-editable row limits and query timeouts.
+- Registered data sources in the in-memory `DataSourceRegistry` seam inside `user_role_management.py`.
+- Added automatic 5-second connection test seam, schema allowlist validation, Vault secret reference storage, and `UNVERIFIED` warning behavior.
+- Added audit logging for create/update operations without storing credential values.
+- Verified with `python -m pytest tests/test_user_role_management.py tests/test_audit_api.py -q`.
+
 ### File List
+
+- `services/orchestration/admin_control/user_role_management.py`
+- `services/orchestration/routes/admin.py`
+- `services/orchestration/audit/read_model.py`
+- `tests/test_user_role_management.py`
+- `tests/test_audit_api.py`

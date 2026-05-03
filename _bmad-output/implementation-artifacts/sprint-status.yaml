@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-04-28T15:26:38+07:00"
-last_updated: "2026-05-01T00:00:00+07:00"
+last_updated: "2026-05-03T15:00:00+07:00"
 project: "AIAL"
 project_key: "NOKEY"
 tracking_system: "file-system"
@@ -79,25 +79,25 @@ development_status:
   3-4-document-access-control: done
   3-5-admin-document-management: done
   epic-3-retrospective: optional
-  epic-4: in-progress
-  4-1-full-abac-extension: review
-  4-2-column-level-security: review
-  4-3-pii-masking-with-presidio: review
-  4-4-query-approval-workflow: review
-  4-5-trust-and-permission-ui-components: review
+  epic-4: done
+  4-1-full-abac-extension: done
+  4-2-column-level-security: done
+  4-3-pii-masking-with-presidio: done
+  4-4-query-approval-workflow: done
+  4-5-trust-and-permission-ui-components: done
   epic-4-retrospective: optional
-  epic-5a: backlog
-  5a-1-user-and-role-management: ready-for-dev
-  5a-2-data-source-configuration: ready-for-dev
-  5a-3-audit-dashboard: ready-for-dev
-  5a-4-system-health-dashboard: ready-for-dev
+  epic-5a: in-progress
+  5a-1-user-and-role-management: review
+  5a-2-data-source-configuration: review
+  5a-3-audit-dashboard: review
+  5a-4-system-health-dashboard: review
   epic-5a-retrospective: optional
-  epic-5b: backlog
-  5b-1-semantic-layer-and-kpi-management-ui: ready-for-dev
-  5b-2-medium-term-memory: ready-for-dev
-  5b-3-long-term-preference-memory: ready-for-dev
-  5b-4-memory-isolation-plus-selective-injection: ready-for-dev
-  5b-5-conversation-history-search: ready-for-dev
+  epic-5b: in-progress
+  5b-1-semantic-layer-and-kpi-management-ui: review
+  5b-2-medium-term-memory: review
+  5b-3-long-term-preference-memory: review
+  5b-4-memory-isolation-plus-selective-injection: review
+  5b-5-conversation-history-search: review
   epic-5b-retrospective: optional
   epic-6: backlog
   6-0-cross-domain-decomposition-spike: ready-for-dev

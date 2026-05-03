@@ -11,12 +11,12 @@
 import { useEffect, useState } from 'react';
 
 export interface ExportConfirmationBarProps {
-  format: 'csv' | 'xlsx' | 'json';
+  format: 'csv' | 'xlsx' | 'pdf';
   rowCount: number;
   sensitivityWarning?: string;
   onConfirm: () => void;
   onCancel: () => void;
-  autoDissmissSeconds?: number;
+  autoDismissSeconds?: number;
 }
 
 export function ExportConfirmationBar({
@@ -25,10 +25,11 @@ export function ExportConfirmationBar({
   sensitivityWarning,
   onConfirm,
   onCancel,
-  autoDissmissSeconds = 30,
+  autoDismissSeconds,
 }: ExportConfirmationBarProps): React.JSX.Element {
   const [checked, setChecked] = useState(false);
-  const [remaining, setRemaining] = useState(autoDissmissSeconds);
+  const dismissSeconds = autoDismissSeconds ?? 30;
+  const [remaining, setRemaining] = useState(dismissSeconds);
 
   useEffect(() => {
     if (remaining <= 0) { onCancel(); return; }

@@ -88,9 +88,24 @@ class TestValidateTokenClaims:
         result = validate_token_claims(claims)
         assert result.clearance == 2
 
+    def test_approval_authority_false_string_stays_false(self) -> None:
+        claims = {**VALID_CLAIMS, "approval_authority": "false"}
+        result = validate_token_claims(claims)
+        assert result.approval_authority is False
+
+    def test_approval_authority_true_string_maps_true(self) -> None:
+        claims = {**VALID_CLAIMS, "approval_authority": "true"}
+        result = validate_token_claims(claims)
+        assert result.approval_authority is True
+
     def test_invalid_clearance_raises_error(self) -> None:
         claims = {**VALID_CLAIMS, "clearance": "not-a-number"}
         with pytest.raises(TokenValidationError, match="clearance must be an integer"):
+            validate_token_claims(claims)
+
+    def test_invalid_approval_authority_raises_error(self) -> None:
+        claims = {**VALID_CLAIMS, "approval_authority": "definitely"}
+        with pytest.raises(TokenValidationError, match="approval_authority"):
             validate_token_claims(claims)
 
     def test_jwt_claims_is_immutable(self) -> None:

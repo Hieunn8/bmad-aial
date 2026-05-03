@@ -4,8 +4,6 @@
  * 3 visual options; user CANNOT proceed without selecting.
  * Role preference stored server-side via POST /v1/user/role-preference.
  */
-import { useState } from 'react';
-
 export type UserRole = 'reporting' | 'answering' | 'analysis';
 
 export interface RoleOption {

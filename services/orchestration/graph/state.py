@@ -23,6 +23,9 @@ class AIALGraphState(TypedDict, total=False):
     final_response: str | None
     error: str | None
     should_abort: bool
+    semantic_context: list[dict[str, Any]]
+    memory_context: dict[str, Any]
+    preference_context: list[dict[str, Any]]
 
 
 def build_initial_state(
@@ -31,6 +34,9 @@ def build_initial_state(
     session_id: str,
     principal: JWTClaims,
     trace_id: str,
+    semantic_context: list[dict[str, Any]] | None = None,
+    memory_context: dict[str, Any] | None = None,
+    preference_context: list[dict[str, Any]] | None = None,
 ) -> AIALGraphState:
     return AIALGraphState(
         trace_id=trace_id,
@@ -44,4 +50,7 @@ def build_initial_state(
         final_response=None,
         error=None,
         should_abort=False,
+        semantic_context=semantic_context or [],
+        memory_context=memory_context or {},
+        preference_context=preference_context or [],
     )

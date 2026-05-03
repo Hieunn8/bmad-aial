@@ -40,12 +40,20 @@ class QueryIntent:
     intent_type: str
     filters: dict[str, Any]
     estimated_row_count: int
+    query_digest: str
 
     def fingerprint(self) -> str:
         canonical = json.dumps(
-            {"user": self.user_id, "dept": self.department, "type": self.intent_type,
-             "tier": self.sensitivity_tier, "filters": sorted(str(self.filters))},
+            {
+                "user": self.user_id,
+                "dept": self.department,
+                "type": self.intent_type,
+                "tier": self.sensitivity_tier,
+                "filters": self.filters,
+                "query_digest": self.query_digest,
+            },
             sort_keys=True,
+            separators=(",", ":"),
         )
         return hashlib.sha256(canonical.encode()).hexdigest()[:16]
 
@@ -103,6 +111,13 @@ class ApprovalStore:
 
     def is_expired(self, request: ApprovalRequest) -> bool:
         return (datetime.now(UTC) - request.created_at) > timedelta(hours=_SLA_HOURS)
+
+
+_approval_store = ApprovalStore()
+
+
+def get_approval_store() -> ApprovalStore:
+    return _approval_store
 
 
 def create_approval_request(intent: QueryIntent, *, store: ApprovalStore) -> ApprovalRequest:

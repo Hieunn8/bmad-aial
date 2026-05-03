@@ -5,7 +5,7 @@
  * Phase 2 (300ms–2s): scale 1.0→1.05→1.0, 800ms, ease-in-out, loop
  * prefers-reduced-motion: static indicator, no animation
  */
-import { useEffect, useRef, useState } from 'react';
+import { useRef } from 'react';
 
 export interface ThinkingPulseProps {
   message?: string;

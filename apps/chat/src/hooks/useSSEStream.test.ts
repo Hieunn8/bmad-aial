@@ -34,7 +34,7 @@ describe('useSSEStream', () => {
     expect(typeof result.current.reset).toBe('function');
   });
 
-  it('connect() sets status to idle (stub mode — no real connection)', () => {
+  it('connect() sets status to connecting before stream activity', () => {
     const { result } = renderHook(() =>
       useSSEStream('/v1/chat/stream/test-123'),
     );
@@ -43,8 +43,7 @@ describe('useSSEStream', () => {
       result.current.connect();
     });
 
-    // In stub mode, transitions to idle after connect
-    expect(result.current.state.status).toBe('idle');
+    expect(result.current.state.status).toBe('connecting');
   });
 
   it('abort() returns to idle state', () => {

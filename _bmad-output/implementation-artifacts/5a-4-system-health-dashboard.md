@@ -1,6 +1,6 @@
 # Story 5A.4: System Health Dashboard (FR-AD5)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -68,4 +68,15 @@ cx/gpt-5.3-codex
 
 ### Completion Notes List
 
+- Added admin system health dashboard endpoint returning P50/P95 latency per mode, cache hit ratio, error rate, token cost/day, active Oracle connections, and Weaviate status.
+- Added 30-second refresh contract, 7-day historical range contract, and Grafana embed URL seam for dashboard consumption.
+- Added configurable alert settings plus alert acknowledgement flow with audit logging.
+- Added threshold-based P95 latency alert generation in the health aggregation service.
+- Verified with `python -m pytest tests/test_user_role_management.py tests/test_orchestration_health.py -q`.
+
 ### File List
+
+- `services/orchestration/admin_control/user_role_management.py`
+- `services/orchestration/routes/admin.py`
+- `tests/test_user_role_management.py`
+- `tests/test_orchestration_health.py`

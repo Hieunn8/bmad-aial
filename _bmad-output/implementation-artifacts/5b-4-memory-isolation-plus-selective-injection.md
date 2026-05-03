@@ -1,6 +1,6 @@
 # Story 5B.4: Memory Isolation + Selective Injection (FR-M4 + FR-M5)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -68,4 +68,16 @@ cx/gpt-5.3-codex
 
 ### Completion Notes List
 
+- Enforced memory isolation by scoping summaries, templates, and history lookups strictly to the requesting `user_id`.
+- Added selective injection bundle generation with semantic similarity threshold `0.7` and token-budget cap under 20%.
+- Added compaction behavior that emits medium-term summaries every 10 recorded turns instead of replaying full history.
+- Added automated memory audit endpoint/service to verify zero raw values are stored in memory artifacts.
+- Verified with `python -m pytest tests/test_semantic_memory_5b.py tests/test_session_memory.py tests/test_orchestration_query.py -q`.
+
 ### File List
+
+- `services/orchestration/memory/long_term.py`
+- `services/orchestration/routes/memory.py`
+- `services/orchestration/routes/query.py`
+- `tests/test_semantic_memory_5b.py`
+- `tests/test_session_memory.py`

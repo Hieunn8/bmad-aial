@@ -28,11 +28,13 @@ async function runAxe(container: HTMLElement, tags: string[] = ['wcag2a', 'wcag2
   return results;
 }
 
-function getViolationsByImpact(violations: typeof axe.AxeResults.prototype.violations) {
-  const critical = violations.filter((v) => v.impact === 'critical');
-  const serious = violations.filter((v) => v.impact === 'serious');
-  const moderate = violations.filter((v) => v.impact === 'moderate');
-  const minor = violations.filter((v) => v.impact === 'minor');
+type AxeViolations = Awaited<ReturnType<typeof runAxe>>['violations'];
+
+function getViolationsByImpact(violations: AxeViolations) {
+  const critical = violations.filter((v: AxeViolations[number]) => v.impact === 'critical');
+  const serious = violations.filter((v: AxeViolations[number]) => v.impact === 'serious');
+  const moderate = violations.filter((v: AxeViolations[number]) => v.impact === 'moderate');
+  const minor = violations.filter((v: AxeViolations[number]) => v.impact === 'minor');
   return { critical, serious, moderate, minor };
 }
 
@@ -78,7 +80,7 @@ describe('AppLayout - Accessibility (axe-core WCAG 2.2 AA)', () => {
     if (moderate.length > 0) {
       console.warn(
         '[A11Y] Moderate violations (must have exception tickets):',
-        moderate.map((v) => `${v.id}: ${v.description}`),
+        moderate.map((v: AxeViolations[number]) => `${v.id}: ${v.description}`),
       );
     }
 

@@ -19,6 +19,10 @@ from aial_shared.auth.fastapi_deps import (
     reset_cerbos_client_cache,
 )
 from aial_shared.auth.keycloak import JWTClaims
+from orchestration.admin_control.user_role_management import (
+    get_user_role_management_service,
+    reset_user_role_management_service,
+)
 
 CURRENT_USER_DEP = Depends(get_current_user)
 
@@ -26,6 +30,7 @@ CURRENT_USER_DEP = Depends(get_current_user)
 @pytest.fixture(autouse=True)
 def clear_cerbos_client_cache() -> None:
     reset_cerbos_client_cache()
+    reset_user_role_management_service()
 
 
 @pytest.fixture()
@@ -126,6 +131,67 @@ class TestGetCurrentUser:
         resp = client.get("/test", headers={"Authorization": "Bearer fake-jwt"})
         assert resp.status_code == 200
         assert resp.json()["sub"] == "user-123"
+
+    @patch("aial_shared.auth.fastapi_deps.decode_jwt")
+    @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
+    def test_admin_managed_user_overrides_department_and_roles_on_next_request(
+        self,
+        mock_validate: MagicMock,
+        mock_decode: MagicMock,
+        sample_claims: JWTClaims,
+    ) -> None:
+        mock_decode.return_value = sample_claims.raw
+        mock_validate.return_value = sample_claims
+        service = get_user_role_management_service()
+        service.create_role(name="finance_analyst", schema_allowlist=["FINANCE_ANALYTICS"], actor="admin")
+        service.create_user(
+            user_id=sample_claims.sub,
+            email=sample_claims.email,
+            department="finance",
+            roles=["finance_analyst"],
+            ldap_groups=["finance"],
+        )
+
+        app = FastAPI()
+
+        @app.get("/test")
+        async def endpoint(user: JWTClaims = CURRENT_USER_DEP):
+            return {"department": user.department, "roles": list(user.roles)}
+
+        client = TestClient(app)
+        resp = client.get("/test", headers={"Authorization": "Bearer fake-jwt"})
+        assert resp.status_code == 200
+        assert resp.json() == {"department": "finance", "roles": ["finance_analyst"]}
+
+    @patch("aial_shared.auth.fastapi_deps.decode_jwt")
+    @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
+    def test_soft_deleted_user_is_denied_on_next_request(
+        self,
+        mock_validate: MagicMock,
+        mock_decode: MagicMock,
+        sample_claims: JWTClaims,
+    ) -> None:
+        mock_decode.return_value = sample_claims.raw
+        mock_validate.return_value = sample_claims
+        service = get_user_role_management_service()
+        service.create_user(
+            user_id=sample_claims.sub,
+            email=sample_claims.email,
+            department=sample_claims.department,
+            roles=[],
+            ldap_groups=[],
+        )
+        service.soft_delete_user(sample_claims.sub)
+
+        app = FastAPI()
+
+        @app.get("/test")
+        async def endpoint(user: JWTClaims = CURRENT_USER_DEP):
+            return {"sub": user.sub}
+
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get("/test", headers={"Authorization": "Bearer fake-jwt"})
+        assert resp.status_code == 403
 
     @patch("aial_shared.auth.fastapi_deps.decode_jwt", side_effect=Exception("bad token"))
     def test_decode_failure_returns_401(self, mock_decode: MagicMock) -> None:

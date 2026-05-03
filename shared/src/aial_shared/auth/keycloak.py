@@ -77,6 +77,25 @@ def decode_jwt(
     return jwt.decode(token, options={"verify_signature": False})
 
 
+def _parse_optional_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "n", "off", ""}:
+            return False
+        raise TokenValidationError("approval_authority must be a boolean-compatible value")
+    if isinstance(value, int):
+        if value in (0, 1):
+            return bool(value)
+        raise TokenValidationError("approval_authority integer claims must be 0 or 1")
+    if value is None:
+        return False
+    raise TokenValidationError("approval_authority must be a boolean-compatible value")
+
+
 def validate_token_claims(claims: dict[str, Any]) -> JWTClaims:
     missing = REQUIRED_CLAIMS - set(claims.keys())
     if missing:
@@ -107,5 +126,5 @@ def validate_token_claims(claims: dict[str, Any]) -> JWTClaims:
         clearance=clearance,
         raw=claims,
         region=str(claims.get("region", "")),
-        approval_authority=bool(claims.get("approval_authority", False)),
+        approval_authority=_parse_optional_bool(claims.get("approval_authority", False)),
     )

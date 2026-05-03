@@ -15,9 +15,22 @@ async def stub_response_node(state: AIALGraphState) -> dict[str, object]:
         span.set_attribute("aial.user_id", state["user_id"])
         span.set_attribute("aial.department_id", state["department_id"])
         span.set_attribute("aial.node_name", "stub_response")
+        semantic_context = state.get("semantic_context", [])
+        memory_context = state.get("memory_context", {})
+        preference_context = state.get("preference_context", [])
+        metric_term = semantic_context[0]["term"] if semantic_context else "governed metric"
+        metric_formula = semantic_context[0]["formula"] if semantic_context else "COUNT(*)"
+        recalled = memory_context.get("summaries", [])
+        preference_hint = preference_context[0]["label"] if preference_context else None
+        answer_parts = [f"stub using {metric_term}"]
+        if recalled:
+            answer_parts.append(f"memory:{len(recalled)}")
+        if preference_hint:
+            answer_parts.append(f"preference:{preference_hint}")
         return {
-            "intent_type": "stub",
-            "final_response": "stub",
+            "intent_type": "semantic_memory_stub" if semantic_context or recalled or preference_context else "stub",
+            "final_response": " | ".join(answer_parts),
+            "generated_sql": f"SELECT {metric_formula} AS metric_value FROM semantic_layer_stub",
             "error": None,
             "should_abort": False,
             "current_node": "stub_response",

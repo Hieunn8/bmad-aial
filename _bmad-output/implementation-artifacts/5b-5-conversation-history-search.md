@@ -1,6 +1,6 @@
 # Story 5B.5: Conversation History Search (FR-M6 + FR-M7)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -68,4 +68,15 @@ cx/gpt-5.3-codex
 
 ### Completion Notes List
 
+- Added per-user conversation history persistence with keyword/topic/time-range search and replay payload generation.
+- Added `reuse` API that preloads intent metadata only and never returns raw Oracle result values.
+- Added history/memory audit coverage to assert zero raw values or PII are stored in memory artifacts.
+- Integrated query completion recording so search has live runtime data rather than admin-only seed fixtures.
+- Verified with `python -m pytest tests/test_semantic_memory_5b.py tests/test_orchestration_query.py -q`.
+
 ### File List
+
+- `services/orchestration/memory/long_term.py`
+- `services/orchestration/routes/memory.py`
+- `services/orchestration/routes/query.py`
+- `tests/test_semantic_memory_5b.py`

@@ -1,6 +1,6 @@
 # Story 4.2: Column-level Security (FR-A4)
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
