@@ -7,6 +7,7 @@ import hashlib
 from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
+import fakeredis
 import pytest
 from fastapi.testclient import TestClient
 
@@ -14,6 +15,14 @@ from aial_shared.auth.fastapi_deps import reset_cerbos_client_cache
 from aial_shared.auth.keycloak import JWTClaims
 from orchestration.admin_control.user_role_management import get_user_role_management_service, reset_user_role_management_service
 from orchestration.approval.workflow import ApprovalDecision, QueryIntent, create_approval_request, get_approval_store
+from orchestration.cache.query_result_cache import (
+    CachedQueryResult,
+    QueryCacheContext,
+    normalize_query_intent,
+    reset_query_result_cache,
+)
+from orchestration.semantic.management import get_semantic_layer_service
+from orchestration.audit.read_model import AuditFilter, get_audit_read_model
 from orchestration.security.column_masker import ColumnSensitivity
 from orchestration.streaming.events import SseEventType
 from orchestration.streaming.queue import get_stream_queue
@@ -46,6 +55,11 @@ def client() -> TestClient:
     return TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def reset_query_cache() -> None:
+    reset_query_result_cache(fakeredis.FakeRedis(decode_responses=True))
+
+
 def _auth_mocks(mock_cerbos_cls: MagicMock, mock_validate: MagicMock, mock_decode: MagicMock, claims: JWTClaims) -> None:
     mock_decode.return_value = claims.raw
     mock_validate.return_value = claims
@@ -56,6 +70,29 @@ def _auth_mocks(mock_cerbos_cls: MagicMock, mock_validate: MagicMock, mock_decod
 
     mock_cerbos.check.side_effect = _default_check
     mock_cerbos_cls.return_value = mock_cerbos
+
+
+def _build_cache_context(query: str, claims: JWTClaims) -> QueryCacheContext:
+    semantic_context = get_semantic_layer_service().match_query(query)
+    version = (
+        "|".join(sorted(str(entry["active_version_id"]) for entry in semantic_context if entry.get("active_version_id")))
+        if semantic_context
+        else get_semantic_layer_service().cache_invalidated_at.isoformat()
+    )
+    freshness = (
+        "|".join(sorted(str(entry["freshness_rule"]) for entry in semantic_context if entry.get("freshness_rule")))
+        if semantic_context
+        else "sql:adhoc"
+    )
+    return QueryCacheContext(
+        query=query,
+        normalized_intent=normalize_query_intent(query),
+        owner_user_id=claims.sub,
+        department_id=claims.department,
+        role_scope="user",
+        semantic_layer_version=version,
+        data_freshness_class=freshness,
+    )
 
 
 class TestChatQueryEndpoint:
@@ -434,6 +471,87 @@ class TestChatQueryEndpoint:
         assert resp.status_code == 400
         assert "invalid-query" in resp.json().get("type", "")
 
+    @patch("aial_shared.auth.fastapi_deps.decode_jwt")
+    @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
+    @patch("aial_shared.auth.fastapi_deps.CerbosClient")
+    @patch("orchestration.routes.query.asyncio.create_task")
+    def test_semantic_cache_hit_bypasses_graph_execution_for_same_scope(
+        self,
+        mock_create_task: MagicMock,
+        mock_cerbos_cls: MagicMock,
+        mock_validate: MagicMock,
+        mock_decode: MagicMock,
+        client: TestClient,
+        sample_claims: JWTClaims,
+    ) -> None:
+        _auth_mocks(mock_cerbos_cls, mock_validate, mock_decode, sample_claims)
+        mock_create_task.side_effect = lambda coro: coro.close()
+        cache = reset_query_result_cache(fakeredis.FakeRedis(decode_responses=True))
+        source_query = "Doanh thu Q1 2026 theo chi nhánh?"
+        cache.store(
+            CachedQueryResult.build(
+                context=_build_cache_context(source_query, sample_claims),
+                answer="cached revenue answer",
+                rows=[{"branch": "HCM", "revenue": 100}],
+                generated_sql="SELECT revenue FROM sales_summary",
+                data_source="sales-primary",
+                pii_scan_mode="inline",
+            )
+        )
+
+        resp = client.post(
+            "/v1/chat/query",
+            json={"query": "Cho tôi xem doanh thu Q1 2026 chia theo chi nhánh?", "session_id": str(uuid4())},
+            headers={"Authorization": "Bearer fake-jwt"},
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["cache_hit"] is True
+        assert body["freshness_indicator"]
+        assert body["cache_similarity"] >= 0.85
+        mock_create_task.assert_not_called()
+
+    @patch("aial_shared.auth.fastapi_deps.decode_jwt")
+    @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
+    @patch("aial_shared.auth.fastapi_deps.CerbosClient")
+    @patch("orchestration.routes.query.asyncio.create_task")
+    def test_force_refresh_invalidates_cache_and_runs_live_query(
+        self,
+        mock_create_task: MagicMock,
+        mock_cerbos_cls: MagicMock,
+        mock_validate: MagicMock,
+        mock_decode: MagicMock,
+        client: TestClient,
+        sample_claims: JWTClaims,
+    ) -> None:
+        _auth_mocks(mock_cerbos_cls, mock_validate, mock_decode, sample_claims)
+        mock_create_task.side_effect = lambda coro: coro.close()
+        cache = reset_query_result_cache(fakeredis.FakeRedis(decode_responses=True))
+        query = "Doanh thu Q1 2026 theo chi nhánh?"
+        context = _build_cache_context(query, sample_claims)
+        cache.store(
+            CachedQueryResult.build(
+                context=context,
+                answer="cached revenue answer",
+                rows=[{"branch": "HCM", "revenue": 100}],
+                generated_sql="SELECT revenue FROM sales_summary",
+                data_source="sales-primary",
+                pii_scan_mode="inline",
+            )
+        )
+
+        resp = client.post(
+            "/v1/chat/query",
+            json={"query": query, "session_id": str(uuid4()), "force_refresh": True},
+            headers={"Authorization": "Bearer fake-jwt"},
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["cache_hit"] is False
+        mock_create_task.assert_called_once()
+        assert cache.find_best_match(context) is None
+
     def test_missing_auth_header_returns_auth_failed_code(self, client: TestClient) -> None:
         resp = client.post(
             "/v1/chat/query",
@@ -488,6 +606,109 @@ class TestSqlExplanationStub:
         body = resp.json()
         assert "data_source" in body
         assert body.get("raw_sql") is None
+
+
+class TestMetricsEndpoint:
+    @patch("aial_shared.auth.fastapi_deps.decode_jwt")
+    @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
+    @patch("aial_shared.auth.fastapi_deps.CerbosClient")
+    def test_metrics_endpoint_exposes_cache_counters(
+        self,
+        mock_cerbos_cls: MagicMock,
+        mock_validate: MagicMock,
+        mock_decode: MagicMock,
+        client: TestClient,
+        sample_claims: JWTClaims,
+    ) -> None:
+        _auth_mocks(mock_cerbos_cls, mock_validate, mock_decode, sample_claims)
+        cache = reset_query_result_cache(fakeredis.FakeRedis(decode_responses=True))
+        source_query = "Doanh thu Q1 2026 theo chi nhánh?"
+        cache.store(
+            CachedQueryResult.build(
+                context=_build_cache_context(source_query, sample_claims),
+                answer="cached revenue answer",
+                rows=[{"branch": "HCM", "revenue": 100}],
+                generated_sql="SELECT revenue FROM sales_summary",
+                data_source="sales-primary",
+                pii_scan_mode="inline",
+            )
+        )
+
+        query_resp = client.post(
+            "/v1/chat/query",
+            json={"query": "Cho tôi xem doanh thu Q1 2026 chia theo chi nhánh?", "session_id": str(uuid4())},
+            headers={"Authorization": "Bearer fake-jwt"},
+        )
+        assert query_resp.status_code == 200
+
+        metrics_resp = client.get("/metrics")
+
+        assert metrics_resp.status_code == 200
+        assert "aial_semantic_query_cache_hits_total 1.0" in metrics_resp.text
+        assert "aial_semantic_query_cache_hit_rate 1.0" in metrics_resp.text
+
+
+class TestCrossDomainExecution:
+    @patch("aial_shared.auth.fastapi_deps.decode_jwt")
+    @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
+    @patch("aial_shared.auth.fastapi_deps.CerbosClient")
+    def test_cross_domain_query_route_returns_stream_handle(
+        self,
+        mock_cerbos_cls: MagicMock,
+        mock_validate: MagicMock,
+        mock_decode: MagicMock,
+        client: TestClient,
+        sample_claims: JWTClaims,
+    ) -> None:
+        _auth_mocks(mock_cerbos_cls, mock_validate, mock_decode, sample_claims)
+
+        resp = client.post(
+            "/v1/chat/query",
+            json={"query": "Chi phí vận hành Q1 so với ngân sách được duyệt?", "session_id": str(uuid4())},
+            headers={"Authorization": "Bearer fake-jwt"},
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "streaming"
+        assert "FINANCE" in body["message"]
+        assert "BUDGET" in body["message"]
+
+    def test_cross_domain_background_runner_emits_conflict_and_audits_subqueries(self, sample_claims: JWTClaims) -> None:
+        from orchestration.routes.query import _run_cross_domain_query_and_cache_explanation
+
+        async def _run() -> None:
+            request_id = str(uuid4())
+            session_id = str(uuid4())
+            queue = get_stream_queue()
+            queue.create(request_id, owner_user_id=sample_claims.sub)
+            get_audit_read_model()._records.clear()  # noqa: SLF001
+
+            await _run_cross_domain_query_and_cache_explanation(
+                request_id=request_id,
+                query="Chi phí vận hành Q1 so với ngân sách được duyệt?",
+                session_id=session_id,
+                principal=sample_claims,
+                trace_id=str(uuid4()),
+            )
+
+            events = list(queue.drain(request_id))
+            done_events = [event for event in events if event.type == SseEventType.DONE]
+            assert done_events
+            done_event = done_events[0].data
+            assert done_event["confidence_state"] == "cross-source-conflict"
+            assert "FINANCE" in done_event["conflict_detail"]
+            assert len(done_event["provenance"]) == 2
+
+            records = get_audit_read_model().search(
+                AuditFilter(request_id=request_id, action="cross_domain_subquery"),
+                page=1,
+                page_size=20,
+            )
+            assert len(records) == 2
+            assert {record.data_sources[0] for record in records} == {"finance-primary", "budget-primary"}
+
+        asyncio.run(_run())
 
 
 class TestRuntimeSecurityWiring:

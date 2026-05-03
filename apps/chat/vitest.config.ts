@@ -29,8 +29,11 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
-      '@aial/ui': resolve(__dirname, '../../packages/ui/src'),
       '@aial/types': resolve(__dirname, '../../packages/types/src'),
+      '@aial/ui/export-confirmation-bar': resolve(__dirname, '../../packages/ui/src/components/ExportConfirmationBar.tsx'),
+      '@aial/ui/export-job-status': resolve(__dirname, '../../packages/ui/src/components/ExportJobStatus.tsx'),
+      '@aial/ui/chart-reveal': resolve(__dirname, '../../packages/ui/src/components/ChartReveal.tsx'),
+      '@aial/ui/confidence-breakdown-card': resolve(__dirname, '../../packages/ui/src/components/ConfidenceBreakdownCard.tsx'),
     },
   },
 });

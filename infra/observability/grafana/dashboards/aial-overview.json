@@ -85,6 +85,68 @@
       ],
       "title": "LangGraph Node Execution Count per Session",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "aial_semantic_query_cache_hit_rate",
+          "legendFormat": "semantic-cache-hit-rate"
+        }
+      ],
+      "title": "Semantic Query Cache Hit Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 5,
+      "targets": [
+        {
+          "expr": "aial_semantic_query_cache_hits_total",
+          "legendFormat": "hits"
+        },
+        {
+          "expr": "aial_semantic_query_cache_misses_total",
+          "legendFormat": "misses"
+        },
+        {
+          "expr": "aial_semantic_query_cache_force_refresh_total",
+          "legendFormat": "force-refresh"
+        }
+      ],
+      "title": "Semantic Query Cache Volume",
+      "type": "timeseries"
     }
   ],
   "schemaVersion": 39,

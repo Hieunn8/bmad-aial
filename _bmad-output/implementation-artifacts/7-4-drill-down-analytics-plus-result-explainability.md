@@ -1,6 +1,6 @@
 # Story 7.4: Drill-down Analytics + Result Explainability (FR-F4 + FR-F5)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -68,4 +68,18 @@ cx/gpt-5.3-codex
 
 ### Completion Notes List
 
+- Added drill-down and explainability API flow for `department`, `product`, `region`, and `channel`.
+- Enforced scoped regional drill-down using the caller's permitted region when present; department scope remains aligned with the authenticated principal.
+- Returned top 3 contributing factors in plain Vietnamese with business-friendly confidence labels instead of raw probabilities.
+- Added async explainability fallback path when SHAP is unavailable, with queued job handle and later result polling.
+- Added UI panel for triggering drill-down analysis, rendering scoped chart breakdown, confidence label, and explainability factors or async fallback state.
+
 ### File List
+
+- services/orchestration/explainability/service.py
+- services/orchestration/routes/drilldown_explainability.py
+- services/orchestration/main.py
+- apps/chat/src/components/epic7/DrilldownExplainabilityPanel.tsx
+- apps/chat/src/components/epic7/DrilldownExplainabilityPanel.test.tsx
+- apps/chat/src/components/epic5b/Epic5BWorkspace.tsx
+- tests/test_drilldown_explainability.py

@@ -1,6 +1,6 @@
 # Story 6.2: Scheduled Reports (FR-E2 + FR-E3)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -68,4 +68,14 @@ cx/gpt-5.3-codex
 
 ### Completion Notes List
 
+- Added scheduled report activation and due-run delivery flow on top of the Epic 6.1 export service.
+- High-sensitivity schedules now require one-time approval before activation; scope changes require a new approval fingerprint.
+- Delivery retries up to 3 times and writes scheduled-delivery audit metadata per run.
+- Internal-recipient validation blocks external email domains for scheduled delivery.
+
 ### File List
+
+- `services/orchestration/exporting/schedules.py`
+- `services/orchestration/routes/scheduled_reports.py`
+- `services/orchestration/main.py`
+- `tests/test_scheduled_reports.py`

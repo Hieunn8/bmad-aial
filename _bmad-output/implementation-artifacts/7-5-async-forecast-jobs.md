@@ -1,6 +1,6 @@
 # Story 7.5: Async Forecast Jobs (FR-F6)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -18,11 +18,11 @@ so that Epic 7 can progress safely with verifiable outcomes.
 
 ## Tasks / Subtasks
 
-- [ ] Chốt phạm vi và dependency của story từ epics/architecture.
-- [ ] Thiết kế thay đổi ở mức interface + data contract cho story này.
-- [ ] Triển khai theo TDD (RED → GREEN) với test cases map trực tiếp AC.
-- [ ] Bổ sung observability/security checks theo vùng tác động.
-- [ ] Tổng hợp evidence để chuyển trạng thái sang review/done.
+- [x] Chốt phạm vi và dependency của story từ epics/architecture.
+- [x] Thiết kế thay đổi ở mức interface + data contract cho story này.
+- [x] Triển khai theo TDD (RED → GREEN) với test cases map trực tiếp AC.
+- [x] Bổ sung observability/security checks theo vùng tác động.
+- [x] Tổng hợp evidence để chuyển trạng thái sang review/done.
 
 ## Dev Notes
 
@@ -66,6 +66,33 @@ cx/gpt-5.3-codex
 
 ### Debug Log References
 
+- `pytest tests/test_forecasting.py`
+- `npm --prefix apps/chat test -- --run src/components/epic7/ForecastStudio.test.tsx`
+- `pytest` (unrelated existing failure in `tests/test_langgraph_stub_graph.py`)
+- `npm --prefix apps/chat test -- --run` (unrelated existing failures in `src/test/designTokens.test.ts` and `src/components/epic5b/Epic5BWorkspace.test.tsx`)
+
 ### Completion Notes List
 
+- Reused the Story 7.1 forecast route as the async execution surface for heavy forecasting jobs.
+- Added immediate `job_id` response, dedicated `forecast-batch` queue metadata, ETA messaging, 60-minute cached result window, and 30-minute queue-timeout guard.
+- Added client-side resume of the latest forecast job via session storage so users can leave and return without losing the in-flight/result handle.
+- Closed the remaining overload gap by returning the explicit 15-minute ETA once forecast queue depth exceeds 20 jobs, matching the story acceptance text.
+- Added queue-timeout retry messaging in Forecast Studio so failed async jobs surface a clear recovery path instead of a raw backend error code.
+- Verified Story 7.5 directly with backend and frontend tests; broader repo regressions still exist outside forecast scope and were not introduced by this change.
+
 ### File List
+
+- services/orchestration/forecasting/service.py
+- services/orchestration/routes/forecast.py
+- apps/chat/src/components/epic7/ForecastStudio.tsx
+- apps/chat/src/components/epic7/ForecastStudio.test.tsx
+- packages/ui/src/components/ExportJobStatus.tsx
+- packages/ui/src/components/index.ts
+- packages/ui/package.json
+- apps/chat/vite.config.ts
+- apps/chat/vitest.config.ts
+- tests/test_forecasting.py
+
+### Change Log
+
+- 2026-05-03: Closed Story 7.5 overload coverage and queue-timeout UX messaging; validated targeted backend and frontend forecast flows.

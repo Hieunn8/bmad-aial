@@ -41,8 +41,37 @@ def make_row_event(*, rows: list[dict[str, Any]], chunk_index: int) -> SseEvent:
     return SseEvent(type=SseEventType.ROW, data={"rows": rows, "chunk_index": chunk_index})
 
 
-def make_done_event(*, trace_id: str, answer: str = "") -> SseEvent:
-    return SseEvent(type=SseEventType.DONE, data={"trace_id": trace_id, "answer": answer})
+def make_done_event(
+    *,
+    trace_id: str,
+    answer: str = "",
+    cache_hit: bool = False,
+    cache_timestamp: str | None = None,
+    freshness_indicator: str | None = None,
+    cache_similarity: float | None = None,
+    force_refresh_available: bool = False,
+    confidence_state: str | None = None,
+    conflict_detail: str | None = None,
+    provenance: list[dict[str, Any]] | None = None,
+) -> SseEvent:
+    data: dict[str, Any] = {"trace_id": trace_id, "answer": answer}
+    if cache_hit:
+        data["cache_hit"] = True
+    if cache_timestamp is not None:
+        data["cache_timestamp"] = cache_timestamp
+    if freshness_indicator is not None:
+        data["freshness_indicator"] = freshness_indicator
+    if cache_similarity is not None:
+        data["cache_similarity"] = cache_similarity
+    if force_refresh_available:
+        data["force_refresh_available"] = True
+    if confidence_state is not None:
+        data["confidence_state"] = confidence_state
+    if conflict_detail is not None:
+        data["conflict_detail"] = conflict_detail
+    if provenance is not None:
+        data["provenance"] = provenance
+    return SseEvent(type=SseEventType.DONE, data=data)
 
 
 def make_error_event(*, code: str, message: str) -> SseEvent:

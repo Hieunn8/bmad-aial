@@ -10,6 +10,8 @@ export { ConfidenceBreakdownCard } from './ConfidenceBreakdownCard';
 export type { ConfidenceBreakdownCardProps, ConfidenceStateType, ConfidenceAction } from './ConfidenceBreakdownCard';
 export { ExportConfirmationBar } from './ExportConfirmationBar';
 export type { ExportConfirmationBarProps } from './ExportConfirmationBar';
+export { ExportJobStatus } from './ExportJobStatus';
+export type { ExportJobStatusProps, JobVisualState } from './ExportJobStatus';
 export { PermissionRequestState } from './PermissionRequestState';
 export type { PermissionRequestStateProps } from './PermissionRequestState';
 export { ApprovalBriefingCard } from './ApprovalBriefingCard';

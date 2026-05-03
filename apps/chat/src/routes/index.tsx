@@ -1,12 +1,11 @@
-/**
- * Index route — redirects to authenticated chat or login
- */
-import { createFileRoute, redirect } from '@tanstack/react-router';
+import { createFileRoute } from '@tanstack/react-router';
+
+import { Epic5BWorkspace } from '../components/epic5b/Epic5BWorkspace';
 
 export const Route = createFileRoute('/')({
-  beforeLoad: () => {
-    // For now redirect to login — auth middleware will handle in Story 1.3
-    throw redirect({ to: '/login' });
-  },
-  component: () => null,
+  component: IndexPage,
 });
+
+function IndexPage(): React.JSX.Element {
+  return <Epic5BWorkspace />;
+}

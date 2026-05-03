@@ -1,6 +1,6 @@
 # Story 7.2: Anomaly Detection & Alerts (FR-F2)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -68,4 +68,19 @@ cx/gpt-5.3-codex
 
 ### Completion Notes List
 
+- Added anomaly detection API endpoints for scan, history listing, detail view, acknowledge, and dismiss flows.
+- Implemented department-scoped anomaly alert history with severity, deviation, isolation-forest score, 30-day false-positive rate, and detection latency metadata.
+- Added chat UI anomaly panel with history rail, time-series chart highlighting anomaly point in red, business-readable explanation, 3 suggested next actions, and `ConfidenceBreakdownCard` reuse.
+- Kept dismissed alerts in history while allowing acknowledge/dismiss state transitions.
+- Added backend and frontend automated coverage for alert creation, access control, and UI interaction.
+
 ### File List
+
+- services/orchestration/anomaly_detection/__init__.py
+- services/orchestration/anomaly_detection/service.py
+- services/orchestration/routes/anomaly_detection.py
+- services/orchestration/main.py
+- apps/chat/src/components/epic7/AnomalyAlertsPanel.tsx
+- apps/chat/src/components/epic7/AnomalyAlertsPanel.test.tsx
+- apps/chat/src/components/epic5b/Epic5BWorkspace.tsx
+- tests/test_anomaly_detection.py

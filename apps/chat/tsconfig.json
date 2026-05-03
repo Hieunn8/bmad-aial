@@ -18,8 +18,7 @@
     "noFallthroughCasesInSwitch": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@aial/ui": ["../../packages/ui/src"],
-      "@aial/types": ["../../packages/types/src"]
+      "@aial/ui/export-confirmation-bar": ["../../packages/ui/src/components/ExportConfirmationBar.tsx"]
     }
   },
   "include": ["src"]

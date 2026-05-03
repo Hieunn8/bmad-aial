@@ -1,6 +1,6 @@
 # Story 6.4: Cross-domain Query Execution (FR-S5)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -68,4 +68,21 @@ cx/gpt-5.3-codex
 
 ### Completion Notes List
 
+- Added a production cross-domain query path for FINANCE + BUDGET requests on the governed `/v1/chat/query` route.
+- Cross-domain execution now decomposes into two domain-scoped subqueries, merges rows at application layer using `department_code` + `period_key`, and returns a unified answer contract.
+- Discrepancy cases emit `cross-source-conflict` metadata over SSE so the client can render `ConfidenceBreakdownCard` and open `ProvenanceDrawer` with per-source values.
+- Independent sub-query audit records are written for each domain execution to preserve per-source governance traceability.
+- Added a lightweight `QueryDecompositionState` contract to the orchestration state module to align implementation with the Story 6.0 spike output.
+
 ### File List
+
+- `services/orchestration/cross_domain/service.py`
+- `services/orchestration/routes/query.py`
+- `services/orchestration/streaming/events.py`
+- `services/orchestration/graph/state.py`
+- `packages/types/src/api.ts`
+- `apps/chat/src/components/epic6/ExportResultsConsole.tsx`
+- `apps/chat/src/components/epic6/ExportResultsConsole.test.tsx`
+- `apps/chat/vite.config.ts`
+- `packages/ui/package.json`
+- `tests/test_orchestration_query.py`

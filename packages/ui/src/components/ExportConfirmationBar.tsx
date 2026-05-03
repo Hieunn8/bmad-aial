@@ -33,7 +33,7 @@ export function ExportConfirmationBar({
 
   useEffect(() => {
     if (remaining <= 0) { onCancel(); return; }
-    const t = setTimeout(() => setRemaining(r => r - 1), 1_000);
+    const t = setTimeout(() => setRemaining((remainingSeconds: number) => remainingSeconds - 1), 1_000);
     return () => clearTimeout(t);
   }, [remaining, onCancel]);
 

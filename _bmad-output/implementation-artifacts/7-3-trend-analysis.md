@@ -1,6 +1,6 @@
 # Story 7.3: Trend Analysis (FR-F3)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -68,4 +68,19 @@ cx/gpt-5.3-codex
 
 ### Completion Notes List
 
+- Added trend analysis API endpoint `POST /v1/trend-analysis/run` with `yoy`, `mom`, and `qoq` comparison support.
+- Implemented `statsmodels-trend` service response with percentage change, absolute change, direction, plain-Vietnamese explanation, and permitted drill-down rows for `department`, `product`, or `region`.
+- Wired trend responses through Story 6.3 semantic cache primitives so repeated trend requests can return as cache hits with freshness metadata.
+- Added UI panel for running trend analysis, rendering drill-down bar chart, summary cards, cache-hit signal, and the manual UAT clarity gate reminder.
+- Manual UAT requirement for 3 non-technical reviewers remains pending before any future `done` transition.
+
 ### File List
+
+- services/orchestration/trend_analysis/__init__.py
+- services/orchestration/trend_analysis/service.py
+- services/orchestration/routes/trend_analysis.py
+- services/orchestration/main.py
+- apps/chat/src/components/epic7/TrendAnalysisPanel.tsx
+- apps/chat/src/components/epic7/TrendAnalysisPanel.test.tsx
+- apps/chat/src/components/epic5b/Epic5BWorkspace.tsx
+- tests/test_trend_analysis.py

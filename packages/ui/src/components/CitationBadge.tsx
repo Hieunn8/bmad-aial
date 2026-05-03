@@ -37,7 +37,7 @@ export function CitationBadge({ citation }: CitationBadgeProps): React.JSX.Eleme
         aria-label={`Xem nguồn số ${citation.citationNumber}`}
         aria-expanded={open}
         aria-haspopup="true"
-        onClick={() => setOpen(v => !v)}
+        onClick={() => setOpen((value: boolean) => !value)}
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         onMouseEnter={() => setOpen(true)}

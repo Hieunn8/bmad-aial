@@ -231,6 +231,11 @@ class UserRoleManagementService:
         self._alert_settings: dict[tuple[str, str, str], AlertSetting] = {}
         self._alerts: dict[str, HealthAlert] = {}
 
+    def _invalidate_query_cache_for_user(self, user_id: str) -> None:
+        from orchestration.cache.query_result_cache import get_query_result_cache
+
+        get_query_result_cache().invalidate_user_entries(user_id)
+
     def create_role(self, *, name: str, schema_allowlist: list[str], actor: str) -> RoleDefinition:
         normalized = name.strip()
         if not normalized:
@@ -312,6 +317,7 @@ class UserRoleManagementService:
             user.department = department.strip()
         user.updated_at = datetime.now(UTC)
         user.is_deleted = False
+        self._invalidate_query_cache_for_user(user.user_id)
         return user
 
     def soft_delete_user(self, user_id: str) -> UserAccount:
@@ -322,6 +328,7 @@ class UserRoleManagementService:
         user.retention_until = now + timedelta(days=_RETENTION_DAYS)
         user.sessions_revoked_at = now
         user.updated_at = now
+        self._invalidate_query_cache_for_user(user.user_id)
         return user
 
     def preview_bulk_import(self, csv_content: str) -> dict[str, object]:

@@ -28,6 +28,19 @@ class AIALGraphState(TypedDict, total=False):
     preference_context: list[dict[str, Any]]
 
 
+class QueryDecompositionState(TypedDict, total=False):
+    trace_id: str
+    request_id: str
+    source_domains: list[str]
+    strategy: str
+    subqueries: list[dict[str, Any]]
+    intermediate_results: list[dict[str, Any]]
+    merge_keys: list[str]
+    merge_metadata: dict[str, Any]
+    merged_result: dict[str, Any] | None
+    error: dict[str, Any] | None
+
+
 def build_initial_state(
     *,
     query: str,

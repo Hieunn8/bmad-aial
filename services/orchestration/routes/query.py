@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -29,7 +30,16 @@ from orchestration.approval.workflow import (
     get_approval_store,
 )
 from orchestration.admin_control.user_role_management import get_user_role_management_service
+from orchestration.cache.query_result_cache import (
+    CacheLookupResult,
+    CachedQueryResult,
+    QueryCacheContext,
+    get_query_result_cache,
+    normalize_query_intent,
+)
+from orchestration.cross_domain.service import execute_cross_domain_query, is_cross_domain_query
 from orchestration.explanation.generator import SqlExplanation, SqlExplanationGenerator
+from orchestration.exporting.service import get_export_service
 from orchestration.graph.graph import get_query_graph, invoke_query_graph
 from orchestration.memory.long_term import get_conversation_memory_service
 from orchestration.security.column_masker import ColumnSensitivity, apply_column_security
@@ -62,6 +72,7 @@ class ChatQueryRequest(BaseModel):
     query: str = Field(min_length=1, max_length=2000)
     session_id: UUID
     approval_request_id: UUID | None = None
+    force_refresh: bool = False
 
     @field_validator("query")
     @classmethod
@@ -80,6 +91,10 @@ class ChatQueryStreamHandle(BaseModel):
     approval_request_id: str | None = None
     approval_state: str | None = None
     message: str | None = None
+    cache_hit: bool = False
+    cache_timestamp: str | None = None
+    freshness_indicator: str | None = None
+    cache_similarity: float | None = None
 
 
 class SqlExplanationResponse(BaseModel):
@@ -133,6 +148,71 @@ def _derive_safe_query_metadata(query: str) -> tuple[str, str]:
         topic = "employee_analysis"
     filter_context = "time_filter" if any(token in normalized for token in ("tháng", "quý", "month", "quarter")) else "general_filter"
     return topic, filter_context
+
+
+def _build_role_scope(principal: JWTClaims) -> str:
+    normalized_roles = sorted({role.strip() for role in principal.roles if role.strip()})
+    return "|".join(normalized_roles) if normalized_roles else "anonymous"
+
+
+def _derive_semantic_layer_version(semantic_context: list[dict[str, Any]]) -> str:
+    version_ids = [
+        str(entry["active_version_id"])
+        for entry in semantic_context
+        if isinstance(entry, dict) and entry.get("active_version_id")
+    ]
+    if version_ids:
+        return "|".join(sorted(version_ids))
+    return get_semantic_layer_service().cache_invalidated_at.isoformat()
+
+
+def _derive_data_freshness_class(
+    *,
+    semantic_context: list[dict[str, Any]],
+    execution_settings: dict[str, Any] | None,
+) -> str:
+    freshness_rules = sorted(
+        {
+            str(entry["freshness_rule"])
+            for entry in semantic_context
+            if isinstance(entry, dict) and entry.get("freshness_rule")
+        }
+    )
+    if freshness_rules:
+        return "|".join(freshness_rules)
+    if execution_settings and execution_settings.get("data_source"):
+        return f"sql:{execution_settings['data_source']}"
+    return "sql:adhoc"
+
+
+def _build_cache_context(
+    *,
+    query: str,
+    principal: JWTClaims,
+    semantic_context: list[dict[str, Any]],
+    execution_settings: dict[str, Any] | None,
+) -> QueryCacheContext:
+    return QueryCacheContext(
+        query=query,
+        normalized_intent=normalize_query_intent(query),
+        owner_user_id=principal.sub,
+        department_id=principal.department,
+        role_scope=_build_role_scope(principal),
+        semantic_layer_version=_derive_semantic_layer_version(semantic_context),
+        data_freshness_class=_derive_data_freshness_class(
+            semantic_context=semantic_context,
+            execution_settings=execution_settings,
+        ),
+    )
+
+
+def _format_cache_freshness_indicator(timestamp: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(timestamp)
+        rendered = parsed.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    except ValueError:
+        rendered = timestamp
+    return f"Káº¿t quáº£ tá»« cache â€” cáº­p nháº­t lÃºc {rendered}"
 
 
 def _resolve_approval_request(
@@ -233,6 +313,110 @@ def _apply_query_execution_settings(
         result["data_source_warning"] = execution_settings["warning"]
 
 
+def _record_query_interaction(
+    *,
+    query: str,
+    principal: JWTClaims,
+    session_id: str,
+    semantic_context: list[dict[str, Any]] | None,
+) -> None:
+    topic, filter_context = _derive_safe_query_metadata(query)
+    get_conversation_memory_service().record_interaction(
+        user_id=principal.sub,
+        department_id=principal.department,
+        session_id=session_id,
+        intent_type="chat_query",
+        topic=topic,
+        filter_context=filter_context,
+        key_result_summary=f"Answer summary for {topic}",
+        sensitivity_level=_classify_query_sensitivity(query),
+        matched_metrics=[str(item["term"]) for item in semantic_context or []],
+    )
+
+
+def _publish_query_result(
+    *,
+    request_id: str,
+    trace_id: str,
+    principal: JWTClaims,
+    sensitivity_tier: int,
+    rows: list[dict[str, Any]],
+    answer: str,
+    data_source: str | None,
+    generated_sql: str,
+    cache_hit: bool = False,
+    cache_timestamp: str | None = None,
+    cache_similarity: float | None = None,
+    confidence_state: str | None = None,
+    conflict_detail: str | None = None,
+    provenance: list[dict[str, Any]] | None = None,
+) -> None:
+    queue = get_stream_queue()
+    _explanation_store[request_id] = (
+        principal.sub,
+        _explanation_generator.explain_kw(sql=generated_sql, metric_context=None),
+    )
+    get_export_service().register_query_result(
+        request_id=request_id,
+        owner_user_id=principal.sub,
+        department_scope=principal.department,
+        sensitivity_tier=sensitivity_tier,
+        rows=rows,
+        trace_id=trace_id,
+        data_source=data_source,
+    )
+    if rows:
+        queue.push(request_id, make_row_event(rows=rows, chunk_index=0))
+    queue.push(
+        request_id,
+        make_done_event(
+            trace_id=trace_id,
+            answer=answer,
+            cache_hit=cache_hit,
+            cache_timestamp=cache_timestamp,
+            freshness_indicator=_format_cache_freshness_indicator(cache_timestamp) if cache_timestamp else None,
+            cache_similarity=cache_similarity,
+            force_refresh_available=cache_hit,
+            confidence_state=confidence_state,
+            conflict_detail=conflict_detail,
+            provenance=provenance,
+        ),
+    )
+    queue.close(request_id)
+
+
+def _serve_cached_query_result(
+    *,
+    request_id: str,
+    trace_id: str,
+    principal: JWTClaims,
+    session_id: str,
+    query: str,
+    sensitivity_tier: int,
+    semantic_context: list[dict[str, Any]],
+    cache_hit: CacheLookupResult,
+) -> None:
+    _record_query_interaction(
+        query=query,
+        principal=principal,
+        session_id=session_id,
+        semantic_context=semantic_context,
+    )
+    _publish_query_result(
+        request_id=request_id,
+        trace_id=trace_id,
+        principal=principal,
+        sensitivity_tier=sensitivity_tier,
+        rows=cache_hit.entry.rows,
+        answer=cache_hit.entry.answer,
+        data_source=cache_hit.entry.data_source,
+        generated_sql=cache_hit.entry.generated_sql,
+        cache_hit=True,
+        cache_timestamp=cache_hit.entry.created_at,
+        cache_similarity=cache_hit.similarity,
+    )
+
+
 async def _is_sensitive_query_authorized(
     *,
     principal: JWTClaims,
@@ -260,13 +444,14 @@ async def _run_graph_and_cache_explanation(
     session_id: str,
     principal: JWTClaims,
     trace_id: str,
+    sensitivity_tier: int = 1,
     execution_settings: dict[str, Any] | None = None,
     semantic_context: list[dict[str, Any]] | None = None,
     memory_context: dict[str, Any] | None = None,
     preference_context: list[dict[str, Any]] | None = None,
+    cache_context: QueryCacheContext | None = None,
 ) -> None:
     """Background task: run LangGraph, store explanation keyed by request_id + user_id."""
-    queue = get_stream_queue()
     try:
         timeout_seconds = None
         if execution_settings is not None:
@@ -296,36 +481,90 @@ async def _run_graph_and_cache_explanation(
         if semantic_context:
             fallback_sql = f"SELECT {semantic_context[0]['formula']} FROM semantic_layer"
         generated_sql = result.get("generated_sql", fallback_sql)
-        exp = _explanation_generator.explain_kw(sql=generated_sql, metric_context=None)
-        _explanation_store[request_id] = (principal.sub, exp)
-        topic, filter_context = _derive_safe_query_metadata(query)
-        memory_service = get_conversation_memory_service()
-        memory_service.record_interaction(
-            user_id=principal.sub,
-            department_id=principal.department,
+        _record_query_interaction(
+            query=query,
+            principal=principal,
             session_id=session_id,
-            intent_type="chat_query",
-            topic=topic,
-            filter_context=filter_context,
-            key_result_summary=f"Answer summary for {topic}",
-            sensitivity_level=_classify_query_sensitivity(query),
-            matched_metrics=[str(item["term"]) for item in semantic_context or []],
+            semantic_context=semantic_context,
         )
-        if secured_rows:
-            queue.push(request_id, make_row_event(rows=secured_rows, chunk_index=0))
         answer = result.get("final_response", "stub") or "stub"
         if result.get("data_source_warning"):
             answer = f"{answer}\n\n[warning] {result['data_source_warning']}"
-        queue.push(request_id, make_done_event(trace_id=trace_id, answer=answer))
-        queue.close(request_id)
+        if cache_context is not None:
+            get_query_result_cache().store(
+                CachedQueryResult.build(
+                    context=cache_context,
+                    answer=answer,
+                    rows=secured_rows,
+                    generated_sql=generated_sql,
+                    data_source=result.get("data_source"),
+                    pii_scan_mode=result.get("pii_scan_mode"),
+                )
+            )
+        _publish_query_result(
+            request_id=request_id,
+            trace_id=trace_id,
+            principal=principal,
+            sensitivity_tier=sensitivity_tier,
+            rows=secured_rows,
+            answer=answer,
+            data_source=result.get("data_source"),
+            generated_sql=generated_sql,
+        )
     except TimeoutError:
         logger.warning("Graph execution timed out for request %s", request_id)
-        queue.push(request_id, make_error_event(code="QUERY_TIMEOUT", message="Query execution timed out"))
-        queue.close(request_id)
+        get_stream_queue().push(request_id, make_error_event(code="QUERY_TIMEOUT", message="Query execution timed out"))
+        get_stream_queue().close(request_id)
     except Exception as exc:
         logger.warning("Graph execution failed for request %s: %s", request_id, exc)
-        queue.push(request_id, make_error_event(code="GRAPH_EXECUTION_FAILED", message="Query execution failed"))
-        queue.close(request_id)
+        get_stream_queue().push(request_id, make_error_event(code="GRAPH_EXECUTION_FAILED", message="Query execution failed"))
+        get_stream_queue().close(request_id)
+
+
+async def _run_cross_domain_query_and_cache_explanation(
+    *,
+    request_id: str,
+    query: str,
+    session_id: str,
+    principal: JWTClaims,
+    trace_id: str,
+    sensitivity_tier: int = 1,
+    semantic_context: list[dict[str, Any]] | None = None,
+) -> None:
+    try:
+        result = execute_cross_domain_query(
+            query=query,
+            principal_user_id=principal.sub,
+            principal_department=principal.department,
+            session_id=session_id,
+            request_id=request_id,
+        )
+        _record_query_interaction(
+            query=query,
+            principal=principal,
+            session_id=session_id,
+            semantic_context=semantic_context,
+        )
+        _publish_query_result(
+            request_id=request_id,
+            trace_id=trace_id,
+            principal=principal,
+            sensitivity_tier=sensitivity_tier,
+            rows=result.rows,
+            answer=result.answer,
+            data_source=result.data_source,
+            generated_sql=result.generated_sql,
+            confidence_state="cross-source-conflict" if result.discrepancy_detected else None,
+            conflict_detail=result.discrepancy_detail,
+            provenance=result.provenance,
+        )
+    except Exception as exc:
+        logger.warning("Cross-domain execution failed for request %s: %s", request_id, exc)
+        get_stream_queue().push(
+            request_id,
+            make_error_event(code="GRAPH_EXECUTION_FAILED", message="Cross-domain query execution failed"),
+        )
+        get_stream_queue().close(request_id)
 
 
 @router.post("/v1/chat/query", response_model=ChatQueryStreamHandle)
@@ -358,8 +597,17 @@ async def chat_query(
         query=payload.query,
     )
     preference_context = memory_service.get_suggestions(user_id=principal.sub)
+    cache_context = _build_cache_context(
+        query=payload.query,
+        principal=principal,
+        semantic_context=semantic_context,
+        execution_settings=execution_settings,
+    )
     current_span.set_attribute("aial.semantic_match_count", len(semantic_context))
     current_span.set_attribute("aial.memory_summary_count", len(memory_context.get("summaries", [])))
+    current_span.set_attribute("aial.query_cache.role_scope", cache_context.role_scope)
+    current_span.set_attribute("aial.query_cache.semantic_layer_version", cache_context.semantic_layer_version)
+    current_span.set_attribute("aial.query_cache.freshness_class", cache_context.data_freshness_class)
     can_bypass_approval = False
     if intent.sensitivity_tier >= 2:
         can_bypass_approval = await _is_sensitive_query_authorized(
@@ -391,6 +639,56 @@ async def chat_query(
             )
 
     get_stream_queue().create(request_id, owner_user_id=principal.sub)
+    if is_cross_domain_query(payload.query):
+        current_span.set_attribute("aial.query_mode", "cross_domain")
+        asyncio.create_task(
+            _run_cross_domain_query_and_cache_explanation(
+                request_id=request_id,
+                query=payload.query,
+                session_id=str(payload.session_id),
+                principal=principal,
+                trace_id=trace_id,
+                sensitivity_tier=intent.sensitivity_tier,
+                semantic_context=semantic_context,
+            )
+        )
+        return ChatQueryStreamHandle(
+            request_id=request_id,
+            status="streaming",
+            trace_id=trace_id,
+            message="Dang phan ra hai truy van FINANCE va BUDGET de hop nhat ket qua...",
+        )
+    cache_service = get_query_result_cache()
+    current_span.set_attribute("aial.query_cache.force_refresh", payload.force_refresh)
+    if payload.force_refresh:
+        cache_service.record_force_refresh()
+        cache_service.invalidate_query(cache_context, reason="force_refresh")
+    else:
+        cache_hit = cache_service.find_best_match(cache_context)
+        if cache_hit is not None:
+            current_span.set_attribute("aial.query_cache.hit", True)
+            current_span.set_attribute("aial.query_cache.similarity", cache_hit.similarity)
+            _serve_cached_query_result(
+                request_id=request_id,
+                trace_id=trace_id,
+                principal=principal,
+                session_id=str(payload.session_id),
+                query=payload.query,
+                sensitivity_tier=intent.sensitivity_tier,
+                semantic_context=semantic_context,
+                cache_hit=cache_hit,
+            )
+            return ChatQueryStreamHandle(
+                request_id=request_id,
+                status="streaming",
+                trace_id=trace_id,
+                message=execution_settings.get("warning") if execution_settings else None,
+                cache_hit=True,
+                cache_timestamp=cache_hit.entry.created_at,
+                freshness_indicator=_format_cache_freshness_indicator(cache_hit.entry.created_at),
+                cache_similarity=cache_hit.similarity,
+            )
+    current_span.set_attribute("aial.query_cache.hit", False)
 
     # Fire-and-forget: do NOT await — return stream handle immediately
     asyncio.create_task(
@@ -400,10 +698,12 @@ async def chat_query(
             session_id=str(payload.session_id),
             principal=principal,
             trace_id=trace_id,
+            sensitivity_tier=intent.sensitivity_tier,
             execution_settings=execution_settings,
             semantic_context=semantic_context,
             memory_context=memory_context,
             preference_context=preference_context,
+            cache_context=cache_context,
         )
     )
 

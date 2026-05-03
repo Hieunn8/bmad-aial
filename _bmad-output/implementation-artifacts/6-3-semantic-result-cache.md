@@ -1,6 +1,6 @@
 # Story 6.3: Semantic Result Cache (FR-S6)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -68,4 +68,25 @@ cx/gpt-5.3-codex
 
 ### Completion Notes List
 
+- Added Redis-backed semantic result cache with semantic-similarity lookup scoped by normalized intent, department, role scope, semantic-layer version, and freshness class.
+- Added force-refresh invalidation and user-owned cache invalidation on permission or department changes.
+- Exposed cache-hit freshness metadata to the UI and Prometheus metrics for hit, miss, force-refresh, and invalidation counters.
+- Added Grafana dashboard panels and Prometheus scrape config for semantic cache hit-rate visibility.
+
 ### File List
+
+- `services/orchestration/cache/query_result_cache.py`
+- `services/orchestration/routes/query.py`
+- `services/orchestration/routes/metrics.py`
+- `services/orchestration/streaming/events.py`
+- `services/orchestration/admin_control/user_role_management.py`
+- `services/orchestration/main.py`
+- `packages/types/src/api.ts`
+- `apps/chat/src/components/epic6/ExportResultsConsole.tsx`
+- `apps/chat/src/components/epic6/ExportResultsConsole.test.tsx`
+- `infra/observability/prometheus/prometheus.yml`
+- `infra/observability/grafana/dashboards/aial-overview.json`
+- `tests/test_query_result_cache.py`
+- `tests/test_orchestration_query.py`
+- `tests/test_user_role_management.py`
+- `tests/test_infra_observability_config.py`

@@ -1,13 +1,19 @@
-/**
- * AppLayout — Main application shell with ARIA landmark structure
- * Story 1.7 AC: ARIA landmark structure (<main>, <nav>, <header>) is present
- * UX-DR24: WCAG 2.2 AA compliance — ARIA landmarks required
- */
 import type { ReactNode } from 'react';
 
 interface AppLayoutProps {
   children: ReactNode;
 }
+
+const navItemStyle: React.CSSProperties = {
+  display: 'block',
+  padding: '0.8rem 0.95rem',
+  borderRadius: '1rem',
+  color: 'var(--color-neutral-700)',
+  textDecoration: 'none',
+  fontSize: '0.95rem',
+  fontWeight: 600,
+  background: 'rgba(255,255,255,0.72)',
+};
 
 export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
   return (
@@ -16,111 +22,109 @@ export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
         display: 'flex',
         flexDirection: 'column',
         minHeight: '100vh',
-        backgroundColor: 'var(--color-background)',
+        background: 'linear-gradient(135deg, #f4ede2 0%, #fbfaf7 42%, #eff8f7 100%)',
         fontFamily: 'var(--font-family-base)',
       }}
     >
-      {/* ARIA landmark: header */}
       <header
         role="banner"
         style={{
           height: 'var(--header-height)',
-          backgroundColor: 'var(--color-surface)',
-          borderBottom: '1px solid var(--color-border)',
+          background: 'rgba(255,255,255,0.82)',
+          borderBottom: '1px solid rgba(117, 94, 60, 0.12)',
           display: 'flex',
           alignItems: 'center',
-          paddingInline: 'var(--space-4)',
+          justifyContent: 'space-between',
+          paddingInline: '1.4rem',
           position: 'sticky',
           top: 0,
           zIndex: 'var(--z-sticky)',
+          backdropFilter: 'blur(12px)',
         }}
       >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-2)',
-          }}
-        >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
           <span
             aria-hidden="true"
             style={{
-              width: '2rem',
-              height: '2rem',
-              backgroundColor: 'var(--color-primary)',
-              borderRadius: 'var(--radius-md)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              width: '2.3rem',
+              height: '2.3rem',
+              background: 'linear-gradient(135deg, #0f766e 0%, #115e59 100%)',
+              borderRadius: '0.9rem',
+              display: 'grid',
+              placeItems: 'center',
               color: 'white',
-              fontSize: '0.875rem',
-              fontWeight: 700,
+              fontSize: '0.92rem',
+              fontWeight: 800,
+              boxShadow: '0 12px 30px rgba(15, 118, 110, 0.22)',
             }}
           >
             AI
           </span>
-          <span
-            style={{
-              fontSize: 'var(--font-size-md)',
-              fontWeight: 'var(--font-weight-semibold)',
-              color: 'var(--color-neutral-900)',
-            }}
-          >
-            AIAL
-          </span>
+          <div>
+            <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-neutral-900)' }}>AIAL</div>
+            <div style={{ fontSize: '0.82rem', color: 'var(--color-neutral-500)' }}>Epic 5B + 6 workspace</div>
+          </div>
+        </div>
+        <div style={{ color: 'var(--color-neutral-500)', fontSize: '0.88rem' }}>
+          Semantic governance / Memory recall / Export reporting
         </div>
       </header>
 
-      <div
-        style={{
-          display: 'flex',
-          flex: 1,
-          overflow: 'hidden',
-        }}
-      >
-        {/* ARIA landmark: navigation */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <nav
-          aria-label="Điều hướng chính"
+          aria-label="Primary navigation"
           style={{
             width: 'var(--sidebar-width)',
-            backgroundColor: 'var(--color-surface)',
-            borderRight: '1px solid var(--color-border)',
+            background: 'rgba(255,255,255,0.58)',
+            borderRight: '1px solid rgba(117, 94, 60, 0.12)',
             display: 'flex',
             flexDirection: 'column',
             overflowY: 'auto',
+            padding: '1.05rem 0.9rem',
+            gap: '1rem',
           }}
         >
-          {/* Navigation items will be populated by authenticated routes */}
-          <ul
-            role="list"
-            style={{ margin: 0, padding: 'var(--space-2)', listStyle: 'none' }}
+          <div>
+            <div
+              style={{
+                fontSize: '0.78rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: 'var(--color-neutral-500)',
+              }}
+            >
+              Workspace
+            </div>
+            <ul
+              role="list"
+              style={{ margin: '0.7rem 0 0', padding: 0, listStyle: 'none', display: 'grid', gap: '0.55rem' }}
+            >
+              <li><a href="#export-studio" style={navItemStyle}>Export studio</a></li>
+              <li><a href="#semantic-studio" style={navItemStyle}>Semantic studio</a></li>
+              <li><a href="#memory-studio" style={navItemStyle}>Memory studio</a></li>
+              <li><a href="#history-studio" style={navItemStyle}>History studio</a></li>
+            </ul>
+          </div>
+          <div
+            style={{
+              borderRadius: '1.1rem',
+              background: 'linear-gradient(160deg, rgba(15,118,110,0.08) 0%, rgba(17,94,89,0.02) 100%)',
+              padding: '0.95rem 1rem',
+              color: 'var(--color-neutral-700)',
+              lineHeight: 1.6,
+            }}
           >
-            <li>
-              <a
-                href="/"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: 'var(--space-2) var(--space-3)',
-                  borderRadius: 'var(--radius-md)',
-                  color: 'var(--color-neutral-700)',
-                  textDecoration: 'none',
-                  fontSize: 'var(--font-size-sm)',
-                  fontWeight: 'var(--font-weight-medium)',
-                }}
-                aria-current="page"
-              >
-                Trò chuyện
-              </a>
-            </li>
-          </ul>
+            <div style={{ fontWeight: 700, marginBottom: '0.3rem' }}>Delivery note</div>
+            <div style={{ fontSize: '0.88rem' }}>
+              This workspace now carries Epic 5B UI plus the first Epic 6 export flow on top of the governed backend APIs.
+            </div>
+          </div>
         </nav>
 
-        {/* ARIA landmark: main content */}
         <main
           id="main-content"
           role="main"
-          aria-label="Nội dung chính"
+          aria-label="Main content"
           style={{
             flex: 1,
             overflowY: 'auto',

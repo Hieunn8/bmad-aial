@@ -65,6 +65,21 @@ export interface SSEDoneEvent {
   type: 'done';
   trace_id: string;
   answer?: string;
+  cache_hit?: boolean;
+  cache_timestamp?: string;
+  freshness_indicator?: string;
+  cache_similarity?: number;
+  force_refresh_available?: boolean;
+  confidence_state?: 'cross-source-conflict';
+  conflict_detail?: string;
+  provenance?: Array<{
+    source: string;
+    domain: string;
+    department_code: string;
+    period_key: string;
+    value_label: string;
+    value: number;
+  }>;
   query_id?: string;
   sources?: SSESource[];
   generated_at?: string;

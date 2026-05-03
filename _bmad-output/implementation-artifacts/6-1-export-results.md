@@ -1,6 +1,6 @@
 # Story 6.1: Export Results (FR-E1 + FR-E4)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -68,4 +68,22 @@ cx/gpt-5.3-codex
 
 ### Completion Notes List
 
+- Added async export job flow on the orchestration service: preview, queue, status polling, and 24-hour download link.
+- Export payloads are generated only from already-secured query rows captured after runtime masking/row-limit enforcement.
+- Audit metadata is written for every completed export without persisting raw exported values.
+- Added a lightweight export console in `apps/chat` that runs a query, streams rows, and consumes the export confirmation bar before dispatching the job.
+
 ### File List
+
+- `services/orchestration/exporting/service.py`
+- `services/orchestration/routes/exports.py`
+- `services/orchestration/routes/query.py`
+- `services/orchestration/main.py`
+- `tests/test_export_results.py`
+- `apps/chat/src/components/epic6/ExportResultsConsole.tsx`
+- `apps/chat/src/components/epic6/ExportResultsConsole.test.tsx`
+- `packages/ui/src/components/ExportConfirmationBar.tsx`
+- `packages/ui/package.json`
+- `packages/ui/tsconfig.json`
+- `apps/chat/src/components/epic5b/Epic5BWorkspace.tsx`
+- `apps/chat/src/components/AppLayout.tsx`

@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-04-28T15:26:38+07:00"
-last_updated: "2026-05-03T15:00:00+07:00"
+last_updated: "2026-05-03T23:36:00+07:00"
 project: "AIAL"
 project_key: "NOKEY"
 tracking_system: "file-system"
@@ -99,17 +99,17 @@ development_status:
   5b-4-memory-isolation-plus-selective-injection: review
   5b-5-conversation-history-search: review
   epic-5b-retrospective: optional
-  epic-6: backlog
+  epic-6: in-progress
   6-0-cross-domain-decomposition-spike: ready-for-dev
-  6-1-export-results: ready-for-dev
-  6-2-scheduled-reports: ready-for-dev
-  6-3-semantic-result-cache: ready-for-dev
-  6-4-cross-domain-query-execution: ready-for-dev
+  6-1-export-results: review
+  6-2-scheduled-reports: review
+  6-3-semantic-result-cache: review
+  6-4-cross-domain-query-execution: review
   epic-6-retrospective: optional
-  epic-7: backlog
-  7-1-time-series-forecasting: ready-for-dev
-  7-2-anomaly-detection-and-alerts: ready-for-dev
-  7-3-trend-analysis: ready-for-dev
-  7-4-drill-down-analytics-plus-result-explainability: ready-for-dev
-  7-5-async-forecast-jobs: ready-for-dev
+  epic-7: in-progress
+  7-1-time-series-forecasting: review
+  7-2-anomaly-detection-and-alerts: review
+  7-3-trend-analysis: review
+  7-4-drill-down-analytics-plus-result-explainability: review
+  7-5-async-forecast-jobs: review
   epic-7-retrospective: optional

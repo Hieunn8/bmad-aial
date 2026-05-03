@@ -1,6 +1,6 @@
 # Story 7.1: Time-series Forecasting (FR-F1)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -68,4 +68,27 @@ cx/gpt-5.3-codex
 
 ### Completion Notes List
 
+- Added authenticated forecast API endpoints: `POST /v1/forecast/run`, `GET /v1/forecast/{job_id}`, `GET /v1/forecast/{job_id}/result`, and `GET /v1/forecast/{job_id}/download`.
+- Implemented async forecast job orchestration on dedicated `forecast-batch` queue contract with `acks_late=True` and `reject_on_worker_lost=True`.
+- Forecast results now include provider selection (`nixtla-timegpt` or statsmodels fallback), MAPE, point forecast, and 80%/95% confidence intervals.
+- Chat UI now renders forecast history vs forecast lines, confidence band, `ConfidenceBreakdownCard`, and shared job-status feedback with download link.
+- Result cache window for completed forecast jobs is exposed to UI and resumable by job id within the client session.
+- Verification passed with backend and frontend tests for forecast flow.
+
 ### File List
+
+- services/orchestration/forecasting/__init__.py
+- services/orchestration/forecasting/service.py
+- services/orchestration/routes/forecast.py
+- services/orchestration/main.py
+- apps/chat/src/components/epic7/ForecastStudio.tsx
+- apps/chat/src/components/epic7/ForecastStudio.test.tsx
+- apps/chat/src/components/epic5b/Epic5BWorkspace.tsx
+- apps/chat/vite.config.ts
+- apps/chat/vitest.config.ts
+- apps/chat/package.json
+- apps/chat/package-lock.json
+- packages/ui/src/components/ExportJobStatus.tsx
+- packages/ui/src/components/index.ts
+- packages/ui/package.json
+- tests/test_forecasting.py

@@ -74,6 +74,12 @@ class TestPrometheusConfig:
         assert "tempo" in jobs
         assert "tempo:3200" in jobs["tempo"]["static_configs"][0]["targets"]
 
+    def test_prometheus_scrapes_orchestration_metrics(self, config: dict) -> None:
+        jobs = {job["job_name"]: job for job in config["scrape_configs"]}
+        assert "orchestration" in jobs
+        assert jobs["orchestration"]["metrics_path"] == "/metrics"
+        assert "host.docker.internal:8090" in jobs["orchestration"]["static_configs"][0]["targets"]
+
 
 class TestGrafanaProvisioning:
     @pytest.fixture()
@@ -104,6 +110,8 @@ class TestGrafanaDashboards:
         assert "P50/P95 Request Latency by Service" in panel_titles
         assert "Error Rate %" in panel_titles
         assert "LangGraph Node Execution Count per Session" in panel_titles
+        assert "Semantic Query Cache Hit Rate" in panel_titles
+        assert "Semantic Query Cache Volume" in panel_titles
 
     def test_llm_dashboard_contains_langfuse_panels(self) -> None:
         path = OBSERVABILITY / "grafana" / "dashboards" / "llm-observability.json"

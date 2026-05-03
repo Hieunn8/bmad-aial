@@ -6,8 +6,6 @@
  * Status indicated by BOTH color AND text label (not color-only).
  * Epic 7 consumes this from packages/ui passing { type: "forecast-uncertainty" }.
  */
-import type { ReactNode } from 'react';
-
 export type ConfidenceStateType =
   | 'low-confidence'
   | 'partial-data'

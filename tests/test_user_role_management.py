@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+import fakeredis
 import pytest
 from fastapi.testclient import TestClient
 
@@ -15,12 +16,14 @@ from orchestration.admin_control.user_role_management import (
     get_user_role_management_service,
     reset_user_role_management_service,
 )
+from orchestration.cache.query_result_cache import CachedQueryResult, QueryCacheContext, normalize_query_intent, reset_query_result_cache
 
 
 @pytest.fixture(autouse=True)
 def reset_state() -> None:
     reset_user_role_management_service()
     get_audit_read_model()._records.clear()  # noqa: SLF001 - test reset for module-level store
+    reset_query_result_cache(fakeredis.FakeRedis(decode_responses=True))
 
 
 @pytest.fixture()
@@ -271,6 +274,41 @@ class TestUserManagement:
 
         records = model.search(audit_filter=AuditFilter(user_id="deleted.user"), page=1, page_size=20)
         assert len(records) >= 1
+
+    def test_update_user_invalidates_owned_semantic_cache_entries(self) -> None:
+        service = get_user_role_management_service()
+        service.create_role(name="sales_analyst", schema_allowlist=["SALES_ANALYTICS"], actor="admin")
+        service.create_user(
+            user_id="minh.sales",
+            email="minh.sales@aial.local",
+            department="sales",
+            roles=["sales_analyst"],
+            ldap_groups=["sales"],
+        )
+        cache = reset_query_result_cache(fakeredis.FakeRedis(decode_responses=True))
+        context = QueryCacheContext(
+            query="Doanh thu tháng 3",
+            normalized_intent=normalize_query_intent("Doanh thu tháng 3"),
+            owner_user_id="minh.sales",
+            department_id="sales",
+            role_scope="sales_analyst",
+            semantic_layer_version="v1",
+            data_freshness_class="daily",
+        )
+        cache.store(
+            CachedQueryResult.build(
+                context=context,
+                answer="cached",
+                rows=[{"revenue": 100}],
+                generated_sql="SELECT revenue FROM sales",
+                data_source="sales-primary",
+                pii_scan_mode="inline",
+            )
+        )
+
+        service.update_user("minh.sales", department="finance", roles=["sales_analyst"])
+
+        assert cache.find_best_match(context) is None
 
 
 class TestBulkImport:

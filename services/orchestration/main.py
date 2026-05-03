@@ -11,14 +11,21 @@ from fastapi.responses import JSONResponse
 
 from aial_shared.auth.fastapi_deps import require_permission
 from aial_shared.telemetry.tracer import setup_tracing
+from orchestration.routes.anomaly_detection import router as anomaly_detection_router
 from orchestration.routes.admin import router as admin_router
 from orchestration.routes.documents import router as documents_router
+from orchestration.routes.drilldown_explainability import router as drilldown_explainability_router
+from orchestration.routes.exports import router as exports_router
+from orchestration.routes.forecast import router as forecast_router
 from orchestration.routes.glossary import router as glossary_router
 from orchestration.routes.health import router as health_router
 from orchestration.routes.memory import router as memory_router
+from orchestration.routes.metrics import router as metrics_router
 from orchestration.routes.onboarding import router as onboarding_router
 from orchestration.routes.query import _INVALID_QUERY_TYPE, router as query_router
+from orchestration.routes.scheduled_reports import router as scheduled_reports_router
 from orchestration.routes.stream import router as stream_router
+from orchestration.routes.trend_analysis import router as trend_analysis_router
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +62,16 @@ def create_app() -> FastAPI:
     FastAPIInstrumentor.instrument_app(app)
 
     app.include_router(health_router)
+    app.include_router(metrics_router)
     app.include_router(query_router, dependencies=[Depends(chat_query_auth)])
+    app.include_router(anomaly_detection_router, dependencies=[Depends(chat_query_auth)])
+    app.include_router(drilldown_explainability_router, dependencies=[Depends(chat_query_auth)])
+    app.include_router(trend_analysis_router, dependencies=[Depends(chat_query_auth)])
     app.include_router(glossary_router, dependencies=[Depends(chat_query_auth)])
     app.include_router(stream_router, dependencies=[Depends(chat_query_auth)])
+    app.include_router(exports_router, dependencies=[Depends(chat_query_auth)])
+    app.include_router(forecast_router, dependencies=[Depends(chat_query_auth)])
+    app.include_router(scheduled_reports_router, dependencies=[Depends(chat_query_auth)])
     app.include_router(onboarding_router, dependencies=[Depends(chat_query_auth)])
     app.include_router(memory_router, dependencies=[Depends(chat_query_auth)])
     app.include_router(admin_router)
