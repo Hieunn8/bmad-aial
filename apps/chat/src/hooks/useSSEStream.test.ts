@@ -6,11 +6,12 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useSSEStream } from '../hooks/useSSEStream';
-import type { SSEEvent } from '@aial/types';
+import type { SSEErrorEvent, SSEEvent } from '@aial/types';
 
 describe('useSSEStream', () => {
   afterEach(() => {
     vi.clearAllTimers();
+    vi.unstubAllGlobals();
   });
 
   it('returns correct initial state (idle)', () => {
@@ -147,5 +148,43 @@ describe('useSSEStream', () => {
     expect(['idle', 'connecting', 'streaming', 'done', 'error']).toContain(
       result.current.state.status,
     );
+  });
+
+  it('transitions to error when the backend emits an SSE error event', async () => {
+    const onError = vi.fn();
+    const encoder = new TextEncoder();
+    const errorEvent: SSEErrorEvent = {
+      type: 'error',
+      error_code: 'timeout',
+      message: 'Query execution timed out',
+      trace_id: 'trace-timeout',
+    };
+
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorEvent)}\n\n`));
+          controller.close();
+        },
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      },
+    )));
+
+    const { result } = renderHook(() =>
+      useSSEStream('/v1/chat/stream/test-123', { onError }),
+    );
+
+    await act(async () => {
+      result.current.connect();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.state.status).toBe('error');
+    expect(result.current.state.error).toEqual(errorEvent);
+    expect(onError).toHaveBeenCalledWith(errorEvent);
   });
 });

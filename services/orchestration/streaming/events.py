@@ -74,5 +74,8 @@ def make_done_event(
     return SseEvent(type=SseEventType.DONE, data=data)
 
 
-def make_error_event(*, code: str, message: str) -> SseEvent:
-    return SseEvent(type=SseEventType.ERROR, data={"code": code, "message": message})
+def make_error_event(*, error_code: str, message: str, trace_id: str | None = None) -> SseEvent:
+    data: dict[str, Any] = {"error_code": error_code, "message": message}
+    if trace_id is not None:
+        data["trace_id"] = trace_id
+    return SseEvent(type=SseEventType.ERROR, data=data)

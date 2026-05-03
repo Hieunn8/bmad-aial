@@ -159,6 +159,20 @@ export function useSSEStream<T extends SSEEvent = SSEEvent>(
                 }));
               }
               onEvent?.(event);
+              if ((event as unknown as { type: string }).type === 'error') {
+                const errorEvent = event as unknown as SSEErrorEvent;
+                if (isMountedRef.current) {
+                  setState(prev => ({
+                    ...prev,
+                    status: 'error',
+                    error: errorEvent,
+                  }));
+                }
+                retryCountRef.current = 0;
+                onError?.(errorEvent);
+                controller.abort();
+                return;
+              }
               if ((event as unknown as { type: string }).type === 'done') {
                 if (isMountedRef.current) setStatus('done');
                 retryCountRef.current = 0;

@@ -104,7 +104,7 @@ class TestQueryGraph:
             trace_id="trace-xyz",
         )
 
-        assert result["final_response"] == "stub"
+        assert result["final_response"] == "stub using governed metric"
         assert result["trace_id"] == "trace-xyz"
         assert result["intent_type"] == "stub"
         assert result["should_abort"] is False
@@ -128,6 +128,6 @@ class TestQueryGraph:
             trace_id="trace-redis",
         )
 
-        assert result["final_response"] == "stub"
+        assert result["final_response"] == "stub using governed metric"
         checkpoint = saver.get_tuple({"configurable": {"thread_id": session_id}})
         assert checkpoint is not None

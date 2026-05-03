@@ -27,6 +27,7 @@ export default defineConfig({
     },
   },
   resolve: {
+    dedupe: ['react', 'react-dom'],
     alias: {
       '@': resolve(__dirname, 'src'),
       '@aial/types': resolve(__dirname, '../../packages/types/src'),
@@ -34,6 +35,7 @@ export default defineConfig({
       '@aial/ui/export-job-status': resolve(__dirname, '../../packages/ui/src/components/ExportJobStatus.tsx'),
       '@aial/ui/chart-reveal': resolve(__dirname, '../../packages/ui/src/components/ChartReveal.tsx'),
       '@aial/ui/confidence-breakdown-card': resolve(__dirname, '../../packages/ui/src/components/ConfidenceBreakdownCard.tsx'),
+      '@aial/ui/provenance-drawer': resolve(__dirname, '../../packages/ui/src/components/ProvenanceDrawer.tsx'),
     },
   },
 });

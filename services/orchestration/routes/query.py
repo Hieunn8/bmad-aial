@@ -513,11 +513,25 @@ async def _run_graph_and_cache_explanation(
         )
     except TimeoutError:
         logger.warning("Graph execution timed out for request %s", request_id)
-        get_stream_queue().push(request_id, make_error_event(code="QUERY_TIMEOUT", message="Query execution timed out"))
+        get_stream_queue().push(
+            request_id,
+            make_error_event(
+                error_code="timeout",
+                message="Query execution timed out",
+                trace_id=trace_id,
+            ),
+        )
         get_stream_queue().close(request_id)
     except Exception as exc:
         logger.warning("Graph execution failed for request %s: %s", request_id, exc)
-        get_stream_queue().push(request_id, make_error_event(code="GRAPH_EXECUTION_FAILED", message="Query execution failed"))
+        get_stream_queue().push(
+            request_id,
+            make_error_event(
+                error_code="stream-error",
+                message="Query execution failed",
+                trace_id=trace_id,
+            ),
+        )
         get_stream_queue().close(request_id)
 
 
@@ -562,7 +576,11 @@ async def _run_cross_domain_query_and_cache_explanation(
         logger.warning("Cross-domain execution failed for request %s: %s", request_id, exc)
         get_stream_queue().push(
             request_id,
-            make_error_event(code="GRAPH_EXECUTION_FAILED", message="Cross-domain query execution failed"),
+            make_error_event(
+                error_code="stream-error",
+                message="Cross-domain query execution failed",
+                trace_id=trace_id,
+            ),
         )
         get_stream_queue().close(request_id)
 
