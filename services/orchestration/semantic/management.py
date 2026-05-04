@@ -5,8 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from difflib import ndiff
+from typing import Any
 from uuid import uuid4
 
+from orchestration.persistence.config_catalog_store import get_config_catalog_store
 from orchestration.semantic.glossary import SEED_GLOSSARY
 
 
@@ -63,11 +65,13 @@ class KpiDefinitionVersion:
 
 
 class SemanticLayerService:
-    def __init__(self) -> None:
+    def __init__(self, *, catalog_store: Any | None = None) -> None:
         self._versions: dict[str, list[KpiDefinitionVersion]] = {}
         self._active_versions: dict[str, str] = {}
+        self._catalog_store = catalog_store
         self._cache_invalidated_at = datetime.now(UTC)
-        self._seed()
+        if not self._load_persisted_state():
+            self._seed()
 
     def _seed(self) -> None:
         for entry in SEED_GLOSSARY:
@@ -89,7 +93,9 @@ class SemanticLayerService:
             aggregation=str(entry["aggregation"]).strip() if entry.get("aggregation") else None,
             grain=str(entry["grain"]).strip() if entry.get("grain") else None,
             unit=str(entry["unit"]).strip() if entry.get("unit") else None,
-            dimensions=_normalize_str_list(entry.get("dimensions") if isinstance(entry.get("dimensions"), list) else None),
+            dimensions=_normalize_str_list(
+                entry.get("dimensions") if isinstance(entry.get("dimensions"), list) else None
+            ),
             source=dict(entry["source"]) if isinstance(entry.get("source"), dict) else None,
             joins=[dict(join) for join in entry.get("joins", []) if isinstance(join, dict)],
             certified_filters=_normalize_str_list(
@@ -100,6 +106,23 @@ class SemanticLayerService:
         normalized_term = version.term.casefold()
         self._versions.setdefault(normalized_term, []).append(version)
         self._active_versions[normalized_term] = version.version_id
+        self._persist_version(version, normalized_term)
+
+    def _load_persisted_state(self) -> bool:
+        if self._catalog_store is None:
+            return False
+        versions, active_versions = self._catalog_store.load_semantic_state()
+        if not versions:
+            return False
+        for payload in versions:
+            version = _version_from_payload(payload)
+            normalized_term = version.term.casefold()
+            self._versions.setdefault(normalized_term, []).append(version)
+        self._active_versions = {key: value for key, value in active_versions.items()}
+        self._cache_invalidated_at = max(
+            version.timestamp for payload in self._versions.values() for version in payload
+        )
+        return True
 
     def list_metrics(self) -> list[dict[str, object]]:
         metrics: list[dict[str, object]] = []
@@ -176,6 +199,7 @@ class SemanticLayerService:
         self._versions.setdefault(normalized, []).append(version)
         self._active_versions[normalized] = version.version_id
         self._cache_invalidated_at = datetime.now(UTC)
+        self._persist_version(version, normalized)
         return version
 
     def rollback_metric(
@@ -216,6 +240,7 @@ class SemanticLayerService:
         self._versions.setdefault(normalized, []).append(version)
         self._active_versions[normalized] = version.version_id
         self._cache_invalidated_at = datetime.now(UTC)
+        self._persist_version(version, normalized)
         return version
 
     def diff_versions(self, *, term: str, left_version_id: str, right_version_id: str) -> dict[str, object]:
@@ -252,8 +277,53 @@ class SemanticLayerService:
     def cache_invalidated_at(self) -> datetime:
         return self._cache_invalidated_at
 
+    def _persist_version(self, version: KpiDefinitionVersion, normalized_term: str) -> None:
+        if self._catalog_store is None:
+            return
+        self._catalog_store.append_semantic_version(
+            version.to_dict(),
+            term_normalized=normalized_term,
+            active_version_id=version.version_id,
+            created_at=version.timestamp,
+        )
 
-_service = SemanticLayerService()
+
+def _version_from_payload(payload: dict[str, object]) -> KpiDefinitionVersion:
+    return KpiDefinitionVersion(
+        version_id=str(payload["version_id"]),
+        term=str(payload["term"]),
+        definition=str(payload["definition"]),
+        formula=str(payload["formula"]),
+        owner=str(payload["owner"]),
+        freshness_rule=str(payload["freshness_rule"]),
+        changed_by=str(payload["changed_by"]),
+        timestamp=_parse_datetime(payload["timestamp"]),
+        previous_formula=str(payload["previous_formula"]) if payload.get("previous_formula") else None,
+        action=str(payload["action"]),
+        aliases=_normalize_str_list(payload.get("aliases") if isinstance(payload.get("aliases"), list) else None),
+        aggregation=str(payload["aggregation"]).strip() if payload.get("aggregation") else None,
+        grain=str(payload["grain"]).strip() if payload.get("grain") else None,
+        unit=str(payload["unit"]).strip() if payload.get("unit") else None,
+        dimensions=_normalize_str_list(
+            payload.get("dimensions") if isinstance(payload.get("dimensions"), list) else None
+        ),
+        source=dict(payload["source"]) if isinstance(payload.get("source"), dict) else None,
+        joins=[dict(join) for join in payload.get("joins", []) if isinstance(join, dict)],
+        certified_filters=_normalize_str_list(
+            payload.get("certified_filters") if isinstance(payload.get("certified_filters"), list) else None
+        ),
+        security=dict(payload["security"]) if isinstance(payload.get("security"), dict) else None,
+        rollback_reason=str(payload["rollback_reason"]) if payload.get("rollback_reason") else None,
+    )
+
+
+def _parse_datetime(value: object) -> datetime:
+    if isinstance(value, datetime):
+        return value.astimezone(UTC)
+    return datetime.fromisoformat(str(value)).astimezone(UTC)
+
+
+_service = SemanticLayerService(catalog_store=get_config_catalog_store())
 
 
 def get_semantic_layer_service() -> SemanticLayerService:
@@ -262,4 +332,4 @@ def get_semantic_layer_service() -> SemanticLayerService:
 
 def reset_semantic_layer_service() -> None:
     global _service
-    _service = SemanticLayerService()
+    _service = SemanticLayerService(catalog_store=get_config_catalog_store())

@@ -122,6 +122,31 @@ SCHEMA_COLLECTIONS: list[dict] = [
                 "dataType": ["int"],
                 "description": "Minimum clearance level required to access this chunk",
             },
+            {
+                "name": "classification",
+                "dataType": ["int"],
+                "description": "Document classification level used for retrieval policy filtering",
+            },
+            {
+                "name": "effectiveDate",
+                "dataType": ["date"],
+                "description": "Business effective date used for staleness filtering",
+            },
+            {
+                "name": "sourceTrust",
+                "dataType": ["text"],
+                "description": "Trust label of the source document",
+            },
+            {
+                "name": "pageNumber",
+                "dataType": ["int"],
+                "description": "Logical page number of the source chunk",
+            },
+            {
+                "name": "uploadedBy",
+                "dataType": ["text"],
+                "description": "User identifier that uploaded the source document",
+            },
         ],
     },
 ]
@@ -142,10 +167,25 @@ def bootstrap_schema(weaviate_base_url: str, *, timeout: float = 10.0) -> None:
 
     response = requests.get(schema_url, timeout=timeout)
     response.raise_for_status()
-    existing = {c["class"] for c in response.json().get("classes", [])}
+    classes = response.json().get("classes", [])
+    existing = {c["class"] for c in classes}
+    existing_properties = {
+        c["class"]: {prop["name"] for prop in c.get("properties", [])}
+        for c in classes
+        if isinstance(c, dict) and "properties" in c
+    }
 
     for collection in SCHEMA_COLLECTIONS:
         if collection["class"] in existing:
+            known_properties = existing_properties.get(collection["class"])
+            if known_properties is None:
+                continue
+            for prop in collection.get("properties", []):
+                if prop["name"] in known_properties:
+                    continue
+                prop_url = f"{schema_url}/{collection['class']}/properties"
+                resp = requests.post(prop_url, json=prop, timeout=timeout)
+                resp.raise_for_status()
             continue
         resp = requests.post(schema_url, json=collection, timeout=timeout)
         resp.raise_for_status()

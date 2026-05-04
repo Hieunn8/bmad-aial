@@ -12,6 +12,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
+from orchestration.admin_control.user_role_management import (
+    get_user_role_management_service,
+    reset_user_role_management_service,
+)
 
 from aial_shared.auth.fastapi_deps import (
     get_current_user,
@@ -19,16 +23,14 @@ from aial_shared.auth.fastapi_deps import (
     reset_cerbos_client_cache,
 )
 from aial_shared.auth.keycloak import JWTClaims
-from orchestration.admin_control.user_role_management import (
-    get_user_role_management_service,
-    reset_user_role_management_service,
-)
 
 CURRENT_USER_DEP = Depends(get_current_user)
 
 
 @pytest.fixture(autouse=True)
-def clear_cerbos_client_cache() -> None:
+def clear_cerbos_client_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AIAL_CONFIG_CATALOG_PERSISTENCE", "memory")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     reset_cerbos_client_cache()
     reset_user_role_management_service()
 

@@ -18,10 +18,19 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException
 from opentelemetry import trace
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from rag.composition.nodes import (
+    RagChunk,
+    SqlResult,
+    compose_answer,
+    format_citations,
+    merge_results,
+)
+from rag.retrieval.weaviate_store import get_weaviate_document_store
 
 from aial_shared.auth.cerbos import CerbosClient
-from aial_shared.auth.fastapi_deps import get_cerbos_client, get_current_user
+from aial_shared.auth.fastapi_deps import CERBOS_CLIENT_DEP, get_current_user
 from aial_shared.auth.keycloak import JWTClaims
+from orchestration.admin_control.user_role_management import get_user_role_management_service
 from orchestration.approval.workflow import (
     ApprovalRequest,
     ApprovalState,
@@ -29,10 +38,9 @@ from orchestration.approval.workflow import (
     create_approval_request,
     get_approval_store,
 )
-from orchestration.admin_control.user_role_management import get_user_role_management_service
 from orchestration.cache.query_result_cache import (
-    CacheLookupResult,
     CachedQueryResult,
+    CacheLookupResult,
     QueryCacheContext,
     get_query_result_cache,
     normalize_query_intent,
@@ -41,6 +49,7 @@ from orchestration.cross_domain.service import execute_cross_domain_query, is_cr
 from orchestration.explanation.generator import SqlExplanation, SqlExplanationGenerator
 from orchestration.exporting.service import get_export_service
 from orchestration.graph.graph import get_query_graph, invoke_query_graph
+from orchestration.llm.answering import generate_chat_answer
 from orchestration.memory.long_term import get_conversation_memory_service
 from orchestration.security.column_masker import ColumnSensitivity, apply_column_security
 from orchestration.security.pii_masker import PiiMasker
@@ -146,7 +155,11 @@ def _derive_safe_query_metadata(query: str) -> tuple[str, str]:
         topic = "profit_analysis"
     elif "nhân viên" in normalized or "employee" in normalized:
         topic = "employee_analysis"
-    filter_context = "time_filter" if any(token in normalized for token in ("tháng", "quý", "month", "quarter")) else "general_filter"
+    filter_context = (
+        "time_filter"
+        if any(token in normalized for token in ("tháng", "quý", "month", "quarter"))
+        else "general_filter"
+    )
     return topic, filter_context
 
 
@@ -232,7 +245,12 @@ def _resolve_approval_request(
         raise HTTPException(status_code=403, detail="Approval request does not belong to this user")
     if request.query_fingerprint != intent.fingerprint():
         raise HTTPException(status_code=409, detail="Approval request does not match this query intent")
-    if store.is_expired(request) and request.state not in {ApprovalState.APPROVED, ApprovalState.REJECTED, ApprovalState.EXPIRED}:
+    terminal_states = {
+        ApprovalState.APPROVED,
+        ApprovalState.REJECTED,
+        ApprovalState.EXPIRED,
+    }
+    if store.is_expired(request) and request.state not in terminal_states:
         store.expire(request.request_id)
         request = store.get(request.request_id)
     return request
@@ -334,6 +352,49 @@ def _record_query_interaction(
     )
 
 
+async def _safe_rag_search(
+    *,
+    query: str,
+    principal: JWTClaims,
+    cerbos_client: CerbosClient,
+) -> list[RagChunk]:
+    try:
+        return await get_weaviate_document_store().search(
+            query=query,
+            principal=principal,
+            cerbos_client=cerbos_client,
+            limit=5,
+        )
+    except Exception as exc:
+        logger.warning("RAG retrieval failed for user %s: %s", principal.sub, exc)
+        return []
+
+
+async def _safe_generate_chat_answer(
+    *,
+    query: str,
+    semantic_context: list[dict[str, Any]] | None,
+    memory_context: dict[str, Any] | None,
+    preference_context: list[dict[str, Any]] | None,
+    rag_chunks: list[RagChunk] | None,
+    sql_rows: list[dict[str, Any]] | None,
+    data_source: str | None,
+) -> str | None:
+    try:
+        return await generate_chat_answer(
+            query=query,
+            semantic_context=semantic_context,
+            memory_context=memory_context,
+            preference_context=preference_context,
+            rag_chunks=rag_chunks,
+            sql_rows=sql_rows,
+            data_source=data_source,
+        )
+    except Exception as exc:
+        logger.warning("LLM answer generation failed: %s", exc)
+        return None
+
+
 def _publish_query_result(
     *,
     request_id: str,
@@ -350,6 +411,7 @@ def _publish_query_result(
     confidence_state: str | None = None,
     conflict_detail: str | None = None,
     provenance: list[dict[str, Any]] | None = None,
+    sources: list[dict[str, Any]] | None = None,
 ) -> None:
     queue = get_stream_queue()
     _explanation_store[request_id] = (
@@ -380,6 +442,7 @@ def _publish_query_result(
             confidence_state=confidence_state,
             conflict_detail=conflict_detail,
             provenance=provenance,
+            sources=sources,
         ),
     )
     queue.close(request_id)
@@ -443,6 +506,7 @@ async def _run_graph_and_cache_explanation(
     query: str,
     session_id: str,
     principal: JWTClaims,
+    cerbos_client: CerbosClient,
     trace_id: str,
     sensitivity_tier: int = 1,
     execution_settings: dict[str, Any] | None = None,
@@ -468,13 +532,18 @@ async def _run_graph_and_cache_explanation(
             memory_context=memory_context,
             preference_context=preference_context,
         )
+        rag_retrieval = _safe_rag_search(
+            query=query,
+            principal=principal,
+            cerbos_client=cerbos_client,
+        )
         if timeout_seconds is not None:
-            result = await asyncio.wait_for(
-                invoke,
+            result, rag_chunks = await asyncio.wait_for(
+                asyncio.gather(invoke, rag_retrieval),
                 timeout=timeout_seconds,
             )
         else:
-            result = await invoke
+            result, rag_chunks = await asyncio.gather(invoke, rag_retrieval)
         _apply_query_execution_settings(result, execution_settings=execution_settings)
         secured_rows = _apply_runtime_security(result, principal=principal)
         fallback_sql = f"SELECT * FROM oracle WHERE query='{query[:40]}'"
@@ -488,6 +557,42 @@ async def _run_graph_and_cache_explanation(
             semantic_context=semantic_context,
         )
         answer = result.get("final_response", "stub") or "stub"
+        sources: list[dict[str, Any]] | None = None
+        if rag_chunks:
+            sql_result = None
+            if secured_rows:
+                sql_result = SqlResult(
+                    data=secured_rows,
+                    trace_id=trace_id,
+                    table_name=str(result.get("data_source") or "query_result"),
+                    timestamp=datetime.now(UTC).isoformat(),
+                )
+            hybrid = merge_results(sql_result=sql_result, rag_chunks=rag_chunks)
+            answer = compose_answer(hybrid)
+            citations = format_citations(hybrid)
+            sources = [
+                {
+                    "doc_id": chunk.document_id,
+                    "title": chunk.source_name,
+                    "page": chunk.page_number,
+                }
+                for chunk in rag_chunks
+            ]
+            result["rag_result"] = {
+                "citations": citations,
+                "source_count": len(rag_chunks),
+            }
+        llm_answer = await _safe_generate_chat_answer(
+            query=query,
+            semantic_context=semantic_context,
+            memory_context=memory_context,
+            preference_context=preference_context,
+            rag_chunks=rag_chunks,
+            sql_rows=secured_rows,
+            data_source=str(result.get("data_source") or ""),
+        )
+        if llm_answer:
+            answer = llm_answer
         if result.get("data_source_warning"):
             answer = f"{answer}\n\n[warning] {result['data_source_warning']}"
         if cache_context is not None:
@@ -510,6 +615,7 @@ async def _run_graph_and_cache_explanation(
             answer=answer,
             data_source=result.get("data_source"),
             generated_sql=generated_sql,
+            sources=sources,
         )
     except TimeoutError:
         logger.warning("Graph execution timed out for request %s", request_id)
@@ -589,7 +695,7 @@ async def _run_cross_domain_query_and_cache_explanation(
 async def chat_query(
     payload: ChatQueryRequest,
     principal: JWTClaims = CURRENT_USER_DEP,
-    cerbos: CerbosClient = Depends(get_cerbos_client),
+    cerbos: CerbosClient = CERBOS_CLIENT_DEP,
 ) -> ChatQueryStreamHandle:
     """Return stream handle immediately; LangGraph runs in background (fire-and-forget)."""
     request_id = str(uuid4())
@@ -610,7 +716,9 @@ async def chat_query(
     allowed_metrics = get_user_role_management_service().allowed_metrics_for_principal(principal)
     if allowed_metrics:
         semantic_context = [
-            metric for metric in semantic_context if str(metric.get("term", "")).casefold() in allowed_metrics
+            metric
+            for metric in semantic_context
+            if str(metric.get("term", "")).casefold() in allowed_metrics
         ]
     memory_service = get_conversation_memory_service()
     memory_context = memory_service.build_context_bundle(
@@ -722,6 +830,7 @@ async def chat_query(
             principal=principal,
             trace_id=trace_id,
             sensitivity_tier=intent.sensitivity_tier,
+            cerbos_client=cerbos,
             execution_settings=execution_settings,
             semantic_context=semantic_context,
             memory_context=memory_context,

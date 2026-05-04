@@ -7,17 +7,15 @@ and idempotent bootstrap behaviour — all without requiring a live Weaviate ins
 from __future__ import annotations
 
 import re
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-
 from weaviate_schema.schema import (
     BGE_MODEL_VERSION,
     EMBEDDING_DIMS,
     SCHEMA_COLLECTIONS,
     get_collection_names,
 )
-
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -183,6 +181,14 @@ class TestDocumentChunkCollection:
         props = {p["name"]: p for p in collection["properties"]}
         assert props["clearanceLevel"]["dataType"] == ["int"]
 
+    def test_has_effective_date_for_staleness_filtering(self, collection: dict) -> None:
+        props = {p["name"]: p for p in collection["properties"]}
+        assert props["effectiveDate"]["dataType"] == ["date"]
+
+    def test_has_source_trust_for_rag_metadata(self, collection: dict) -> None:
+        props = {p["name"]: p for p in collection["properties"]}
+        assert props["sourceTrust"]["dataType"] == ["text"]
+
 
 # ---------------------------------------------------------------------------
 # Idempotent bootstrap (AC5)
@@ -242,3 +248,38 @@ class TestIdempotentBootstrap:
         assert mock_post.call_count == 1
         posted_class = mock_post.call_args[1]["json"]["class"]
         assert posted_class == "DocumentChunk"
+
+    def test_bootstrap_adds_missing_properties_to_existing_collection(self) -> None:
+        from weaviate_schema.schema import bootstrap_schema
+
+        query_cache_schema = next(
+            collection for collection in SCHEMA_COLLECTIONS if collection["class"] == "QueryResultCache"
+        )
+        mock_get = MagicMock()
+        mock_get.return_value.json.return_value = {
+            "classes": [
+                {
+                    "class": "DocumentChunk",
+                    "properties": [
+                        {"name": "chunkText"},
+                        {"name": "chunkIndex"},
+                        {"name": "documentId"},
+                    ],
+                },
+                {
+                    "class": "QueryResultCache",
+                    "properties": [*query_cache_schema["properties"]],
+                },
+            ]
+        }
+        mock_get.return_value.raise_for_status = MagicMock()
+        mock_post = MagicMock()
+        mock_post.return_value.raise_for_status = MagicMock()
+
+        with patch("weaviate_schema.schema.requests.get", mock_get), patch(
+            "weaviate_schema.schema.requests.post", mock_post
+        ):
+            bootstrap_schema("http://localhost:8081")
+
+        posted_urls = [call_args.args[0] for call_args in mock_post.call_args_list]
+        assert any(url.endswith("/v1/schema/DocumentChunk/properties") for url in posted_urls)

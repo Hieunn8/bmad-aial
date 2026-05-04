@@ -16,7 +16,9 @@ dependencies = [
     "opentelemetry-sdk>=1.20",
     "opentelemetry-instrumentation-fastapi>=0.42",
     "opentelemetry-exporter-otlp-proto-grpc>=1.20",
+    "psycopg[binary]>=3.2",
     "redis>=7.4.0",
+    "requests>=2.32",
 ]
 
 [build-system]

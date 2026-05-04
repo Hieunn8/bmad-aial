@@ -6,6 +6,7 @@ import { RouterProvider, createRouter } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { routeTree } from './routeTree.gen';
 import { AppErrorBoundary } from './components/ErrorBoundaries';
+import { AuthProvider, useAuth } from './auth/AuthProvider';
 
 // ============================================================
 // Query Client
@@ -32,7 +33,20 @@ const router = createRouter({
   defaultPreloadStaleTime: 0,
   context: {
     queryClient,
-    isAuthenticated: false, // Updated by auth middleware (Story 1.3)
+    auth: {
+      isAuthenticated: false,
+      isReady: false,
+      session: null,
+      login: async () => {},
+      loginWithPassword: async () => {
+        throw new Error('Auth provider not ready');
+      },
+      logout: () => {},
+      refreshSession: async () => null,
+      handleAuthCallback: async () => {
+        throw new Error('Auth provider not ready');
+      },
+    },
   },
 });
 
@@ -49,9 +63,18 @@ declare module '@tanstack/react-router' {
 
 export function App(): React.JSX.Element {
   return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
+  );
+}
+
+function AppShell(): React.JSX.Element {
+  const auth = useAuth();
+  return (
     <AppErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <RouterProvider router={router} context={{ queryClient, auth }} />
       </QueryClientProvider>
     </AppErrorBoundary>
   );

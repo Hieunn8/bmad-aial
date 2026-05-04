@@ -9,18 +9,26 @@ from uuid import uuid4
 import fakeredis
 import pytest
 from fastapi.testclient import TestClient
-
-from aial_shared.auth.keycloak import JWTClaims
-from orchestration.audit.read_model import AuditFilter, AuditRecord, get_audit_read_model
 from orchestration.admin_control.user_role_management import (
+    UserRoleManagementService,
     get_user_role_management_service,
     reset_user_role_management_service,
 )
-from orchestration.cache.query_result_cache import CachedQueryResult, QueryCacheContext, normalize_query_intent, reset_query_result_cache
+from orchestration.audit.read_model import AuditFilter, AuditRecord, get_audit_read_model
+from orchestration.cache.query_result_cache import (
+    CachedQueryResult,
+    QueryCacheContext,
+    normalize_query_intent,
+    reset_query_result_cache,
+)
+
+from aial_shared.auth.keycloak import JWTClaims
 
 
 @pytest.fixture(autouse=True)
-def reset_state() -> None:
+def reset_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AIAL_CONFIG_CATALOG_PERSISTENCE", "memory")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     reset_user_role_management_service()
     get_audit_read_model()._records.clear()  # noqa: SLF001 - test reset for module-level store
     reset_query_result_cache(fakeredis.FakeRedis(decode_responses=True))
@@ -76,6 +84,37 @@ def _auth(
     mock_cerbos_cls.return_value = mock_cerbos
 
 
+class _CatalogStoreStub:
+    def __init__(self) -> None:
+        self.roles: list[dict[str, object]] = []
+        self.data_sources: list[dict[str, object]] = []
+
+    def load_roles(self) -> list[dict[str, object]]:
+        return [dict(item) for item in self.roles]
+
+    def upsert_role(self, payload: dict[str, object], *, updated_at: datetime) -> None:
+        del updated_at
+        self.roles = [item for item in self.roles if item["name"] != payload["name"]]
+        self.roles.append(dict(payload))
+
+    def load_data_sources(self) -> list[dict[str, object]]:
+        return [dict(item) for item in self.data_sources]
+
+    def upsert_data_source(
+        self,
+        payload: dict[str, object],
+        *,
+        username: str,
+        password: str,
+        updated_at: datetime,
+    ) -> None:
+        del updated_at
+        record = dict(payload)
+        record["_secret_payload"] = {"username": username, "password": password}
+        self.data_sources = [item for item in self.data_sources if item["name"] != payload["name"]]
+        self.data_sources.append(record)
+
+
 class TestRoleManagement:
     @patch("aial_shared.auth.fastapi_deps.decode_jwt")
     @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
@@ -125,6 +164,42 @@ class TestRoleManagement:
             headers={"Authorization": "Bearer fake-jwt"},
         )
         assert resp.status_code == 403
+
+    def test_catalog_roles_and_data_sources_reload_from_persistent_store(self) -> None:
+        store = _CatalogStoreStub()
+        service = UserRoleManagementService(catalog_store=store)
+
+        role = service.create_role(
+            name="finance_analyst",
+            schema_allowlist=["finance_analytics"],
+            actor="admin-1",
+            description="Finance scoped access",
+            data_source_names=["oracle-finance"],
+            metric_allowlist=["doanh thu thuần"],
+        )
+        config = service.create_data_source(
+            name="oracle-finance",
+            description="Finance warehouse",
+            host="db.company.local",
+            port=1521,
+            service_name="FINPRD",
+            username="reader",
+            password="secret",
+            schema_allowlist=["FINANCE_ANALYTICS"],
+            actor="admin-1",
+        )
+
+        reloaded = UserRoleManagementService(catalog_store=store)
+
+        reloaded_role = reloaded.list_roles()[0]
+        assert reloaded_role.name == role.name
+        assert reloaded_role.data_source_names == ["oracle-finance"]
+        assert reloaded_role.metric_allowlist == ["doanh thu thuần"]
+
+        reloaded_source = reloaded.get_data_source(config.name)
+        assert reloaded_source is not None
+        assert reloaded_source.description == "Finance warehouse"
+        assert reloaded_source.available_schemas == ["FINANCE_ANALYTICS"]
 
 
 class TestUserManagement:
@@ -356,10 +431,7 @@ class TestBulkImport:
         _auth(mock_cerbos_cls, mock_validate, mock_decode, admin_claims)
         headers = {"Authorization": "Bearer fake-jwt"}
 
-        csv_content = (
-            "user_id,email,department,roles,ldap_groups\n"
-            "imported.user,imported@aial.local,finance,,finance\n"
-        )
+        csv_content = "user_id,email,department,roles,ldap_groups\nimported.user,imported@aial.local,finance,,finance\n"
         commit_resp = client.post(
             "/v1/admin/users/import/commit",
             json={"csv_content": csv_content},
@@ -485,7 +557,8 @@ class TestDataSourceConfiguration:
         assert resp.json()["data_source"]["status"] == "UNVERIFIED"
         detail_resp = client.get("/v1/admin/data-sources/oracle-unverified", headers=headers)
         assert detail_resp.status_code == 200
-        assert detail_resp.json()["query_execution"]["warning"] == "Kết nối thất bại - kiểm tra thông tin trước khi dùng"
+        expected_warning = "Kết nối thất bại - kiểm tra thông tin trước khi dùng"
+        assert detail_resp.json()["query_execution"]["warning"] == expected_warning
 
     @patch("aial_shared.auth.fastapi_deps.decode_jwt")
     @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
@@ -817,8 +890,9 @@ class TestSystemHealthDashboard:
             active_oracle_connections=8,
             weaviate_index_status="HEALTHY",
         )
+        headers = {"Authorization": "Bearer fake-jwt"}
 
-        resp = client.get("/v1/admin/system-health?time_range=last_7_days", headers={"Authorization": "Bearer fake-jwt"})
+        resp = client.get("/v1/admin/system-health?time_range=last_7_days", headers=headers)
         assert resp.status_code == 200
         body = resp.json()
         assert body["refresh_interval_seconds"] == 30
@@ -922,6 +996,5 @@ class TestSystemHealthDashboard:
         )
         assert len(audit_records) >= 1
         assert any(
-            record.metadata and record.metadata.get("metric_name") == "p95_latency_ms.sql"
-            for record in audit_records
+            record.metadata and record.metadata.get("metric_name") == "p95_latency_ms.sql" for record in audit_records
         )

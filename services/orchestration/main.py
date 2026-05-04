@@ -13,6 +13,7 @@ from aial_shared.auth.fastapi_deps import require_permission
 from aial_shared.telemetry.tracer import setup_tracing
 from orchestration.routes.anomaly_detection import router as anomaly_detection_router
 from orchestration.routes.admin import router as admin_router
+from orchestration.routes.auth import router as auth_router
 from orchestration.routes.documents import router as documents_router
 from orchestration.routes.drilldown_explainability import router as drilldown_explainability_router
 from orchestration.routes.exports import router as exports_router
@@ -63,6 +64,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(metrics_router)
+    app.include_router(auth_router)
     app.include_router(query_router, dependencies=[Depends(chat_query_auth)])
     app.include_router(anomaly_detection_router, dependencies=[Depends(chat_query_auth)])
     app.include_router(drilldown_explainability_router, dependencies=[Depends(chat_query_auth)])

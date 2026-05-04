@@ -304,14 +304,21 @@ services:
       retries: 30
 
   cerbos:
-    image: ghcr.io/cerbos/cerbos:0.38.0
+    image: ghcr.io/cerbos/cerbos:0.51.0
     container_name: aial-cerbos
     command: ["server", "--config=/config/conf.yaml"]
     volumes:
       - ./cerbos:/config:ro
     ports: ["3592:3592"]
     healthcheck:
-      test: ["CMD", "sh", "-c", "exec 3<>/dev/tcp/127.0.0.1/3592"]
+      test:
+        [
+          "CMD",
+          "/cerbos",
+          "healthcheck",
+          "--config=/config/conf.yaml",
+          "--kind=http"
+        ]
       interval: 5s
       timeout: 3s
       retries: 20

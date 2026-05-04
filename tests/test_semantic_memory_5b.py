@@ -2,27 +2,29 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-
-from aial_shared.auth.keycloak import JWTClaims
 from orchestration.memory.long_term import (
     HistoryEntry,
     get_conversation_memory_service,
     reset_conversation_memory_service,
 )
 from orchestration.semantic.management import (
-    get_semantic_layer_service,
+    SemanticLayerService,
     reset_semantic_layer_service,
 )
 
+from aial_shared.auth.keycloak import JWTClaims
+
 
 @pytest.fixture(autouse=True)
-def reset_services() -> None:
+def reset_services(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AIAL_CONFIG_CATALOG_PERSISTENCE", "memory")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     reset_semantic_layer_service()
     reset_conversation_memory_service()
 
@@ -77,7 +79,59 @@ def _auth(
     mock_cerbos_cls.return_value = mock_cerbos
 
 
+class _SemanticCatalogStoreStub:
+    def __init__(self) -> None:
+        self.versions: list[dict[str, object]] = []
+        self.active_versions: dict[str, str] = {}
+
+    def load_semantic_state(self) -> tuple[list[dict[str, object]], dict[str, str]]:
+        return [dict(item) for item in self.versions], dict(self.active_versions)
+
+    def append_semantic_version(
+        self,
+        payload: dict[str, object],
+        *,
+        term_normalized: str,
+        active_version_id: str,
+        created_at: datetime,
+    ) -> None:
+        del created_at
+        self.versions.append(dict(payload))
+        self.active_versions[term_normalized] = active_version_id
+
+
 class TestSemanticLayerManagement:
+    def test_semantic_versions_reload_from_persistent_store(self) -> None:
+        store = _SemanticCatalogStoreStub()
+        service = SemanticLayerService(catalog_store=store)
+
+        published = service.publish_metric(
+            term="doanh thu thuần",
+            definition="Doanh thu sau điều chỉnh",
+            formula="SUM(NET_REVENUE) - SUM(RETURNS)",
+            owner="Finance",
+            freshness_rule="daily",
+            changed_by="owner-1",
+            aliases=["net revenue"],
+            aggregation="sum",
+            grain="daily_customer",
+            unit="VND",
+            dimensions=["date", "customer"],
+            source={"data_source": "oracle-finance", "schema": "FINANCE_ANALYTICS", "table": "F_SALES"},
+            joins=[{"target": "D_CUSTOMER", "on": "F_SALES.CUSTOMER_ID = D_CUSTOMER.CUSTOMER_ID"}],
+            certified_filters=["IS_DELETED = 0"],
+            security={"sensitivity_tier": 1, "allowed_roles": ["finance_analyst"]},
+        )
+
+        reloaded = SemanticLayerService(catalog_store=store)
+        metric = reloaded.get_metric("doanh thu thuần")
+
+        assert metric is not None
+        assert metric.version_id == published.version_id
+        assert metric.aliases == ["net revenue"]
+        assert metric.source is not None
+        assert metric.source["table"] == "F_SALES"
+
     @patch("aial_shared.auth.fastapi_deps.decode_jwt")
     @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
     @patch("aial_shared.auth.fastapi_deps.CerbosClient")
@@ -138,10 +192,12 @@ class TestSemanticLayerManagement:
         versions = versions_resp.json()["versions"]
         assert len(versions) >= 2
 
-        diff_resp = client.get(
-            f"/v1/admin/semantic-layer/metrics/doanh thu thuần/diff?from_version_id={versions[0]['version_id']}&to_version_id={new_version['version_id']}",
-            headers=headers,
+        diff_path = (
+            "/v1/admin/semantic-layer/metrics/doanh thu thuần/diff"
+            f"?from_version_id={versions[0]['version_id']}"
+            f"&to_version_id={new_version['version_id']}"
         )
+        diff_resp = client.get(diff_path, headers=headers)
         assert diff_resp.status_code == 200
         assert any(row["kind"] == "added" for row in diff_resp.json()["diff"])
 

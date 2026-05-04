@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ExportResultsConsole } from './ExportResultsConsole';
+import { ChatAssistantConsole } from './ChatAssistantConsole';
 
 const connectMock = vi.fn();
 const resetMock = vi.fn();
@@ -61,7 +61,7 @@ vi.mock('../../hooks/useSSEStream', () => ({
   },
 }));
 
-describe('ExportResultsConsole', () => {
+describe('ChatAssistantConsole', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     connectMock.mockReset();
@@ -70,11 +70,11 @@ describe('ExportResultsConsole', () => {
   });
 
   it('renders the query and export controls', () => {
-    render(<ExportResultsConsole />);
+    render(<ChatAssistantConsole />);
 
-    expect(screen.getByRole('heading', { name: 'Export Results' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Run Query' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Generate Report' })).toBeDisabled();
+    expect(screen.getByRole('heading', { name: 'Chat Assistant' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ask AI' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Generate report' })).toBeDisabled();
     expect(screen.getByRole('combobox', { name: 'Export format' })).toHaveValue('xlsx');
   });
 
@@ -100,9 +100,9 @@ describe('ExportResultsConsole', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<ExportResultsConsole />);
+    render(<ChatAssistantConsole />);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Run Query' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Ask AI' }));
 
     expect(await screen.findByRole('status', { name: 'Cache freshness' })).toHaveTextContent('Kết quả từ cache');
     expect(screen.getByText(/Độ tương đồng ngữ nghĩa: 91%/i)).toBeInTheDocument();
@@ -130,9 +130,9 @@ describe('ExportResultsConsole', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<ExportResultsConsole />);
+    render(<ChatAssistantConsole />);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Run Query' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Ask AI' }));
     latestOptions?.onEvent?.({
       type: 'done',
       trace_id: 'trace-conflict',

@@ -16,8 +16,10 @@ import csv
 import io
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from aial_shared.auth.keycloak import JWTClaims
+from orchestration.persistence.config_catalog_store import get_config_catalog_store
 
 _RETENTION_DAYS = 90
 _AUDIT_RETENTION_DAYS = 365
@@ -216,12 +218,13 @@ class HealthSnapshot:
 
 
 class UserRoleManagementService:
-    def __init__(self) -> None:
+    def __init__(self, *, catalog_store: Any | None = None) -> None:
         self._users: dict[str, UserAccount] = {}
         self._roles: dict[str, RoleDefinition] = {}
         self._sync_status = LdapSyncStatus()
         self._data_sources: dict[str, DataSourceConfig] = {}
         self._vault_secrets: dict[str, dict[str, str]] = {}
+        self._catalog_store = catalog_store
         self._health_snapshot = HealthSnapshot(
             p50_latency_ms={"sql": 850, "rag": 1_200, "hybrid": 1_550, "forecast": 2_300},
             p95_latency_ms={"sql": 2_400, "rag": 3_600, "hybrid": 4_800, "forecast": 6_400},
@@ -235,6 +238,22 @@ class UserRoleManagementService:
         )
         self._alert_settings: dict[tuple[str, str, str], AlertSetting] = {}
         self._alerts: dict[str, HealthAlert] = {}
+        self._load_persisted_catalog()
+
+    def _load_persisted_catalog(self) -> None:
+        if self._catalog_store is None:
+            return
+        for payload in self._catalog_store.load_roles():
+            role = _role_from_payload(payload)
+            self._roles[role.name] = role
+        for payload in self._catalog_store.load_data_sources():
+            secret_payload = payload.pop("_secret_payload", {})
+            data_source = _data_source_from_payload(payload)
+            self._data_sources[data_source.name] = data_source
+            self._vault_secrets[data_source.vault_secret_ref] = {
+                "username": str(secret_payload.get("username", "")),
+                "password": str(secret_payload.get("password", "")),
+            }
 
     def _invalidate_query_cache_for_user(self, user_id: str) -> None:
         from orchestration.cache.query_result_cache import get_query_result_cache
@@ -271,6 +290,7 @@ class UserRoleManagementService:
             metric_allowlist=sorted({item.strip() for item in metric_allowlist or [] if item.strip()}),
         )
         self._roles[normalized] = role
+        self._persist_role(role)
         return role
 
     def list_roles(self) -> list[RoleDefinition]:
@@ -507,6 +527,7 @@ class UserRoleManagementService:
         )
         self._data_sources[normalized_name] = config
         self._vault_secrets[vault_ref] = {"username": username.strip(), "password": password}
+        self._persist_data_source(config, username=username.strip(), password=password)
         return config
 
     def update_data_source(
@@ -535,9 +556,7 @@ class UserRoleManagementService:
         next_username = username.strip() if username is not None else current_secret["username"]
         next_password = password if password is not None else current_secret["password"]
         next_schemas = (
-            _normalize_schema_allowlist(schema_allowlist)
-            if schema_allowlist is not None
-            else config.schema_allowlist
+            _normalize_schema_allowlist(schema_allowlist) if schema_allowlist is not None else config.schema_allowlist
         )
         probe = self._probe_oracle_connection(
             host=next_host,
@@ -557,7 +576,11 @@ class UserRoleManagementService:
             ("port", config.port, next_port),
             ("service_name", config.service_name, next_service_name),
             ("schema_allowlist", config.schema_allowlist, next_schemas),
-            ("query_timeout_seconds", config.query_timeout_seconds, query_timeout_seconds or config.query_timeout_seconds),
+            (
+                "query_timeout_seconds",
+                config.query_timeout_seconds,
+                query_timeout_seconds or config.query_timeout_seconds,
+            ),
             ("row_limit", config.row_limit, row_limit or config.row_limit),
         ):
             if old_value != new_value:
@@ -587,6 +610,7 @@ class UserRoleManagementService:
         config.updated_at = config.last_test_at
         if username is not None or password is not None:
             self._vault_secrets[config.vault_secret_ref] = {"username": next_username, "password": next_password}
+        self._persist_data_source(config, username=next_username, password=next_password)
         return config, changes
 
     def list_data_sources(self) -> list[DataSourceConfig]:
@@ -769,7 +793,10 @@ class UserRoleManagementService:
         return setting
 
     def list_alert_settings(self) -> list[AlertSetting]:
-        return sorted(self._alert_settings.values(), key=lambda item: (item.scope_type, item.scope_id, item.metric_name))
+        return sorted(
+            self._alert_settings.values(),
+            key=lambda item: (item.scope_type, item.scope_id, item.metric_name),
+        )
 
     def get_health_dashboard(self, *, time_range: str = "last_30_minutes") -> dict[str, object]:
         snapshot = self._health_snapshot
@@ -855,6 +882,21 @@ class UserRoleManagementService:
             raise KeyError(user_id)
         return user
 
+    def _persist_role(self, role: RoleDefinition) -> None:
+        if self._catalog_store is None:
+            return
+        self._catalog_store.upsert_role(_role_to_payload(role), updated_at=role.updated_at)
+
+    def _persist_data_source(self, config: DataSourceConfig, *, username: str, password: str) -> None:
+        if self._catalog_store is None:
+            return
+        self._catalog_store.upsert_data_source(
+            _data_source_to_payload(config),
+            username=username,
+            password=password,
+            updated_at=config.updated_at,
+        )
+
     def _validate_roles(self, roles: list[str]) -> None:
         missing_roles = [role for role in roles if role.strip() and role.strip() not in self._roles]
         if missing_roles:
@@ -888,7 +930,87 @@ def _split_csv_multi_value(value: str) -> list[str]:
     return [item.strip() for item in value.split("|") if item.strip()]
 
 
-_service = UserRoleManagementService()
+def _role_to_payload(role: RoleDefinition) -> dict[str, object]:
+    return {
+        "name": role.name,
+        "schema_allowlist": list(role.schema_allowlist),
+        "created_by": role.created_by,
+        "created_at": role.created_at.isoformat(),
+        "updated_at": role.updated_at.isoformat(),
+        "description": role.description,
+        "data_source_names": list(role.data_source_names),
+        "metric_allowlist": list(role.metric_allowlist),
+        "cerbos_policy_status": role.cerbos_policy_status,
+        "data_source_config_status": role.data_source_config_status,
+    }
+
+
+def _role_from_payload(payload: dict[str, object]) -> RoleDefinition:
+    return RoleDefinition(
+        name=str(payload["name"]),
+        schema_allowlist=[str(item) for item in payload.get("schema_allowlist", [])],
+        created_by=str(payload["created_by"]),
+        created_at=_parse_datetime(payload["created_at"]),
+        updated_at=_parse_datetime(payload["updated_at"]),
+        description=str(payload["description"]) if payload.get("description") else None,
+        data_source_names=[str(item) for item in payload.get("data_source_names", [])],
+        metric_allowlist=[str(item) for item in payload.get("metric_allowlist", [])],
+        cerbos_policy_status=str(payload.get("cerbos_policy_status", "synced")),
+        data_source_config_status=str(payload.get("data_source_config_status", "persisted")),
+    )
+
+
+def _data_source_to_payload(config: DataSourceConfig) -> dict[str, object]:
+    return {
+        "name": config.name,
+        "description": config.description,
+        "host": config.host,
+        "port": config.port,
+        "service_name": config.service_name,
+        "schema_allowlist": list(config.schema_allowlist),
+        "query_timeout_seconds": config.query_timeout_seconds,
+        "row_limit": config.row_limit,
+        "status": config.status,
+        "created_by": config.created_by,
+        "created_at": config.created_at.isoformat(),
+        "updated_at": config.updated_at.isoformat(),
+        "vault_secret_ref": config.vault_secret_ref,
+        "warning_message": config.warning_message,
+        "connection_timeout_seconds": config.connection_timeout_seconds,
+        "last_test_at": config.last_test_at.isoformat() if config.last_test_at else None,
+        "available_schemas": list(config.available_schemas),
+    }
+
+
+def _data_source_from_payload(payload: dict[str, object]) -> DataSourceConfig:
+    return DataSourceConfig(
+        name=str(payload["name"]),
+        description=str(payload["description"]) if payload.get("description") else None,
+        host=str(payload["host"]),
+        port=int(payload["port"]),
+        service_name=str(payload["service_name"]),
+        schema_allowlist=[str(item) for item in payload.get("schema_allowlist", [])],
+        query_timeout_seconds=int(payload["query_timeout_seconds"]),
+        row_limit=int(payload["row_limit"]),
+        status=str(payload["status"]),
+        created_by=str(payload["created_by"]),
+        created_at=_parse_datetime(payload["created_at"]),
+        updated_at=_parse_datetime(payload["updated_at"]),
+        vault_secret_ref=str(payload["vault_secret_ref"]),
+        warning_message=str(payload["warning_message"]) if payload.get("warning_message") else None,
+        connection_timeout_seconds=int(payload.get("connection_timeout_seconds", _DEFAULT_CONNECTION_TIMEOUT_SECONDS)),
+        last_test_at=_parse_datetime(payload["last_test_at"]) if payload.get("last_test_at") else None,
+        available_schemas=[str(item) for item in payload.get("available_schemas", [])],
+    )
+
+
+def _parse_datetime(value: object) -> datetime:
+    if isinstance(value, datetime):
+        return value.astimezone(UTC)
+    return datetime.fromisoformat(str(value)).astimezone(UTC)
+
+
+_service = UserRoleManagementService(catalog_store=get_config_catalog_store())
 
 
 def get_user_role_management_service() -> UserRoleManagementService:
@@ -897,4 +1019,4 @@ def get_user_role_management_service() -> UserRoleManagementService:
 
 def reset_user_role_management_service() -> None:
     global _service
-    _service = UserRoleManagementService()
+    _service = UserRoleManagementService(catalog_store=get_config_catalog_store())

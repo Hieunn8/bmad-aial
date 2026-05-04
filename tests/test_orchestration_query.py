@@ -10,22 +10,26 @@ from uuid import UUID, uuid4
 import fakeredis
 import pytest
 from fastapi.testclient import TestClient
-
-from aial_shared.auth.fastapi_deps import reset_cerbos_client_cache
-from aial_shared.auth.keycloak import JWTClaims
-from orchestration.admin_control.user_role_management import get_user_role_management_service, reset_user_role_management_service
+from orchestration.admin_control.user_role_management import (
+    get_user_role_management_service,
+    reset_user_role_management_service,
+)
 from orchestration.approval.workflow import ApprovalDecision, QueryIntent, create_approval_request, get_approval_store
+from orchestration.audit.read_model import AuditFilter, get_audit_read_model
 from orchestration.cache.query_result_cache import (
     CachedQueryResult,
     QueryCacheContext,
     normalize_query_intent,
     reset_query_result_cache,
 )
-from orchestration.semantic.management import get_semantic_layer_service
-from orchestration.audit.read_model import AuditFilter, get_audit_read_model
 from orchestration.security.column_masker import ColumnSensitivity
+from orchestration.semantic.management import get_semantic_layer_service
 from orchestration.streaming.events import SseEventType
 from orchestration.streaming.queue import get_stream_queue
+from rag.composition.nodes import RagChunk
+
+from aial_shared.auth.fastapi_deps import reset_cerbos_client_cache
+from aial_shared.auth.keycloak import JWTClaims
 
 
 @pytest.fixture()
@@ -48,6 +52,10 @@ def sample_claims() -> JWTClaims:
 
 @pytest.fixture()
 def client() -> TestClient:
+    import os
+
+    os.environ["AIAL_CONFIG_CATALOG_PERSISTENCE"] = "memory"
+    os.environ.pop("DATABASE_URL", None)
     reset_cerbos_client_cache()
     reset_user_role_management_service()
     from orchestration.main import app
@@ -60,12 +68,35 @@ def reset_query_cache() -> None:
     reset_query_result_cache(fakeredis.FakeRedis(decode_responses=True))
 
 
-def _auth_mocks(mock_cerbos_cls: MagicMock, mock_validate: MagicMock, mock_decode: MagicMock, claims: JWTClaims) -> None:
+@pytest.fixture(autouse=True)
+def mock_rag_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Store:
+        async def search(self, **_: object) -> list[RagChunk]:
+            return []
+
+    monkeypatch.setattr(
+        "orchestration.routes.query.get_weaviate_document_store",
+        lambda: _Store(),
+    )
+
+
+def _auth_mocks(
+    mock_cerbos_cls: MagicMock,
+    mock_validate: MagicMock,
+    mock_decode: MagicMock,
+    claims: JWTClaims,
+) -> None:
     mock_decode.return_value = claims.raw
     mock_validate.return_value = claims
     mock_cerbos = MagicMock()
 
-    def _default_check(principal: JWTClaims, resource_kind: str, resource_id: str, action: str, **_: object) -> MagicMock:
+    def _default_check(
+        principal: JWTClaims,
+        resource_kind: str,
+        resource_id: str,
+        action: str,
+        **_: object,
+    ) -> MagicMock:
         return MagicMock(allowed=action == "query")
 
     mock_cerbos.check.side_effect = _default_check
@@ -75,7 +106,9 @@ def _auth_mocks(mock_cerbos_cls: MagicMock, mock_validate: MagicMock, mock_decod
 def _build_cache_context(query: str, claims: JWTClaims) -> QueryCacheContext:
     semantic_context = get_semantic_layer_service().match_query(query)
     version = (
-        "|".join(sorted(str(entry["active_version_id"]) for entry in semantic_context if entry.get("active_version_id")))
+        "|".join(
+            sorted(str(entry["active_version_id"]) for entry in semantic_context if entry.get("active_version_id"))
+        )
         if semantic_context
         else get_semantic_layer_service().cache_invalidated_at.isoformat()
     )
@@ -167,7 +200,7 @@ class TestChatQueryEndpoint:
             intent_type="chat_query",
             filters={"query_preview": "Show employee salary by region"},
             estimated_row_count=100,
-            query_digest=hashlib.sha256("Show employee salary by region".encode("utf-8")).hexdigest(),
+            query_digest=hashlib.sha256(b"Show employee salary by region").hexdigest(),
         )
         approval_request = create_approval_request(intent, store=store)
         store.decide(
@@ -760,7 +793,9 @@ class TestCrossDomainExecution:
         assert "FINANCE" in body["message"]
         assert "BUDGET" in body["message"]
 
-    def test_cross_domain_background_runner_emits_conflict_and_audits_subqueries(self, sample_claims: JWTClaims) -> None:
+    def test_cross_domain_background_runner_emits_conflict_and_audits_subqueries(
+        self, sample_claims: JWTClaims
+    ) -> None:
         from orchestration.routes.query import _run_cross_domain_query_and_cache_explanation
 
         async def _run() -> None:
@@ -824,6 +859,7 @@ class TestRuntimeSecurityWiring:
                     query="Show employee salary and notes",
                     session_id=str(uuid4()),
                     principal=sample_claims,
+                    cerbos_client=MagicMock(),
                     trace_id=str(uuid4()),
                 )
 
@@ -834,6 +870,86 @@ class TestRuntimeSecurityWiring:
             assert secured_row["salary"] == "***"
             assert "user@company.com" not in secured_row["notes"]
             assert "0912345678" not in secured_row["notes"]
+
+        asyncio.run(_run())
+
+    def test_background_runner_prefers_grounded_rag_answer_when_chunks_exist(self, sample_claims: JWTClaims) -> None:
+        from orchestration.routes.query import _run_graph_and_cache_explanation
+
+        async def _run() -> None:
+            request_id = str(uuid4())
+            queue = get_stream_queue()
+            queue.create(request_id, owner_user_id=sample_claims.sub)
+
+            class _Store:
+                async def search(self, **_: object) -> list[RagChunk]:
+                    return [
+                        RagChunk(
+                            chunk_text="Chính sách doanh thu quy định doanh thu thuần là doanh thu sau giảm trừ.",
+                            document_id="doc-1",
+                            source_name="Revenue Policy",
+                            page_number=2,
+                            department="sales",
+                            score=0.91,
+                            citation_number=1,
+                        )
+                    ]
+
+            with patch("orchestration.routes.query.invoke_query_graph") as mock_invoke, patch(
+                "orchestration.routes.query.get_weaviate_document_store",
+                return_value=_Store(),
+            ):
+                mock_invoke.return_value = {
+                    "sql_result": [],
+                    "generated_sql": "SELECT 1",
+                    "final_response": "stub",
+                }
+                await _run_graph_and_cache_explanation(
+                    request_id=request_id,
+                    query="Doanh thu thuần là gì?",
+                    session_id=str(uuid4()),
+                    principal=sample_claims,
+                    cerbos_client=MagicMock(),
+                    trace_id=str(uuid4()),
+                )
+
+            done_events = [event for event in queue.drain(request_id) if event.type == SseEventType.DONE]
+            assert done_events
+            done = done_events[0].data
+            assert "Revenue Policy" in done["answer"]
+            assert done["sources"][0]["doc_id"] == "doc-1"
+
+        asyncio.run(_run())
+
+    def test_background_runner_prefers_primary_llm_answer_when_available(self, sample_claims: JWTClaims) -> None:
+        from orchestration.routes.query import _run_graph_and_cache_explanation
+
+        async def _run() -> None:
+            request_id = str(uuid4())
+            queue = get_stream_queue()
+            queue.create(request_id, owner_user_id=sample_claims.sub)
+
+            with patch("orchestration.routes.query.invoke_query_graph") as mock_invoke, patch(
+                "orchestration.routes.query._safe_generate_chat_answer",
+                return_value="Cau tra loi tu OpenAI",
+            ):
+                mock_invoke.return_value = {
+                    "sql_result": [{"metric_value": 123}],
+                    "generated_sql": "SELECT 123 AS metric_value",
+                    "final_response": "stub",
+                }
+                await _run_graph_and_cache_explanation(
+                    request_id=request_id,
+                    query="Cho toi tom tat ngan gon",
+                    session_id=str(uuid4()),
+                    principal=sample_claims,
+                    cerbos_client=MagicMock(),
+                    trace_id=str(uuid4()),
+                )
+
+            done_events = [event for event in queue.drain(request_id) if event.type == SseEventType.DONE]
+            assert done_events
+            assert done_events[0].data["answer"] == "Cau tra loi tu OpenAI"
 
         asyncio.run(_run())
 
@@ -862,6 +978,7 @@ class TestRuntimeSecurityWiring:
                     query="Show employee notes",
                     session_id=str(uuid4()),
                     principal=sample_claims,
+                    cerbos_client=MagicMock(),
                     trace_id=str(uuid4()),
                 )
 
@@ -893,6 +1010,7 @@ class TestRuntimeSecurityWiring:
                     query="Show rows",
                     session_id=str(uuid4()),
                     principal=sample_claims,
+                    cerbos_client=MagicMock(),
                     trace_id=str(uuid4()),
                     execution_settings={"data_source": "sales-primary", "row_limit": 2, "query_timeout_seconds": 30},
                 )
@@ -916,6 +1034,7 @@ class TestRuntimeSecurityWiring:
                 query="Doanh thu thuần tháng 3",
                 session_id=str(uuid4()),
                 principal=sample_claims,
+                cerbos_client=MagicMock(),
                 trace_id=str(uuid4()),
                 semantic_context=[{"term": "doanh thu thuần", "formula": "SUM(NET_REVENUE)"}],
                 memory_context={"summaries": [{"topic": "monthly revenue trend"}]},

@@ -4,8 +4,10 @@ import pytest
 from embedding.client import (
     BGE_MODEL_NAME,
     DIMS,
+    DeterministicEmbeddingClient,
     EmbeddingClient,
     EmbeddingResult,
+    get_embedding_client,
 )
 
 
@@ -42,6 +44,28 @@ class TestEmbeddingClient:
         client = EmbeddingClient()
         with pytest.raises(NotImplementedError):
             await client.embed_batch(["a", "b"])
+
+
+class TestDeterministicEmbeddingClient:
+    @pytest.mark.anyio
+    async def test_embed_returns_normalized_vector(self) -> None:
+        client = DeterministicEmbeddingClient()
+        result = await client.embed("doanh thu thuần theo khu vực")
+        assert result.model == BGE_MODEL_NAME
+        assert result.dimensions == DIMS
+        assert len(result.vector) == DIMS
+        assert any(component != 0.0 for component in result.vector)
+
+    @pytest.mark.anyio
+    async def test_same_input_produces_same_vector(self) -> None:
+        client = DeterministicEmbeddingClient()
+        left = await client.embed("policy revenue approval")
+        right = await client.embed("policy revenue approval")
+        assert left.vector == right.vector
+
+    def test_get_embedding_client_returns_concrete_client(self) -> None:
+        client = get_embedding_client()
+        assert isinstance(client, DeterministicEmbeddingClient)
 
 
 class TestEmbeddingResult:

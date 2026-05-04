@@ -57,6 +57,28 @@ npm install
 Repo có file mẫu [`.env.example`](../.env.example).
 
 Trong local dev, phần lớn biến môi trường được bơm từ Vault khi chạy `make infra-up`.
+Nếu muốn bật chatbot với OpenAI là mặc định, tạo thêm `.env.local` ở root repo và điền:
+
+```dotenv
+OPENAI_API_KEY=your-key-here
+OPENAI_MODEL=gpt-4.1-mini
+OPENAI_API_BASE_URL=https://api.openai.com/v1
+AIAL_LOCAL_AUTH_SECRET=aial-local-dev-secret
+AIAL_LOCAL_ADMIN_USERNAME=admin
+AIAL_LOCAL_ADMIN_PASSWORD=admin123!
+```
+
+Gemini là tùy chọn fallback:
+
+```dotenv
+GEMINI_API_KEY=your-gemini-key-here
+GEMINI_MODEL=gemini-2.0-flash
+GEMINI_API_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+```
+
+`start-local.ps1` sẽ tự nạp `.env.local` khi khởi động backend.
+Frontend giờ được ép chạy ở `http://localhost:3000` trên `127.0.0.1` với `strictPort`.
+Nếu cổng `3000` đang bị process khác chiếm, frontend sẽ fail fast thay vì tự nhảy sang cổng khác.
 
 Các biến quan trọng:
 
@@ -64,7 +86,16 @@ Các biến quan trọng:
 - `CERBOS_URL`
 - `REDIS_URL`
 - `DATABASE_URL`
+- `AIAL_CONFIG_CATALOG_PERSISTENCE`
+- `AIAL_CONFIG_CATALOG_SCHEMA`
 - `WEAVIATE_URL`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `AIAL_LOCAL_AUTH_SECRET`
+- `AIAL_LOCAL_ADMIN_USERNAME`
+- `AIAL_LOCAL_ADMIN_PASSWORD`
+- `GEMINI_API_KEY`
+- `GEMINI_MODEL`
 - `AIAL_KEYCLOAK_CLIENT_SECRET`
 - `AIAL_ORACLE_USERNAME`
 - `AIAL_ORACLE_PASSWORD`
@@ -114,6 +145,34 @@ Bạn có thể chạy `docker compose` trực tiếp, nhưng sẽ phải tự x
 - init Weaviate schema
 
 Do đó, dùng `make infra-up` vẫn là cách nên dùng nhất.
+
+### Cách đơn giản hơn trên Windows PowerShell
+
+Repo đã có script:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
+```
+
+Script này sẽ:
+
+- start Vault dev
+- seed secret dev vào Vault
+- sinh `.env.infra`
+- dựng Postgres, Redis, Weaviate, OpenLDAP, Keycloak, Cerbos, Kong, observability
+- sinh `infra/kong/kong.yml` từ public key của Keycloak
+- start backend `:8090`
+- start frontend `:3000`
+- bật local login mặc định `admin / admin123!`
+
+Các mode hữu ích:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -InfraOnly
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -BackendOnly
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -FrontendOnly
+powershell -ExecutionPolicy Bypass -File .\scripts\stop-local.ps1
+```
 
 ## 6. Chạy backend orchestration
 
@@ -197,7 +256,7 @@ npm run test
 Ví dụ chạy focused:
 
 ```powershell
-npm run test -- useSSEStream.test.ts ExportResultsConsole.test.tsx Epic5BWorkspace.test.tsx
+npm run test -- useSSEStream.test.ts ChatAssistantConsole.test.tsx Epic5BWorkspace.test.tsx
 ```
 
 ## 10. Luồng khởi động khuyến nghị
@@ -208,6 +267,32 @@ Trình tự khởi động mỗi ngày:
 2. chạy backend orchestration ở port `8090`
 3. chạy frontend `apps/chat`
 4. mở `http://localhost:3000`
+
+## 12. Local login và Oracle sample data
+
+Bạn có thể login local bằng:
+
+- username: `admin`
+- password: `admin123!`
+
+Ngoài SSO Keycloak, màn login hiện đã có form `user/pass`.
+Admin local có thể tạo thêm local users ngay trong panel `Document Admin`.
+
+Để tạo dữ liệu Oracle mẫu cho môi trường `FREE`, chạy:
+
+```powershell
+sqlplus system/<password>@//localhost:1521/FREE @docs/sql/oracle-free-system-sample.sql
+```
+
+Script sẽ tạo:
+
+- `AIAL_REGION_DIM`
+- `AIAL_CHANNEL_DIM`
+- `AIAL_PRODUCT_DIM`
+- `AIAL_SALES_FACT`
+- `AIAL_BUDGET_FACT`
+- `AIAL_DOCUMENT_CATALOG`
+- view `AIAL_SALES_DAILY_V`
 
 ## 11. Sự cố thường gặp
 
@@ -274,3 +359,15 @@ Và hỗ trợ import 1 lần cho cả:
 qua endpoint:
 
 - `POST /v1/admin/config-catalog/import`
+
+Neu muon config catalog ben vung qua restart process, bat them:
+
+- `AIAL_CONFIG_CATALOG_PERSISTENCE=postgres`
+- `AIAL_CONFIG_CATALOG_SCHEMA=public`
+
+Khi orchestration service khoi dong voi `DATABASE_URL` hop le, backend se tu tao cac bang:
+
+- `catalog_roles`
+- `catalog_data_sources`
+- `semantic_metric_versions`
+- `semantic_metric_heads`

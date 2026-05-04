@@ -25,11 +25,13 @@ from aial_shared.auth.keycloak import (
     decode_jwt,
     validate_token_claims,
 )
+from aial_shared.auth.local_tokens import LOCAL_AUTH_ISSUER, decode_local_token, peek_token_issuer
 
 logger = logging.getLogger(__name__)
 
 _ISSUER = os.environ.get("KEYCLOAK_ISSUER", "http://localhost:8080/realms/aial")
 _CERBOS_URL = os.environ.get("CERBOS_URL", "http://localhost:3592")
+_LOCAL_AUTH_SECRET = os.environ.get("AIAL_LOCAL_AUTH_SECRET", "aial-local-dev-secret")
 
 
 @lru_cache(maxsize=1)
@@ -54,9 +56,20 @@ async def get_current_user(request: Request) -> JWTClaims:
 
     try:
         loop = asyncio.get_running_loop()
-        raw_claims = await loop.run_in_executor(
-            None, lambda: decode_jwt(token, issuer=_ISSUER, verify=True)
-        )
+        try:
+            issuer = await loop.run_in_executor(None, lambda: peek_token_issuer(token))
+        except Exception:
+            issuer = None
+        if issuer == LOCAL_AUTH_ISSUER:
+            raw_claims = await loop.run_in_executor(
+                None,
+                lambda: decode_local_token(token, secret=_LOCAL_AUTH_SECRET, token_use="access"),
+            )
+        else:
+            raw_claims = await loop.run_in_executor(
+                None,
+                lambda: decode_jwt(token, issuer=_ISSUER, verify=True),
+            )
     except Exception as exc:
         logger.warning("JWT validation failed: %s", exc)
         raise HTTPException(status_code=401, detail="Invalid token") from exc

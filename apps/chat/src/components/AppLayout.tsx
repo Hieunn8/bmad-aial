@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useAuth } from '../auth/AuthProvider';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -16,6 +17,10 @@ const navItemStyle: React.CSSProperties = {
 };
 
 export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
+  const auth = useAuth();
+  const roles = auth.session?.claims.roles ?? [];
+  const canManageDocuments = roles.includes('admin') || roles.includes('data_owner');
+
   return (
     <div
       style={{
@@ -65,8 +70,26 @@ export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
             <div style={{ fontSize: '0.82rem', color: 'var(--color-neutral-500)' }}>Epic 5B + 6 workspace</div>
           </div>
         </div>
-        <div style={{ color: 'var(--color-neutral-500)', fontSize: '0.88rem' }}>
-          Semantic governance / Memory recall / Export reporting
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ color: 'var(--color-neutral-500)', fontSize: '0.88rem', textAlign: 'right' }}>
+            <div>{auth.session?.claims.name ?? auth.session?.claims.email ?? 'Guest'}</div>
+            <div>{roles.join(', ') || 'user'}</div>
+          </div>
+          <button
+            type="button"
+            onClick={auth.logout}
+            style={{
+              border: '1px solid rgba(117, 94, 60, 0.16)',
+              borderRadius: '999px',
+              padding: '0.55rem 0.9rem',
+              background: 'rgba(255,255,255,0.82)',
+              cursor: 'pointer',
+              color: 'var(--color-neutral-700)',
+              fontWeight: 600,
+            }}
+          >
+            Logout
+          </button>
         </div>
       </header>
 
@@ -99,7 +122,8 @@ export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
               role="list"
               style={{ margin: '0.7rem 0 0', padding: 0, listStyle: 'none', display: 'grid', gap: '0.55rem' }}
             >
-              <li><a href="#export-studio" style={navItemStyle}>Export studio</a></li>
+              <li><a href="#chat-assistant" style={navItemStyle}>Chat assistant</a></li>
+              {canManageDocuments ? <li><a href="#document-admin" style={navItemStyle}>Document admin</a></li> : null}
               <li><a href="#semantic-studio" style={navItemStyle}>Semantic studio</a></li>
               <li><a href="#memory-studio" style={navItemStyle}>Memory studio</a></li>
               <li><a href="#history-studio" style={navItemStyle}>History studio</a></li>

@@ -53,6 +53,7 @@ def make_done_event(
     confidence_state: str | None = None,
     conflict_detail: str | None = None,
     provenance: list[dict[str, Any]] | None = None,
+    sources: list[dict[str, Any]] | None = None,
 ) -> SseEvent:
     data: dict[str, Any] = {"trace_id": trace_id, "answer": answer}
     if cache_hit:
@@ -71,6 +72,8 @@ def make_done_event(
         data["conflict_detail"] = conflict_detail
     if provenance is not None:
         data["provenance"] = provenance
+    if sources is not None:
+        data["sources"] = sources
     return SseEvent(type=SseEventType.DONE, data=data)
 
 

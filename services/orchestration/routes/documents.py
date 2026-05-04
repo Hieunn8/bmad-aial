@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from rag.ingestion.chunker import DocumentChunker
 from rag.ingestion.metadata import Classification, DocumentMetadata, validate_document_metadata
+from rag.retrieval.weaviate_store import get_weaviate_document_store
 from rag.tasks.ingest import enqueue_sync_index, get_job
 
 from aial_shared.auth.fastapi_deps import get_current_user
@@ -59,6 +60,7 @@ def _parse_classification(value: int) -> Classification | None:
 class DocumentUploadRequest(BaseModel):
     filename: str
     content_text: str = ""
+    source_url: str = ""
     department: str = ""
     classification: int = 0
     source_trust: str = ""
@@ -109,21 +111,37 @@ async def upload_document(
         effective_date=eff_date,
     )
     chunks = _chunker.chunk_text(body.content_text, document_id=document_id, metadata=meta)
-    chunk_texts = [c.chunk_text for c in chunks]
+    if not chunks:
+        return JSONResponse(status_code=400, content={"errors": ["content_text: required, must not be empty"]})
+    try:
+        indexed = await get_weaviate_document_store().index_document(
+            document_id=document_id,
+            filename=body.filename,
+            source_url=body.source_url,
+            uploaded_by=principal.sub,
+            chunks=chunks,
+        )
+    except Exception as exc:
+        return JSONResponse(
+            status_code=502,
+            content={"detail": f"Failed to index document into Weaviate: {exc}"},
+        )
 
-    # Enqueue Celery task: rag.document.sync_index (acks_late=True, reject_on_worker_lost=True)
-    job = enqueue_sync_index(document_id, chunk_texts)
+    # Preserve the existing job contract while doing real synchronous indexing.
+    job = enqueue_sync_index(document_id, [chunk.chunk_text for chunk in chunks])
 
     _documents[document_id] = {
         "document_id": document_id,
         "filename": body.filename,
+        "source_url": body.source_url,
         "department": body.department,
         "classification": body.classification,
         "source_trust": body.source_trust,
         "effective_date": body.effective_date,
-        "chunk_count": len(chunks),
+        "chunk_count": indexed.chunk_count,
         "status": job.status.value,
         "uploaded_by": principal.sub,
+        "indexed_at": indexed.indexed_at,
     }
 
     # Audit: document uploaded
@@ -132,8 +150,8 @@ async def upload_document(
     return JSONResponse(status_code=202, content={
         "document_id": document_id,
         "status": job.status.value,
-        "chunk_count": len(chunks),
-        "message": "Document enqueued for indexing (task: rag.document.sync_index)",
+        "chunk_count": indexed.chunk_count,
+        "message": "Document indexed into Weaviate",
     })
 
 

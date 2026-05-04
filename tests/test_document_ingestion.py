@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-
-from aial_shared.auth.keycloak import JWTClaims
 from rag.ingestion.chunker import DocumentChunk, DocumentChunker
 from rag.ingestion.metadata import (
     Classification,
     DocumentMetadata,
     validate_document_metadata,
 )
+from rag.retrieval.weaviate_store import IndexedDocument
+
+from aial_shared.auth.keycloak import JWTClaims
 
 
 @pytest.fixture()
@@ -32,13 +33,49 @@ def client() -> TestClient:
     return TestClient(app)
 
 
-def _auth(mock_cerbos_cls: MagicMock, mock_validate: MagicMock, mock_decode: MagicMock, claims: JWTClaims) -> None:
-    mock_decode.return_value = {"sub": claims.sub, "email": claims.email,
-                                "department": claims.department, "roles": list(claims.roles), "clearance": claims.clearance}
+def _auth(
+    mock_cerbos_cls: MagicMock,
+    mock_validate: MagicMock,
+    mock_decode: MagicMock,
+    claims: JWTClaims,
+) -> None:
+    mock_decode.return_value = {
+        "sub": claims.sub,
+        "email": claims.email,
+        "department": claims.department,
+        "roles": list(claims.roles),
+        "clearance": claims.clearance,
+    }
     mock_validate.return_value = claims
     mock_cerbos = MagicMock()
     mock_cerbos.check.return_value = MagicMock(allowed=True)
     mock_cerbos_cls.return_value = mock_cerbos
+
+
+@pytest.fixture(autouse=True)
+def mock_document_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Store:
+        async def index_document(
+            self,
+            *,
+            document_id: str,
+            filename: str,
+            source_url: str,
+            uploaded_by: str,
+            chunks: list[object],
+        ) -> IndexedDocument:
+            del source_url, uploaded_by
+            return IndexedDocument(
+                document_id=document_id,
+                filename=filename,
+                chunk_count=len(chunks),
+                indexed_at="2026-05-04T00:00:00+00:00",
+            )
+
+    monkeypatch.setattr(
+        "orchestration.routes.documents.get_weaviate_document_store",
+        lambda: _Store(),
+    )
 
 
 # ---------------------------------------------------------------------------

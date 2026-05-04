@@ -50,10 +50,14 @@ plugins:
       limit_by: consumer
     route: chat-query
 
-# __KONG_JWT_CONSUMERS__ — replaced at boot by infra/scripts/configure-kong-jwt.sh
+# __KONG_JWT_CONSUMERS__ ??? replaced at boot by infra/scripts/configure-kong-jwt.sh
 consumers:
   - username: aial-service
     jwt_secrets:
       - key: http://localhost:8080/realms/aial
         algorithm: RS256
-        rsa_public_key: "__KEYCLOAK_RSA_PUBLIC_KEY__"
+        rsa_public_key: |-
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtkzw5LEcc+SC9CoWXistrAQGPQBBEi6t7NzF1+Q2aCqGM2BHdRSiJA6sSV5U1+i4aXLXguaFG2XeVeYfnGyFKo/qoyevN0d82gMrmexQ0hcYRrIRsGLIgClLpbksk2iDMwD2TB88ad3gzYi2I3F7LURqrJtWpwDI/VHnIw8Sh8N9CnXgolltBmVXwKTBLg7zD8hOaML3Spv3OoNQIsEr9QpgcVkSPLmj7Iz01tx0WsTMQvVCpmzV1cD1W4K/Y9TUy2/lQa9XF5RjQ6onbs7UvUijMa2wf2W3Fnh86chmVY3FtB8IDLIQi9Vg8D8LSawDUblvrMD9GRZMQ8KH97Y2pwIDAQAB
+          -----END PUBLIC KEY-----
+

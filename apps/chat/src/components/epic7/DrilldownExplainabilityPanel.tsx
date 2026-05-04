@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartReveal, useChartTheme } from '@aial/ui/chart-reveal';
 import { ExportJobStatus } from '@aial/ui/export-job-status';
+import { apiRequest } from '../../api/client';
 
 type DrilldownRow = {
   label: string;
@@ -35,30 +36,6 @@ type DrilldownExplainabilityResult = {
   business_labels_mapped?: boolean;
   explainability_job?: ExplainabilityJobHandle;
 };
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
-
-async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  });
-  if (!response.ok) {
-    let detail = response.statusText;
-    try {
-      const body = await response.json() as { detail?: string };
-      detail = body.detail ?? detail;
-    } catch {
-      // ignore
-    }
-    throw new Error(detail);
-  }
-  return response.json() as Promise<T>;
-}
 
 const cardStyle: React.CSSProperties = {
   background: 'rgba(255,255,255,0.78)',

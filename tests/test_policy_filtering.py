@@ -5,10 +5,10 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
+from rag.retrieval.policy_filter import PolicyDecision, PolicyEnforcementService
+from rag.retrieval.weaviate_filter import WeaviateFilterBuilder
 
 from aial_shared.auth.keycloak import JWTClaims
-from rag.retrieval.policy_filter import PolicyEnforcementService, PolicyDecision
-from rag.retrieval.weaviate_filter import WeaviateFilterBuilder
 
 
 @pytest.fixture()

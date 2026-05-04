@@ -1,9 +1,12 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { ExportResultsConsole } from '../epic6/ExportResultsConsole';
+import { ChatAssistantConsole } from '../epic6/ChatAssistantConsole';
 import { AnomalyAlertsPanel } from '../epic7/AnomalyAlertsPanel';
 import { DrilldownExplainabilityPanel } from '../epic7/DrilldownExplainabilityPanel';
 import { ForecastStudio } from '../epic7/ForecastStudio';
 import { TrendAnalysisPanel } from '../epic7/TrendAnalysisPanel';
+import { apiRequest } from '../../api/client';
+import { useAuth } from '../../auth/AuthProvider';
+import { DocumentAdminPanel } from '../rag/DocumentAdminPanel';
 
 type Metric = {
   term: string;
@@ -79,36 +82,6 @@ type MemoryContextBundle = {
   threshold: number;
 };
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
-
-async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  });
-
-  if (!response.ok) {
-    let detail = response.statusText;
-    try {
-      const body = await response.json() as { detail?: string };
-      detail = body.detail ?? detail;
-    } catch {
-      // ignore
-    }
-    throw new Error(detail);
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return response.json() as Promise<T>;
-}
-
 const workspaceShell: React.CSSProperties = {
   minHeight: '100%',
   background:
@@ -170,6 +143,9 @@ function formatDate(value: string): string {
 }
 
 export function Epic5BWorkspace(): React.JSX.Element {
+  const auth = useAuth();
+  const roles = auth.session?.claims.roles ?? [];
+  const canManageDocuments = roles.includes('admin') || roles.includes('data_owner');
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [selectedMetric, setSelectedMetric] = useState<string>('doanh thu thuần');
   const [versions, setVersions] = useState<MetricVersion[]>([]);
@@ -446,8 +422,14 @@ export function Epic5BWorkspace(): React.JSX.Element {
       )}
 
       <div style={{ marginTop: '1.4rem' }}>
-        <ExportResultsConsole />
+        <ChatAssistantConsole />
       </div>
+
+      {canManageDocuments ? (
+        <div style={{ marginTop: '1.4rem' }}>
+          <DocumentAdminPanel />
+        </div>
+      ) : null}
 
       <div style={{ marginTop: '1.4rem' }}>
         <ForecastStudio />

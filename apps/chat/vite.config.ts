@@ -21,10 +21,14 @@ export default defineConfig({
     },
   },
   server: {
+    host: '127.0.0.1',
     port: 3000,
+    strictPort: true,
     proxy: {
       '/v1': {
-        target: 'http://localhost:8000',
+        // Local dev proxies API traffic straight to FastAPI because Kong only
+        // exposes a subset of routes in this workspace.
+        target: 'http://127.0.0.1:8090',
         changeOrigin: true,
       },
     },

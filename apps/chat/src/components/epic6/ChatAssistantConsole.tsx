@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { SSEEvent } from '@aial/types';
+import type { SSEEvent, SSESource } from '@aial/types';
 import { ExportConfirmationBar } from '@aial/ui/export-confirmation-bar';
 import { ConfidenceBreakdownCard } from '@aial/ui/confidence-breakdown-card';
 import { ProvenanceDrawer, ProvenanceSection } from '@aial/ui/provenance-drawer';
 import { useSSEStream } from '../../hooks/useSSEStream';
 import { ProgressiveDataTable } from '../streaming/ProgressiveDataTable';
+import { API_BASE, apiRequest } from '../../api/client';
 
 type ExportFormat = 'csv' | 'xlsx' | 'pdf';
 
@@ -48,36 +49,6 @@ type ExportJobStatus = {
   expires_at?: string | null;
   error?: string | null;
 };
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
-
-async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  });
-
-  if (!response.ok) {
-    let detail = response.statusText;
-    try {
-      const body = (await response.json()) as { detail?: string };
-      detail = body.detail ?? detail;
-    } catch {
-      // ignore
-    }
-    throw new Error(detail);
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return response.json() as Promise<T>;
-}
 
 const cardStyle: React.CSSProperties = {
   background: 'rgba(255,255,255,0.78)',
@@ -135,6 +106,11 @@ type CrossDomainConflictState = {
   }>;
 };
 
+type CitationDrawerState = {
+  open: boolean;
+  sources: SSESource[];
+};
+
 const initialCacheState: CacheState = {
   cacheHit: false,
   freshnessIndicator: null,
@@ -153,7 +129,7 @@ function buildCacheState(source?: Partial<QueryHandle> | Partial<Extract<SSEEven
   };
 }
 
-export function ExportResultsConsole(): React.JSX.Element {
+export function ChatAssistantConsole(): React.JSX.Element {
   const [query, setQuery] = useState('Doanh thu HCM thang nay');
   const [requestId, setRequestId] = useState<string | null>(null);
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
@@ -172,6 +148,10 @@ export function ExportResultsConsole(): React.JSX.Element {
     detail: null,
     provenance: [],
   });
+  const [citationState, setCitationState] = useState<CitationDrawerState>({
+    open: false,
+    sources: [],
+  });
 
   const handleStreamEvent = useCallback((event: SSEEvent) => {
     if (event.type === 'row') {
@@ -180,6 +160,10 @@ export function ExportResultsConsole(): React.JSX.Element {
     }
     if (event.type === 'done') {
       setAnswer(event.answer ?? '');
+      setCitationState({
+        open: false,
+        sources: event.sources ?? [],
+      });
       setCacheState((current) => ({
         ...current,
         ...buildCacheState(event),
@@ -256,6 +240,7 @@ export function ExportResultsConsole(): React.JSX.Element {
     setAnswer('');
     setCacheState(initialCacheState);
     setConflictState({ open: false, detail: null, provenance: [] });
+    setCitationState({ open: false, sources: [] });
     reset();
 
     try {
@@ -314,12 +299,12 @@ export function ExportResultsConsole(): React.JSX.Element {
   }
 
   return (
-    <section id="export-studio" style={cardStyle}>
+    <section id="chat-assistant" style={cardStyle}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Export Results</h2>
+          <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Chat Assistant</h2>
           <p style={{ margin: '0.35rem 0 0', color: 'var(--color-neutral-600)', lineHeight: 1.6 }}>
-            Run a governed query, stream rows back, then export the secured result to Excel, PDF, or CSV.
+            Ask a governed question, receive a text answer with evidence, then export the structured result only if needed.
           </p>
         </div>
         <div style={{ color: 'var(--color-neutral-500)', fontSize: '0.88rem' }}>
@@ -327,25 +312,15 @@ export function ExportResultsConsole(): React.JSX.Element {
         </div>
       </div>
 
-      <div style={{ marginTop: '1rem', display: 'grid', gap: '0.85rem', gridTemplateColumns: '1fr auto auto' }}>
+      <div style={{ marginTop: '1rem', display: 'grid', gap: '0.85rem', gridTemplateColumns: '1fr auto' }}>
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           style={inputStyle}
-          placeholder="Nhap cau hoi de lay du lieu can export"
+          placeholder="Nhap cau hoi can giai dap tu du lieu va tai lieu noi bo"
         />
-        <select
-          value={exportFormat}
-          onChange={(event) => setExportFormat(event.target.value as ExportFormat)}
-          style={{ ...inputStyle, width: '10rem' }}
-          aria-label="Export format"
-        >
-          <option value="xlsx">Excel</option>
-          <option value="pdf">PDF</option>
-          <option value="csv">CSV</option>
-        </select>
         <button type="button" style={buttonStyle} onClick={() => void handleRunQuery()}>
-          Run Query
+          Ask AI
         </button>
       </div>
 
@@ -400,28 +375,106 @@ export function ExportResultsConsole(): React.JSX.Element {
         </div>
       )}
 
-      <div style={{ marginTop: '1rem', display: 'grid', gap: '1rem', gridTemplateColumns: '1.3fr 0.9fr' }}>
-        <div style={{ borderRadius: '1rem', background: 'rgba(246,241,232,0.82)', padding: '1rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '0.8rem' }}>
-            <strong>Query rows</strong>
-            <span style={{ color: 'var(--color-neutral-500)', fontSize: '0.88rem' }}>{visibleRowCount} rows buffered</span>
+      <div style={{ marginTop: '1rem', display: 'grid', gap: '1rem', gridTemplateColumns: '1.35fr 0.85fr' }}>
+        <div style={{ display: 'grid', gap: '0.85rem' }}>
+          <div style={{ borderRadius: '1rem', background: 'rgba(255,255,255,0.88)', padding: '1.05rem', border: '1px solid rgba(117, 94, 60, 0.14)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+              <div>
+                <div style={{ fontWeight: 700 }}>Answer</div>
+                <div style={{ marginTop: '0.25rem', color: 'var(--color-neutral-500)', fontSize: '0.88rem' }}>
+                  Natural-language response synthesized from the current stream.
+                </div>
+              </div>
+              {citationState.sources.length > 0 ? (
+                <button
+                  type="button"
+                  style={ghostButtonStyle}
+                  onClick={() => setCitationState((current) => ({ ...current, open: true }))}
+                >
+                  View citations
+                </button>
+              ) : null}
+            </div>
+            <p style={{ margin: '0.8rem 0 0', color: 'var(--color-neutral-700)', lineHeight: 1.7, minHeight: '7rem' }}>
+              {answer || 'Cau tra loi se xuat hien khi stream done event ve toi client.'}
+            </p>
+            {cacheState.cacheTimestamp ? (
+              <div style={{ marginTop: '0.7rem', color: 'var(--color-neutral-500)', fontSize: '0.84rem' }}>
+                Cached at {cacheState.cacheTimestamp}
+              </div>
+            ) : null}
           </div>
-          {rows.length === 0 ? (
-            <div style={{ color: 'var(--color-neutral-500)' }}>No rows streamed yet.</div>
-          ) : (
-            <ProgressiveDataTable rows={rows} />
-          )}
+
+          <div style={{ borderRadius: '1rem', background: 'rgba(246,241,232,0.82)', padding: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '0.8rem' }}>
+              <strong>Structured rows</strong>
+              <span style={{ color: 'var(--color-neutral-500)', fontSize: '0.88rem' }}>{visibleRowCount} rows buffered</span>
+            </div>
+            {rows.length === 0 ? (
+              <div style={{ color: 'var(--color-neutral-500)' }}>No structured rows streamed yet.</div>
+            ) : (
+              <ProgressiveDataTable rows={rows} />
+            )}
+          </div>
         </div>
 
         <div style={{ display: 'grid', gap: '0.85rem' }}>
           <div style={{ borderRadius: '1rem', background: 'rgba(255,255,255,0.78)', padding: '1rem', border: '1px solid rgba(117, 94, 60, 0.14)' }}>
-            <div style={{ fontWeight: 700 }}>Export status</div>
+            <div style={{ fontWeight: 700 }}>Evidence</div>
+            <div style={{ marginTop: '0.45rem', color: 'var(--color-neutral-600)', lineHeight: 1.6 }}>
+              {citationState.sources.length > 0
+                ? `${citationState.sources.length} document citation(s) attached to this answer.`
+                : 'No document citations attached to this answer yet.'}
+            </div>
+            {citationState.sources.length > 0 ? (
+              <div style={{ marginTop: '0.8rem', display: 'grid', gap: '0.65rem' }}>
+                {citationState.sources.slice(0, 3).map((source) => (
+                  <div
+                    key={`${source.doc_id}-${source.page}-${source.title}`}
+                    style={{
+                      borderRadius: '0.9rem',
+                      background: 'rgba(15, 118, 110, 0.08)',
+                      padding: '0.75rem 0.85rem',
+                    }}
+                  >
+                    <div style={{ fontWeight: 700 }}>{source.title}</div>
+                    <div style={{ marginTop: '0.2rem', color: 'var(--color-neutral-500)', fontSize: '0.86rem' }}>
+                      Document {source.doc_id} · Page {source.page}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div style={{ borderRadius: '1rem', background: 'rgba(255,255,255,0.78)', padding: '1rem', border: '1px solid rgba(117, 94, 60, 0.14)' }}>
+            <div style={{ fontWeight: 700 }}>Export report</div>
             <div style={{ marginTop: '0.45rem', color: 'var(--color-neutral-600)', lineHeight: 1.6 }}>
               {jobStatus?.status === 'completed'
                 ? `Ready for download until ${jobStatus.expires_at ?? '24h'}`
                 : jobHandle?.status === 'queued'
                   ? `Queued on ${jobHandle.queue_name}`
-                  : 'No active export job'}
+                  : 'Optional step after reviewing the answer and rows.'}
+            </div>
+            <div style={{ marginTop: '0.8rem', display: 'grid', gap: '0.8rem' }}>
+              <select
+                value={exportFormat}
+                onChange={(event) => setExportFormat(event.target.value as ExportFormat)}
+                style={inputStyle}
+                aria-label="Export format"
+              >
+                <option value="xlsx">Excel</option>
+                <option value="pdf">PDF</option>
+                <option value="csv">CSV</option>
+              </select>
+              <button
+                type="button"
+                style={ghostButtonStyle}
+                onClick={() => void handlePrepareExport()}
+                disabled={!requestId || rows.length === 0}
+              >
+                Generate report
+              </button>
             </div>
             {jobStatus?.download_url ? (
               <a
@@ -430,18 +483,6 @@ export function ExportResultsConsole(): React.JSX.Element {
               >
                 Download report
               </a>
-            ) : null}
-          </div>
-
-          <div style={{ borderRadius: '1rem', background: 'rgba(255,255,255,0.78)', padding: '1rem', border: '1px solid rgba(117, 94, 60, 0.14)' }}>
-            <div style={{ fontWeight: 700 }}>Answer summary</div>
-            <p style={{ margin: '0.45rem 0 0', color: 'var(--color-neutral-700)', lineHeight: 1.6 }}>
-              {answer || 'Answer se xuat hien khi stream done event ve toi client.'}
-            </p>
-            {cacheState.cacheTimestamp ? (
-              <div style={{ marginTop: '0.7rem', color: 'var(--color-neutral-500)', fontSize: '0.84rem' }}>
-                Cached at {cacheState.cacheTimestamp}
-              </div>
             ) : null}
           </div>
 
@@ -465,15 +506,6 @@ export function ExportResultsConsole(): React.JSX.Element {
               ]}
             />
           ) : null}
-
-          <button
-            type="button"
-            style={ghostButtonStyle}
-            onClick={() => void handlePrepareExport()}
-            disabled={!requestId || rows.length === 0}
-          >
-            Generate Report
-          </button>
         </div>
       </div>
 
@@ -486,6 +518,35 @@ export function ExportResultsConsole(): React.JSX.Element {
           onCancel={() => setShowConfirmation(false)}
         />
       ) : null}
+
+      <ProvenanceDrawer
+        open={citationState.open}
+        onClose={() => setCitationState((current) => ({ ...current, open: false }))}
+      >
+        <ProvenanceSection title="Document citations">
+          <div style={{ display: 'grid', gap: '0.75rem' }}>
+            {citationState.sources.map((source) => (
+              <div
+                key={`${source.doc_id}-${source.page}-${source.title}`}
+                style={{
+                  borderRadius: '0.9rem',
+                  border: '1px solid rgba(117, 94, 60, 0.16)',
+                  background: 'rgba(255,255,255,0.78)',
+                  padding: '0.85rem 0.9rem',
+                }}
+              >
+                <div style={{ fontWeight: 700 }}>{source.title}</div>
+                <div style={{ marginTop: '0.25rem', color: 'var(--color-neutral-600)', fontSize: '0.92rem' }}>
+                  Document ID: {source.doc_id}
+                </div>
+                <div style={{ marginTop: '0.35rem' }}>
+                  Page <strong>{source.page}</strong>
+                </div>
+              </div>
+            ))}
+          </div>
+        </ProvenanceSection>
+      </ProvenanceDrawer>
 
       <ProvenanceDrawer
         open={conflictState.open}

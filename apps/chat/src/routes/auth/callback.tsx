@@ -1,51 +1,54 @@
-/**
- * Auth callback route — handles Keycloak OIDC redirect
- * Exchanges authorization code for tokens
- */
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useAuth } from '../../auth/AuthProvider';
 
 export const Route = createFileRoute('/auth/callback')({
   component: AuthCallbackPage,
 });
 
 function AuthCallbackPage(): React.JSX.Element {
+  const auth = useAuth();
   const navigate = useNavigate();
+  const [message, setMessage] = useState('Dang xac thuc, vui long cho...');
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    const error = params.get('error');
-    const returnedState = params.get('state');
-    const storedState = sessionStorage.getItem('oidc_state');
+    let active = true;
 
-    if (error) {
-      void navigate({ to: '/login' });
-      return;
-    }
+    const run = async (): Promise<void> => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('error')) {
+        setMessage('Dang nhap that bai. Dang quay lai man login...');
+        void navigate({ to: '/login' });
+        return;
+      }
 
-    // Validate OIDC state parameter to prevent CSRF against the auth flow
-    if (!returnedState || returnedState !== storedState) {
-      void navigate({ to: '/login' });
-      return;
-    }
+      try {
+        await auth.handleAuthCallback(window.location.search);
+        if (!active) {
+          return;
+        }
+        void navigate({ to: '/' });
+      } catch {
+        if (active) {
+          setMessage('Khong the hoan tat dang nhap. Dang quay lai man login...');
+          window.setTimeout(() => {
+            void navigate({ to: '/login' });
+          }, 1200);
+        }
+      }
+    };
 
-    sessionStorage.removeItem('oidc_state');
-
-    if (!code) {
-      void navigate({ to: '/login' });
-      return;
-    }
-
-    // STUB: Token exchange to be implemented in Epic 2A
-    void navigate({ to: '/' });
-  }, [navigate]);
+    void run();
+    return () => {
+      active = false;
+    };
+  }, [auth, navigate]);
 
   return (
     <div
       role="status"
       aria-live="polite"
-      aria-label="Đang xác thực..."
+      aria-label="Dang xac thuc"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -55,7 +58,7 @@ function AuthCallbackPage(): React.JSX.Element {
         color: 'var(--color-neutral-600)',
       }}
     >
-      <p>Đang xác thực, vui lòng chờ...</p>
+      <p>{message}</p>
     </div>
   );
 }

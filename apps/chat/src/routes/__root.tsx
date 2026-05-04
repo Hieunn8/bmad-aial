@@ -4,18 +4,32 @@
  * UX-DR22: defaultPreload: 'intent' configured here
  */
 import {
-  createRootRoute,
+  createRootRouteWithContext,
   Outlet,
+  useRouterState,
 } from '@tanstack/react-router';
 import { AppErrorBoundary, PageErrorBoundary } from '../components/ErrorBoundaries';
 import { ConnectionStatusBanner } from '../components/streaming/ConnectionStatusBanner';
 import { AppLayout } from '../components/AppLayout';
+import type { AppRouterContext } from '../router-context';
 
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<AppRouterContext>()({
   component: RootComponent,
 });
 
 function RootComponent(): React.JSX.Element {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  if (pathname === '/login' || pathname === '/auth/callback') {
+    return (
+      <AppErrorBoundary>
+        <PageErrorBoundary>
+          <Outlet />
+        </PageErrorBoundary>
+      </AppErrorBoundary>
+    );
+  }
   return (
     <AppErrorBoundary>
       <AppLayout>

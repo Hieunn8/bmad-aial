@@ -12,6 +12,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SSEEvent, SSEErrorEvent, StreamState, StreamStatus } from '@aial/types';
+import { ensureFreshSession } from '../auth/session';
 
 // ============================================================
 // Types
@@ -124,12 +125,16 @@ export function useSSEStream<T extends SSEEvent = SSEEvent>(
       setState({ status: 'connecting', events: [], error: null, traceId: null } as StreamState<T>);
     }
 
-    const headers: Record<string, string> = { Accept: 'text/event-stream' };
-    if (tokenRef.current) {
-      headers['Authorization'] = `Bearer ${tokenRef.current}`;
-    }
+    void ensureFreshSession()
+      .then((session) => {
+        const headers: Record<string, string> = { Accept: 'text/event-stream' };
+        const resolvedToken = tokenRef.current ?? session?.accessToken;
+        if (resolvedToken) {
+          headers['Authorization'] = `Bearer ${resolvedToken}`;
+        }
 
-    fetch(urlRef.current, { headers, signal: controller.signal })
+        return fetch(urlRef.current, { headers, signal: controller.signal });
+      })
       .then(async response => {
         if (!response.ok) throw new Error(`SSE error: ${response.status}`);
         if (!response.body) throw new Error('No response body');
