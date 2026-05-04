@@ -57,6 +57,16 @@ const INITIAL_STATE: StreamState = {
   traceId: null,
 };
 
+class SSEHttpError extends Error {
+  status: number;
+
+  constructor(status: number, message?: string) {
+    super(message ?? `SSE error: ${status}`);
+    this.name = 'SSEHttpError';
+    this.status = status;
+  }
+}
+
 function computeBackoffDelay(attempt: number, baseDelay: number): number {
   // Exponential backoff: baseDelay * 2^attempt, capped at 30s
   const delay = baseDelay * Math.pow(2, attempt);
@@ -136,7 +146,7 @@ export function useSSEStream<T extends SSEEvent = SSEEvent>(
         return fetch(urlRef.current, { headers, signal: controller.signal });
       })
       .then(async response => {
-        if (!response.ok) throw new Error(`SSE error: ${response.status}`);
+        if (!response.ok) throw new SSEHttpError(response.status);
         if (!response.body) throw new Error('No response body');
         if (isMountedRef.current) setStatus('streaming');
 
@@ -195,9 +205,13 @@ export function useSSEStream<T extends SSEEvent = SSEEvent>(
       })
       .catch(err => {
         if ((err as Error).name === 'AbortError') return;
+        const httpStatus = err instanceof SSEHttpError ? err.status : null;
         const errorEvent: SSEErrorEvent = { type: 'error', error_code: 'stream-error', message: (err as Error).message };
         onError?.(errorEvent);
-        if (retryCountRef.current < maxRetries && isMountedRef.current) {
+        const shouldRetry =
+          httpStatus === null ||
+          (httpStatus >= 500 && httpStatus <= 599);
+        if (shouldRetry && retryCountRef.current < maxRetries && isMountedRef.current) {
           const delay = computeBackoffDelay(retryCountRef.current, baseRetryDelay);
           retryCountRef.current += 1;
           retryTimeoutRef.current = setTimeout(() => { if (isMountedRef.current) connect(); }, delay);

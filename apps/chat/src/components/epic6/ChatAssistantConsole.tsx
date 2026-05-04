@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { SSEEvent, SSESource } from '@aial/types';
+import type { SSEErrorEvent, SSEEvent, SSESource } from '@aial/types';
 import { ExportConfirmationBar } from '@aial/ui/export-confirmation-bar';
 import { ConfidenceBreakdownCard } from '@aial/ui/confidence-breakdown-card';
 import { ProvenanceDrawer, ProvenanceSection } from '@aial/ui/provenance-drawer';
@@ -178,10 +178,14 @@ export function ChatAssistantConsole(): React.JSX.Element {
     }
   }, []);
 
+  const handleStreamError = useCallback((streamError: SSEErrorEvent) => {
+    setError(streamError.message);
+  }, []);
+
   const { state: streamState, connect, reset } = useSSEStream<SSEEvent>(streamPath, {
     autoConnect: false,
     onEvent: handleStreamEvent,
-    onError: (streamError) => setError(streamError.message),
+    onError: handleStreamError,
   });
 
   useEffect(() => {
