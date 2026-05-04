@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from difflib import ndiff
 from uuid import uuid4
 
 from orchestration.semantic.glossary import SEED_GLOSSARY
+
+
+def _normalize_str_list(values: list[str] | None) -> list[str]:
+    return [value.strip() for value in values or [] if value.strip()]
 
 
 @dataclass(frozen=True)
@@ -22,6 +26,15 @@ class KpiDefinitionVersion:
     timestamp: datetime
     previous_formula: str | None
     action: str
+    aliases: list[str] = field(default_factory=list)
+    aggregation: str | None = None
+    grain: str | None = None
+    unit: str | None = None
+    dimensions: list[str] = field(default_factory=list)
+    source: dict[str, object] | None = None
+    joins: list[dict[str, str]] = field(default_factory=list)
+    certified_filters: list[str] = field(default_factory=list)
+    security: dict[str, object] | None = None
     rollback_reason: str | None = None
 
     def to_dict(self) -> dict[str, object]:
@@ -36,6 +49,15 @@ class KpiDefinitionVersion:
             "timestamp": self.timestamp.isoformat(),
             "previous_formula": self.previous_formula,
             "action": self.action,
+            "aliases": self.aliases,
+            "aggregation": self.aggregation,
+            "grain": self.grain,
+            "unit": self.unit,
+            "dimensions": self.dimensions,
+            "source": self.source,
+            "joins": self.joins,
+            "certified_filters": self.certified_filters,
+            "security": self.security,
             "rollback_reason": self.rollback_reason,
         }
 
@@ -49,20 +71,35 @@ class SemanticLayerService:
 
     def _seed(self) -> None:
         for entry in SEED_GLOSSARY:
-            version = KpiDefinitionVersion(
-                version_id=str(uuid4()),
-                term=entry["term"],
-                definition=entry["definition"],
-                formula=entry["formula"],
-                owner=entry["owner"],
-                freshness_rule=entry["freshness_rule"],
-                changed_by="system-seed",
-                timestamp=datetime.now(UTC),
-                previous_formula=None,
-                action="seed",
-            )
-            self._versions.setdefault(entry["term"].casefold(), []).append(version)
-            self._active_versions[entry["term"].casefold()] = version.version_id
+            self._store_seed_entry(entry)
+
+    def _store_seed_entry(self, entry: dict[str, object]) -> None:
+        version = KpiDefinitionVersion(
+            version_id=str(uuid4()),
+            term=str(entry["term"]),
+            definition=str(entry["definition"]),
+            formula=str(entry["formula"]),
+            owner=str(entry["owner"]),
+            freshness_rule=str(entry["freshness_rule"]),
+            changed_by="system-seed",
+            timestamp=datetime.now(UTC),
+            previous_formula=None,
+            action="seed",
+            aliases=_normalize_str_list(entry.get("aliases") if isinstance(entry.get("aliases"), list) else None),
+            aggregation=str(entry["aggregation"]).strip() if entry.get("aggregation") else None,
+            grain=str(entry["grain"]).strip() if entry.get("grain") else None,
+            unit=str(entry["unit"]).strip() if entry.get("unit") else None,
+            dimensions=_normalize_str_list(entry.get("dimensions") if isinstance(entry.get("dimensions"), list) else None),
+            source=dict(entry["source"]) if isinstance(entry.get("source"), dict) else None,
+            joins=[dict(join) for join in entry.get("joins", []) if isinstance(join, dict)],
+            certified_filters=_normalize_str_list(
+                entry.get("certified_filters") if isinstance(entry.get("certified_filters"), list) else None
+            ),
+            security=dict(entry["security"]) if isinstance(entry.get("security"), dict) else None,
+        )
+        normalized_term = version.term.casefold()
+        self._versions.setdefault(normalized_term, []).append(version)
+        self._active_versions[normalized_term] = version.version_id
 
     def list_metrics(self) -> list[dict[str, object]]:
         metrics: list[dict[str, object]] = []
@@ -72,11 +109,7 @@ class SemanticLayerService:
                 continue
             metrics.append(
                 {
-                    "term": active.term,
-                    "definition": active.definition,
-                    "formula": active.formula,
-                    "owner": active.owner,
-                    "freshness_rule": active.freshness_rule,
+                    **active.to_dict(),
                     "active_version_id": active.version_id,
                     "version_count": len(self._versions[normalized_term]),
                     "cache_invalidated_at": self._cache_invalidated_at.isoformat(),
@@ -107,6 +140,15 @@ class SemanticLayerService:
         owner: str,
         freshness_rule: str,
         changed_by: str,
+        aliases: list[str] | None = None,
+        aggregation: str | None = None,
+        grain: str | None = None,
+        unit: str | None = None,
+        dimensions: list[str] | None = None,
+        source: dict[str, object] | None = None,
+        joins: list[dict[str, str]] | None = None,
+        certified_filters: list[str] | None = None,
+        security: dict[str, object] | None = None,
     ) -> KpiDefinitionVersion:
         normalized = term.strip().casefold()
         previous = self.get_metric(term)
@@ -121,6 +163,15 @@ class SemanticLayerService:
             timestamp=datetime.now(UTC),
             previous_formula=previous.formula if previous else None,
             action="publish",
+            aliases=_normalize_str_list(aliases),
+            aggregation=aggregation.strip() if aggregation else None,
+            grain=grain.strip() if grain else None,
+            unit=unit.strip() if unit else None,
+            dimensions=_normalize_str_list(dimensions),
+            source=dict(source) if source else None,
+            joins=[dict(join) for join in joins or []],
+            certified_filters=_normalize_str_list(certified_filters),
+            security=dict(security) if security else None,
         )
         self._versions.setdefault(normalized, []).append(version)
         self._active_versions[normalized] = version.version_id
@@ -150,6 +201,15 @@ class SemanticLayerService:
             timestamp=datetime.now(UTC),
             previous_formula=current.formula if current else None,
             action="rollback",
+            aliases=list(target.aliases),
+            aggregation=target.aggregation,
+            grain=target.grain,
+            unit=target.unit,
+            dimensions=list(target.dimensions),
+            source=dict(target.source) if target.source else None,
+            joins=[dict(join) for join in target.joins],
+            certified_filters=list(target.certified_filters),
+            security=dict(target.security) if target.security else None,
             rollback_reason=reason.strip() if reason else None,
         )
         normalized = term.strip().casefold()
@@ -183,7 +243,8 @@ class SemanticLayerService:
         normalized_query = query.casefold()
         matches: list[dict[str, object]] = []
         for metric in self.list_metrics():
-            if str(metric["term"]).casefold() in normalized_query:
+            terms = [str(metric["term"]).casefold(), *(alias.casefold() for alias in metric.get("aliases", []))]
+            if any(term in normalized_query for term in terms):
                 matches.append(metric)
         return matches
 

@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from aial_shared.auth.fastapi_deps import get_current_user
 from aial_shared.auth.keycloak import JWTClaims
+from orchestration.config_catalog import CONFIG_CATALOG_TEMPLATE
 from orchestration.admin_control.user_role_management import (
     RoleDefinition,
     get_user_role_management_service,
@@ -55,6 +56,9 @@ class AuditLogResponse(BaseModel):
 class RoleCreateRequest(BaseModel):
     name: str
     schema_allowlist: list[str]
+    description: str | None = None
+    data_source_names: list[str] = []
+    metric_allowlist: list[str] = []
 
 
 class UserCreateRequest(BaseModel):
@@ -90,6 +94,7 @@ class LdapSyncRequest(BaseModel):
 
 class DataSourceCreateRequest(BaseModel):
     name: str
+    description: str | None = None
     host: str
     port: int
     service_name: str
@@ -101,6 +106,7 @@ class DataSourceCreateRequest(BaseModel):
 
 
 class DataSourceUpdateRequest(BaseModel):
+    description: str | None = None
     host: str | None = None
     port: int | None = None
     service_name: str | None = None
@@ -124,11 +130,65 @@ class SemanticMetricPublishRequest(BaseModel):
     formula: str
     owner: str
     freshness_rule: str
+    aliases: list[str] = []
+    aggregation: str | None = None
+    grain: str | None = None
+    unit: str | None = None
+    dimensions: list[str] = []
+    source: dict[str, object] | None = None
+    joins: list[dict[str, str]] = []
+    certified_filters: list[str] = []
+    security: dict[str, object] | None = None
 
 
 class SemanticMetricRollbackRequest(BaseModel):
     version_id: str
     reason: str | None = None
+
+
+class CatalogDataSourceRequest(BaseModel):
+    name: str
+    description: str | None = None
+    host: str
+    port: int
+    service_name: str
+    username: str
+    password: str
+    schema_allowlist: list[str]
+    query_timeout_seconds: int = 30
+    row_limit: int = 50_000
+
+
+class CatalogSemanticMetricRequest(BaseModel):
+    term: str
+    aliases: list[str] = []
+    definition: str
+    formula: str
+    aggregation: str | None = None
+    owner: str
+    freshness_rule: str
+    grain: str | None = None
+    unit: str | None = None
+    dimensions: list[str] = []
+    source: dict[str, object] | None = None
+    joins: list[dict[str, str]] = []
+    certified_filters: list[str] = []
+    security: dict[str, object] | None = None
+
+
+class CatalogRoleMappingRequest(BaseModel):
+    name: str
+    description: str | None = None
+    schema_allowlist: list[str]
+    data_source_names: list[str] = []
+    metric_allowlist: list[str] = []
+
+
+class ConfigCatalogImportRequest(BaseModel):
+    catalog_version: str
+    data_sources: list[CatalogDataSourceRequest] = []
+    semantic_metrics: list[CatalogSemanticMetricRequest] = []
+    role_mappings: list[CatalogRoleMappingRequest] = []
 
 
 @router.get("/audit-logs", response_model=AuditLogResponse)
@@ -237,7 +297,14 @@ async def create_role(
     _require_admin(principal)
     service = get_user_role_management_service()
     try:
-        role = service.create_role(name=body.name, schema_allowlist=body.schema_allowlist, actor=principal.sub)
+        role = service.create_role(
+            name=body.name,
+            schema_allowlist=body.schema_allowlist,
+            actor=principal.sub,
+            description=body.description,
+            data_source_names=body.data_source_names,
+            metric_allowlist=body.metric_allowlist,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     _append_admin_audit(
@@ -428,6 +495,7 @@ async def create_data_source(
             query_timeout_seconds=body.query_timeout_seconds,
             row_limit=body.row_limit,
             actor=principal.sub,
+            description=body.description,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -490,6 +558,7 @@ async def update_data_source(
             query_timeout_seconds=body.query_timeout_seconds,
             row_limit=body.row_limit,
             actor=principal.sub,
+            description=body.description,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Data source not found") from exc
@@ -604,6 +673,15 @@ async def publish_semantic_metric(
         owner=body.owner,
         freshness_rule=body.freshness_rule,
         changed_by=principal.sub,
+        aliases=body.aliases,
+        aggregation=body.aggregation,
+        grain=body.grain,
+        unit=body.unit,
+        dimensions=body.dimensions,
+        source=body.source,
+        joins=body.joins,
+        certified_filters=body.certified_filters,
+        security=body.security,
     )
     _append_admin_audit(
         principal,
@@ -618,6 +696,74 @@ async def publish_semantic_metric(
         },
     )
     return {"version": version.to_dict()}
+
+
+@router.get("/config-catalog/template")
+async def get_config_catalog_template(principal: JWTClaims = CURRENT_USER_DEP) -> dict[str, object]:
+    _require_data_owner_or_admin(principal)
+    return CONFIG_CATALOG_TEMPLATE
+
+
+@router.post("/config-catalog/import", status_code=201)
+async def import_config_catalog(
+    body: ConfigCatalogImportRequest,
+    principal: JWTClaims = CURRENT_USER_DEP,
+) -> dict[str, Any]:
+    _require_data_owner_or_admin(principal)
+    service = get_user_role_management_service()
+    semantic = get_semantic_layer_service()
+    try:
+        imported_roles = service.import_role_mappings(
+            roles=[role.model_dump() for role in body.role_mappings],
+            actor=principal.sub,
+        )
+        imported_sources = service.import_data_sources(
+            data_sources=[source.model_dump() for source in body.data_sources],
+            actor=principal.sub,
+        )
+        imported_metrics = [
+            semantic.publish_metric(
+                term=metric.term,
+                definition=metric.definition,
+                formula=metric.formula,
+                owner=metric.owner,
+                freshness_rule=metric.freshness_rule,
+                changed_by=principal.sub,
+                aliases=metric.aliases,
+                aggregation=metric.aggregation,
+                grain=metric.grain,
+                unit=metric.unit,
+                dimensions=metric.dimensions,
+                source=metric.source,
+                joins=metric.joins,
+                certified_filters=metric.certified_filters,
+                security=metric.security,
+            )
+            for metric in body.semantic_metrics
+        ]
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    _append_admin_audit(
+        principal,
+        intent_type="admin:config_catalog_import",
+        data_sources=[source.name for source in imported_sources],
+        status="SUCCESS",
+        metadata={
+            "catalog_version": body.catalog_version,
+            "imported_role_count": len(imported_roles),
+            "imported_data_source_count": len(imported_sources),
+            "imported_metric_count": len(imported_metrics),
+        },
+    )
+    return {
+        "catalog_version": body.catalog_version,
+        "imported": {
+            "roles": [_role_to_dict(role) for role in imported_roles],
+            "data_sources": [source.to_dict() for source in imported_sources],
+            "semantic_metrics": [metric.to_dict() for metric in imported_metrics],
+        },
+    }
 
 
 @router.get("/semantic-layer/metrics/{term}/diff")
@@ -672,7 +818,10 @@ async def rollback_semantic_metric(
 def _role_to_dict(role: RoleDefinition) -> dict[str, Any]:
     return {
         "name": role.name,
+        "description": role.description,
         "schema_allowlist": role.schema_allowlist,
+        "data_source_names": role.data_source_names,
+        "metric_allowlist": role.metric_allowlist,
         "created_by": role.created_by,
         "created_at": role.created_at.isoformat(),
         "updated_at": role.updated_at.isoformat(),

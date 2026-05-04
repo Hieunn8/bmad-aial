@@ -378,6 +378,29 @@ class TestDataSourceConfiguration:
     @patch("aial_shared.auth.fastapi_deps.decode_jwt")
     @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
     @patch("aial_shared.auth.fastapi_deps.CerbosClient")
+    def test_template_endpoint_returns_standardized_catalog_shape(
+        self,
+        mock_cerbos_cls: MagicMock,
+        mock_validate: MagicMock,
+        mock_decode: MagicMock,
+        client: TestClient,
+        admin_claims: JWTClaims,
+    ) -> None:
+        _auth(mock_cerbos_cls, mock_validate, mock_decode, admin_claims)
+        headers = {"Authorization": "Bearer fake-jwt"}
+
+        resp = client.get("/v1/admin/config-catalog/template", headers=headers)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["catalog_version"]
+        assert body["data_sources"]
+        assert body["semantic_metrics"]
+        assert body["role_mappings"]
+
+    @patch("aial_shared.auth.fastapi_deps.decode_jwt")
+    @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
+    @patch("aial_shared.auth.fastapi_deps.CerbosClient")
     def test_create_data_source_stores_credentials_in_vault_and_audits_without_secret_values(
         self,
         mock_cerbos_cls: MagicMock,
@@ -510,6 +533,92 @@ class TestDataSourceConfiguration:
         assert changes["row_limit"]["previous_value"] == 50000
         assert changes["row_limit"]["new_value"] == 10000
         assert changes["row_limit"]["changed_by"] == admin_claims.sub
+
+    @patch("aial_shared.auth.fastapi_deps.decode_jwt")
+    @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
+    @patch("aial_shared.auth.fastapi_deps.CerbosClient")
+    def test_admin_can_import_standardized_config_catalog(
+        self,
+        mock_cerbos_cls: MagicMock,
+        mock_validate: MagicMock,
+        mock_decode: MagicMock,
+        client: TestClient,
+        admin_claims: JWTClaims,
+    ) -> None:
+        _auth(mock_cerbos_cls, mock_validate, mock_decode, admin_claims)
+        headers = {"Authorization": "Bearer fake-jwt"}
+
+        with patch.object(
+            get_user_role_management_service(),
+            "_probe_oracle_connection",
+            return_value={"ok": True, "available_schemas": ["FINANCE_ANALYTICS", "COMMON_DIM"]},
+        ):
+            resp = client.post(
+                "/v1/admin/config-catalog/import",
+                json={
+                    "catalog_version": "2026-05-04",
+                    "role_mappings": [
+                        {
+                            "name": "finance_analyst",
+                            "description": "Finance analyst",
+                            "schema_allowlist": ["FINANCE_ANALYTICS", "COMMON_DIM"],
+                            "data_source_names": ["oracle-finance"],
+                            "metric_allowlist": ["doanh thu thuan"],
+                        }
+                    ],
+                    "data_sources": [
+                        {
+                            "name": "oracle-finance",
+                            "description": "Primary finance warehouse",
+                            "host": "oracle.internal",
+                            "port": 1521,
+                            "service_name": "FINPDB1",
+                            "username": "finance_user",
+                            "password": "super-secret",
+                            "schema_allowlist": ["FINANCE_ANALYTICS", "COMMON_DIM"],
+                            "query_timeout_seconds": 30,
+                            "row_limit": 50000,
+                        }
+                    ],
+                    "semantic_metrics": [
+                        {
+                            "term": "doanh thu thuan",
+                            "aliases": ["net revenue"],
+                            "definition": "Doanh thu sau chiet khau",
+                            "formula": "SUM(NET_REVENUE)",
+                            "aggregation": "sum",
+                            "owner": "Finance",
+                            "freshness_rule": "daily",
+                            "grain": "daily_customer",
+                            "unit": "VND",
+                            "dimensions": ["date", "customer", "region"],
+                            "source": {
+                                "data_source": "oracle-finance",
+                                "schema": "FINANCE_ANALYTICS",
+                                "table": "F_SALES",
+                            },
+                            "joins": [{"target": "D_CUSTOMER", "on": "F_SALES.CUSTOMER_ID = D_CUSTOMER.CUSTOMER_ID"}],
+                            "certified_filters": ["IS_DELETED = 0"],
+                            "security": {"sensitivity_tier": 1, "allowed_roles": ["finance_analyst"]},
+                        }
+                    ],
+                },
+                headers=headers,
+            )
+
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["catalog_version"] == "2026-05-04"
+        assert body["imported"]["roles"][0]["data_source_names"] == ["oracle-finance"]
+        assert body["imported"]["data_sources"][0]["description"] == "Primary finance warehouse"
+        assert body["imported"]["semantic_metrics"][0]["grain"] == "daily_customer"
+
+        audit_records = get_audit_read_model().search(
+            AuditFilter(action="admin:config_catalog_import"),
+            page=1,
+            page_size=20,
+        )
+        assert len(audit_records) == 1
 
 
 class TestAuditDashboard:

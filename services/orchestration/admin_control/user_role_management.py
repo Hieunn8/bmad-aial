@@ -36,6 +36,9 @@ class RoleDefinition:
     created_by: str
     created_at: datetime
     updated_at: datetime
+    description: str | None = None
+    data_source_names: list[str] = field(default_factory=list)
+    metric_allowlist: list[str] = field(default_factory=list)
     cerbos_policy_status: str = "synced"
     data_source_config_status: str = "persisted"
 
@@ -93,6 +96,7 @@ class DataSourceConfig:
     created_at: datetime
     updated_at: datetime
     vault_secret_ref: str
+    description: str | None = None
     warning_message: str | None = None
     connection_timeout_seconds: int = _DEFAULT_CONNECTION_TIMEOUT_SECONDS
     last_test_at: datetime | None = None
@@ -101,6 +105,7 @@ class DataSourceConfig:
     def to_dict(self) -> dict[str, object]:
         return {
             "name": self.name,
+            "description": self.description,
             "host": self.host,
             "port": self.port,
             "service_name": self.service_name,
@@ -236,7 +241,16 @@ class UserRoleManagementService:
 
         get_query_result_cache().invalidate_user_entries(user_id)
 
-    def create_role(self, *, name: str, schema_allowlist: list[str], actor: str) -> RoleDefinition:
+    def create_role(
+        self,
+        *,
+        name: str,
+        schema_allowlist: list[str],
+        actor: str,
+        description: str | None = None,
+        data_source_names: list[str] | None = None,
+        metric_allowlist: list[str] | None = None,
+    ) -> RoleDefinition:
         normalized = name.strip()
         if not normalized:
             raise ValueError("role name is required")
@@ -252,6 +266,9 @@ class UserRoleManagementService:
             created_by=actor,
             created_at=now,
             updated_at=now,
+            description=description.strip() if description else None,
+            data_source_names=sorted({item.strip() for item in data_source_names or [] if item.strip()}),
+            metric_allowlist=sorted({item.strip() for item in metric_allowlist or [] if item.strip()}),
         )
         self._roles[normalized] = role
         return role
@@ -443,6 +460,7 @@ class UserRoleManagementService:
         query_timeout_seconds: int = _DEFAULT_QUERY_TIMEOUT_SECONDS,
         row_limit: int = _DEFAULT_ROW_LIMIT,
         actor: str,
+        description: str | None = None,
     ) -> DataSourceConfig:
         normalized_name = name.strip()
         if not normalized_name:
@@ -482,6 +500,7 @@ class UserRoleManagementService:
             created_at=now,
             updated_at=now,
             vault_secret_ref=vault_ref,
+            description=description.strip() if description else None,
             warning_message=warning_message,
             last_test_at=now,
             available_schemas=available_schemas,
@@ -503,6 +522,7 @@ class UserRoleManagementService:
         query_timeout_seconds: int | None = None,
         row_limit: int | None = None,
         actor: str,
+        description: str | None = None,
     ) -> tuple[DataSourceConfig, dict[str, dict[str, object]]]:
         config = self.get_data_source(name)
         if config is None:
@@ -532,6 +552,7 @@ class UserRoleManagementService:
             if missing_schemas:
                 raise ValueError(f"schema allowlist not found in Oracle: {missing_schemas}")
         for field_name, old_value, new_value in (
+            ("description", config.description, description.strip() if description else config.description),
             ("host", config.host, next_host),
             ("port", config.port, next_port),
             ("service_name", config.service_name, next_service_name),
@@ -545,6 +566,8 @@ class UserRoleManagementService:
                     "new_value": new_value,
                     "changed_by": actor,
                 }
+        if description is not None:
+            config.description = description.strip() if description else None
         if host is not None:
             config.host = next_host
         if port is not None:
@@ -588,14 +611,74 @@ class UserRoleManagementService:
         if not self._data_sources:
             return None
         principal_schemas: set[str] = set()
+        preferred_data_sources: list[str] = []
         for role_name in principal.roles:
             role = self._roles.get(role_name)
             if role is not None:
                 principal_schemas.update(role.schema_allowlist)
+                preferred_data_sources.extend(role.data_source_names)
+        seen: set[str] = set()
+        ordered_data_sources: list[DataSourceConfig] = []
+        for name in preferred_data_sources:
+            config = self.get_data_source(name)
+            if config is not None and config.name not in seen:
+                ordered_data_sources.append(config)
+                seen.add(config.name)
         for config in self.list_data_sources():
+            if config.name in seen:
+                continue
+            ordered_data_sources.append(config)
+        for config in ordered_data_sources:
             if principal_schemas and principal_schemas.intersection(config.schema_allowlist):
                 return self.get_query_execution_settings(config.name)
         return None
+
+    def allowed_metrics_for_principal(self, principal: JWTClaims) -> set[str]:
+        allowed_metrics: set[str] = set()
+        scoped = False
+        for role_name in principal.roles:
+            role = self._roles.get(role_name)
+            if role is None:
+                continue
+            if role.metric_allowlist:
+                scoped = True
+                allowed_metrics.update(metric.casefold() for metric in role.metric_allowlist)
+        return allowed_metrics if scoped else set()
+
+    def import_role_mappings(self, *, roles: list[dict[str, object]], actor: str) -> list[RoleDefinition]:
+        imported: list[RoleDefinition] = []
+        for role in roles:
+            imported.append(
+                self.create_role(
+                    name=str(role["name"]),
+                    schema_allowlist=[str(item) for item in role.get("schema_allowlist", [])],
+                    actor=actor,
+                    description=str(role["description"]).strip() if role.get("description") else None,
+                    data_source_names=[str(item) for item in role.get("data_source_names", [])],
+                    metric_allowlist=[str(item) for item in role.get("metric_allowlist", [])],
+                )
+            )
+        return imported
+
+    def import_data_sources(self, *, data_sources: list[dict[str, object]], actor: str) -> list[DataSourceConfig]:
+        imported: list[DataSourceConfig] = []
+        for item in data_sources:
+            imported.append(
+                self.create_data_source(
+                    name=str(item["name"]),
+                    host=str(item["host"]),
+                    port=int(item["port"]),
+                    service_name=str(item["service_name"]),
+                    username=str(item["username"]),
+                    password=str(item["password"]),
+                    schema_allowlist=[str(schema) for schema in item.get("schema_allowlist", [])],
+                    query_timeout_seconds=int(item.get("query_timeout_seconds", _DEFAULT_QUERY_TIMEOUT_SECONDS)),
+                    row_limit=int(item.get("row_limit", _DEFAULT_ROW_LIMIT)),
+                    actor=actor,
+                    description=str(item["description"]).strip() if item.get("description") else None,
+                )
+            )
+        return imported
 
     def export_audit_records_csv(self, records: list[dict[str, object]]) -> str:
         output = io.StringIO()

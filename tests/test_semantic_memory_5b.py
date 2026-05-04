@@ -104,16 +104,34 @@ class TestSemanticLayerManagement:
                 "formula": "SUM(NET_REVENUE) - SUM(RETURNS)",
                 "owner": "Finance",
                 "freshness_rule": "daily",
+                "aliases": ["net revenue"],
+                "aggregation": "sum",
+                "grain": "daily_customer",
+                "unit": "VND",
+                "dimensions": ["date", "customer", "region"],
+                "source": {
+                    "data_source": "oracle-finance",
+                    "schema": "FINANCE_ANALYTICS",
+                    "table": "F_SALES",
+                },
+                "joins": [{"target": "D_CUSTOMER", "on": "F_SALES.CUSTOMER_ID = D_CUSTOMER.CUSTOMER_ID"}],
+                "certified_filters": ["IS_DELETED = 0"],
+                "security": {"sensitivity_tier": 1, "allowed_roles": ["finance_analyst"]},
             },
             headers=headers,
         )
         assert publish_resp.status_code == 201
         new_version = publish_resp.json()["version"]
         assert new_version["previous_formula"] == previous_formula
+        assert new_version["aliases"] == ["net revenue"]
+        assert new_version["grain"] == "daily_customer"
+        assert new_version["source"]["table"] == "F_SALES"
 
         glossary_resp = client.get("/v1/glossary/doanh%20thu%20thu%E1%BA%A7n", headers=headers)
         assert glossary_resp.status_code == 200
         assert glossary_resp.json()["formula"] == "SUM(NET_REVENUE) - SUM(RETURNS)"
+        assert glossary_resp.json()["aliases"] == ["net revenue"]
+        assert glossary_resp.json()["dimensions"] == ["date", "customer", "region"]
 
         versions_resp = client.get("/v1/admin/semantic-layer/metrics/doanh thu thuần/versions", headers=headers)
         assert versions_resp.status_code == 200

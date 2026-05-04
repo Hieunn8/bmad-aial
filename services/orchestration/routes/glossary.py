@@ -22,6 +22,15 @@ class GlossaryEntry(BaseModel):
     formula: str
     owner: str
     freshness_rule: str
+    aliases: list[str] = []
+    aggregation: str | None = None
+    grain: str | None = None
+    unit: str | None = None
+    dimensions: list[str] = []
+    source: dict[str, object] | None = None
+    joins: list[dict[str, str]] = []
+    certified_filters: list[str] = []
+    security: dict[str, object] | None = None
 
 
 class GlossaryNotFound(BaseModel):
@@ -42,6 +51,15 @@ async def get_glossary_term(
             formula=managed.formula,
             owner=managed.owner,
             freshness_rule=managed.freshness_rule,
+            aliases=managed.aliases,
+            aggregation=managed.aggregation,
+            grain=managed.grain,
+            unit=managed.unit,
+            dimensions=managed.dimensions,
+            source=managed.source,
+            joins=managed.joins,
+            certified_filters=managed.certified_filters,
+            security=managed.security,
         )
     result = _repo.find(term)
     if result is None:

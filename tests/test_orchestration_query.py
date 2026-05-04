@@ -387,6 +387,92 @@ class TestChatQueryEndpoint:
     @patch("aial_shared.auth.fastapi_deps.decode_jwt")
     @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
     @patch("aial_shared.auth.fastapi_deps.CerbosClient")
+    def test_role_mapping_prefers_named_data_source_when_multiple_sources_match(
+        self,
+        mock_cerbos_cls: MagicMock,
+        mock_validate: MagicMock,
+        mock_decode: MagicMock,
+        client: TestClient,
+        sample_claims: JWTClaims,
+    ) -> None:
+        claims = JWTClaims(
+            sub=sample_claims.sub,
+            email=sample_claims.email,
+            department=sample_claims.department,
+            roles=("sales_analyst",),
+            clearance=sample_claims.clearance,
+            raw={**sample_claims.raw, "roles": ["sales_analyst"]},
+        )
+        _auth_mocks(mock_cerbos_cls, mock_validate, mock_decode, claims)
+        service = get_user_role_management_service()
+        service.create_role(
+            name="sales_analyst",
+            schema_allowlist=["SALES_ANALYTICS"],
+            actor="admin",
+            data_source_names=["sales-secondary"],
+            metric_allowlist=["doanh thu"],
+        )
+        with patch.object(
+            service,
+            "_probe_oracle_connection",
+            return_value={"ok": True, "available_schemas": ["SALES_ANALYTICS"]},
+        ):
+            service.create_data_source(
+                name="sales-primary",
+                host="oracle-sales-1",
+                port=1521,
+                service_name="SALESPDB1",
+                username="sales_user",
+                password="secret",
+                schema_allowlist=["SALES_ANALYTICS"],
+                actor="admin",
+            )
+            service.create_data_source(
+                name="sales-secondary",
+                host="oracle-sales-2",
+                port=1521,
+                service_name="SALESPDB1",
+                username="sales_user",
+                password="secret",
+                schema_allowlist=["SALES_ANALYTICS"],
+                actor="admin",
+            )
+
+        resp = client.post(
+            "/v1/chat/query",
+            json={"query": "doanh thu theo khu vuc", "session_id": str(uuid4())},
+            headers={"Authorization": "Bearer fake-jwt"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "streaming"
+
+    def test_metric_allowlist_filters_semantic_matches(self, sample_claims: JWTClaims) -> None:
+        service = get_user_role_management_service()
+        service.create_role(
+            name="finance_analyst",
+            schema_allowlist=["FINANCE_ANALYTICS"],
+            actor="admin",
+            metric_allowlist=["doanh thu"],
+        )
+        claims = JWTClaims(
+            sub=sample_claims.sub,
+            email=sample_claims.email,
+            department=sample_claims.department,
+            roles=("finance_analyst",),
+            clearance=sample_claims.clearance,
+            raw=sample_claims.raw,
+        )
+        allowed = service.allowed_metrics_for_principal(claims)
+        metrics = get_semantic_layer_service().match_query("doanh thu va so luong khach hang")
+        filtered = [metric for metric in metrics if str(metric.get("term", "")).casefold() in allowed]
+
+        assert allowed == {"doanh thu"}
+        assert len(filtered) == 1
+        assert filtered[0]["term"] == "doanh thu"
+
+    @patch("aial_shared.auth.fastapi_deps.decode_jwt")
+    @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
+    @patch("aial_shared.auth.fastapi_deps.CerbosClient")
     def test_approval_request_cannot_be_reused_for_different_long_query_with_same_prefix(
         self,
         mock_cerbos_cls: MagicMock,

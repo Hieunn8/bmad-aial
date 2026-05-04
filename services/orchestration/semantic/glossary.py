@@ -1,26 +1,22 @@
-"""Business Glossary — canonical term-to-formula registry.
-
-S2 Interface Contract (Story 2A.2):
-  GET /v1/glossary/{term} → GlossaryEntry | NotFoundResponse
-  Epic 5B management CRUD extends this API without breaking changes.
-"""
+"""Business glossary and seed metric catalog."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any
 
-# ---------------------------------------------------------------------------
-# Seed data — Phase 1 bootstrap (PostgreSQL-backed at runtime)
-# ---------------------------------------------------------------------------
-
-SEED_GLOSSARY: list[dict[str, str]] = [
+SEED_GLOSSARY: list[dict[str, object]] = [
     {
         "term": "doanh thu thuần",
-        "definition": "Doanh thu bán hàng sau khi trừ chiết khấu thương mại và hàng bán bị trả lại",
+        "definition": "Doanh thu bán hàng sau khi trừ chiết khấu và hàng trả lại",
         "formula": "SUM(NET_REVENUE)",
         "owner": "Finance",
         "freshness_rule": "daily",
+        "aggregation": "sum",
+        "grain": "daily_customer",
+        "unit": "VND",
+        "dimensions": ["date", "customer", "region", "channel"],
+        "source": {"data_source": "oracle-finance", "schema": "FINANCE_ANALYTICS", "table": "F_SALES"},
     },
     {
         "term": "doanh thu",
@@ -28,6 +24,11 @@ SEED_GLOSSARY: list[dict[str, str]] = [
         "formula": "SUM(GROSS_REVENUE)",
         "owner": "Finance",
         "freshness_rule": "daily",
+        "aggregation": "sum",
+        "grain": "daily_customer",
+        "unit": "VND",
+        "dimensions": ["date", "customer", "region", "channel"],
+        "source": {"data_source": "oracle-finance", "schema": "FINANCE_ANALYTICS", "table": "F_SALES"},
     },
     {
         "term": "lợi nhuận gộp",
@@ -35,6 +36,11 @@ SEED_GLOSSARY: list[dict[str, str]] = [
         "formula": "SUM(NET_REVENUE) - SUM(COST_OF_GOODS_SOLD)",
         "owner": "Finance",
         "freshness_rule": "daily",
+        "aggregation": "derived",
+        "grain": "daily_customer",
+        "unit": "VND",
+        "dimensions": ["date", "customer", "region", "channel"],
+        "source": {"data_source": "oracle-finance", "schema": "FINANCE_ANALYTICS", "table": "F_SALES"},
     },
     {
         "term": "số lượng khách hàng",
@@ -42,28 +48,24 @@ SEED_GLOSSARY: list[dict[str, str]] = [
         "formula": "COUNT(DISTINCT CUSTOMER_ID)",
         "owner": "Sales",
         "freshness_rule": "daily",
+        "aggregation": "count_distinct",
+        "grain": "daily_customer",
+        "unit": "customers",
+        "dimensions": ["date", "region", "channel"],
+        "source": {"data_source": "oracle-sales", "schema": "SALES_ANALYTICS", "table": "F_CUSTOMER_ACTIVITY"},
     },
 ]
 
-_SEED_INDEX: dict[str, dict[str, str]] = {entry["term"].lower(): entry for entry in SEED_GLOSSARY}
-
-
-# ---------------------------------------------------------------------------
-# Repository
-# ---------------------------------------------------------------------------
+_SEED_INDEX: dict[str, dict[str, object]] = {str(entry["term"]).lower(): entry for entry in SEED_GLOSSARY}
 
 
 class GlossaryRepository:
-    """PostgreSQL-backed glossary repository.
-
-    `connection_factory` is injected so tests can pass `None` and mock `find()`.
-    Production wires a psycopg2/asyncpg factory from the service config.
-    """
+    """PostgreSQL-backed glossary repository."""
 
     def __init__(self, connection_factory: Callable[[], Any] | None) -> None:
         self._factory = connection_factory
 
-    def find(self, term: str) -> dict[str, str] | None:
+    def find(self, term: str) -> dict[str, object] | None:
         normalized = term.strip().lower()
         if self._factory is None:
             return _SEED_INDEX.get(normalized)

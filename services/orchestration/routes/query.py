@@ -607,6 +607,11 @@ async def chat_query(
     if get_user_role_management_service().list_data_sources() and execution_settings is None:
         raise HTTPException(status_code=403, detail="No authorized data source is configured for this principal")
     semantic_context = get_semantic_layer_service().match_query(payload.query)
+    allowed_metrics = get_user_role_management_service().allowed_metrics_for_principal(principal)
+    if allowed_metrics:
+        semantic_context = [
+            metric for metric in semantic_context if str(metric.get("term", "")).casefold() in allowed_metrics
+        ]
     memory_service = get_conversation_memory_service()
     memory_context = memory_service.build_context_bundle(
         user_id=principal.sub,
