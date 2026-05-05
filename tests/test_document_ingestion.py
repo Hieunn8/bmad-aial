@@ -222,7 +222,7 @@ class TestDocumentUploadApi:
             "/v1/admin/documents",
             json={
                 "filename": "test.pdf", "content_text": "c",
-                "department": "sales", "classification": 99,
+                "owner_department": "sales", "classification": 99,
                 "source_trust": "authoritative", "effective_date": "2024-01-01",
             },
             headers={"Authorization": "Bearer fake-jwt"},
@@ -240,7 +240,7 @@ class TestDocumentUploadApi:
         _auth(mock_cerbos_cls, mock_validate, mock_decode, admin_claims)
         resp = client.post(
             "/v1/admin/documents",
-            json={"filename": "test.pdf", "department": ""},
+            json={"filename": "test.pdf", "owner_department": ""},
             headers={"Authorization": "Bearer fake-jwt"},
         )
         assert resp.status_code == 400
@@ -259,7 +259,11 @@ class TestDocumentUploadApi:
             json={
                 "filename": "policy.pdf",
                 "content_text": "Chính sách bán hàng 2024. " * 20,
-                "department": "sales", "classification": 1,
+                "owner_department": "sales",
+                "allowed_departments": ["sales", "finance"],
+                "allowed_roles": ["user"],
+                "visibility": "restricted",
+                "classification": 1,
                 "source_trust": "authoritative", "effective_date": "2024-01-01",
             },
             headers={"Authorization": "Bearer fake-jwt"},

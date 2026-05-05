@@ -77,7 +77,10 @@ def _upload_doc(client: TestClient, headers: dict) -> str:
         json={
             "filename": "test.pdf",
             "content_text": "Content. " * 30,
-            "department": "sales",
+            "owner_department": "sales",
+            "allowed_departments": ["sales", "finance"],
+            "allowed_roles": ["user", "manager"],
+            "visibility": "restricted",
             "classification": 1,
             "source_trust": "authoritative",
             "effective_date": "2024-03-01",
@@ -105,6 +108,11 @@ class TestDocumentList:
         assert "documents" in body
         assert "total" in body
         assert body["total"] >= 1
+        first = body["documents"][0]
+        assert "owner_department" in first
+        assert "allowed_departments" in first
+        assert "allowed_roles" in first
+        assert "visibility" in first
 
 
 class TestDocumentMetadataUpdate:

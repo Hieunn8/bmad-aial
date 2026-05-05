@@ -13,6 +13,7 @@ from embedding.client import EmbeddingClient, get_embedding_client
 from weaviate_schema.schema import BGE_MODEL_VERSION, bootstrap_schema
 
 from aial_shared.auth.keycloak import JWTClaims
+from orchestration.persistence.document_catalog_store import get_document_catalog_store
 from rag.composition.nodes import RagChunk
 from rag.ingestion.chunker import DocumentChunk
 from rag.retrieval.policy_filter import PolicyEnforcementService
@@ -152,7 +153,11 @@ class WeaviateDocumentStore:
                     citation_number=index,
                 )
             )
-        return rag_chunks
+        allowed_document_ids = get_document_catalog_store().filter_accessible_documents(
+            [chunk.document_id for chunk in rag_chunks],
+            principal,
+        )
+        return [chunk for chunk in rag_chunks if chunk.document_id in allowed_document_ids]
 
     def _delete_object(self, object_id: str) -> None:
         response = requests.delete(
