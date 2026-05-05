@@ -38,11 +38,23 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          router: ['@tanstack/react-router'],
-          query: ['@tanstack/react-query'],
-          state: ['zustand'],
+        manualChunks(id) {
+          if (!id.includes('node_modules')) {
+            return undefined;
+          }
+          if (id.includes('@tanstack/react-router')) {
+            return 'router';
+          }
+          if (id.includes('@tanstack/react-query')) {
+            return 'query';
+          }
+          if (id.includes('zustand')) {
+            return 'state';
+          }
+          if (id.includes('react') || id.includes('react-dom')) {
+            return 'vendor';
+          }
+          return undefined;
         },
       },
     },

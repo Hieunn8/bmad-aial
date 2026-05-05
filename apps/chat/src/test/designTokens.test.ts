@@ -6,10 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 
-const TOKENS_CSS_PATH = new URL(
-  '../../../../packages/ui/src/styles/tokens.css',
-  import.meta.url,
-);
+const TOKENS_CSS_PATH = '../../packages/ui/src/styles/tokens.css';
 
 function loadTokensCSS(): string {
   return readFileSync(TOKENS_CSS_PATH, 'utf-8');

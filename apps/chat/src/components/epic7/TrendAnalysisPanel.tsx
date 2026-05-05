@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import * as XLSX from 'xlsx';
 import { ChartReveal, useChartTheme } from '@aial/ui/chart-reveal';
 import { apiRequest } from '../../api/client';
 
@@ -65,6 +66,12 @@ const buttonStyle: React.CSSProperties = {
   cursor: 'pointer',
 };
 
+const ghostButtonStyle: React.CSSProperties = {
+  ...buttonStyle,
+  background: 'rgba(29,78,216,0.09)',
+  color: '#1d4ed8',
+};
+
 export function TrendAnalysisPanel(): React.JSX.Element {
   const chartTheme = useChartTheme();
   const [metricName, setMetricName] = useState('doanh thu');
@@ -104,6 +111,16 @@ export function TrendAnalysisPanel(): React.JSX.Element {
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleExcelExport(): void {
+    if (!result?.drilldown.length) {
+      return;
+    }
+    const ws = XLSX.utils.json_to_sheet(result.drilldown);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Trend Analysis');
+    XLSX.writeFile(wb, `trend-${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
   return (
@@ -179,6 +196,11 @@ export function TrendAnalysisPanel(): React.JSX.Element {
               <div style={{ marginTop: '0.65rem', color: 'var(--color-neutral-500)', fontSize: '0.86rem' }}>
                 {result.cache_hit ? `Kết quả từ cache${result.cache_similarity ? ` • similarity ${Math.round(result.cache_similarity * 100)}%` : ''}` : 'Kết quả mới từ statsmodels-trend'}
               </div>
+            ) : null}
+            {result && result.drilldown.length > 0 ? (
+              <button type="button" onClick={handleExcelExport} style={{ ...ghostButtonStyle, marginTop: '0.8rem' }}>
+                Xuat Excel
+              </button>
             ) : null}
           </div>
 

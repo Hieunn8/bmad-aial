@@ -9,13 +9,54 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SemanticRouteImport } from './routes/semantic'
+import { Route as MemoryRouteImport } from './routes/memory'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ChatRouteImport } from './routes/chat'
+import { Route as AnalyticsRouteImport } from './routes/analytics'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AnalyticsIndexRouteImport } from './routes/analytics/index'
+import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
+import { Route as AnalyticsTrendRouteImport } from './routes/analytics/trend'
+import { Route as AnalyticsForecastRouteImport } from './routes/analytics/forecast'
+import { Route as AnalyticsDrilldownRouteImport } from './routes/analytics/drilldown'
+import { Route as AnalyticsAnomalyRouteImport } from './routes/analytics/anomaly'
+import { Route as AdminUsersRouteImport } from './routes/admin/users'
+import { Route as AdminRolesRouteImport } from './routes/admin/roles'
+import { Route as AdminDocumentsRouteImport } from './routes/admin/documents'
+import { Route as AdminDataSourcesRouteImport } from './routes/admin/data-sources'
+import { Route as AdminAuditLogRouteImport } from './routes/admin/audit-log'
 
+const SemanticRoute = SemanticRouteImport.update({
+  id: '/semantic',
+  path: '/semantic',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MemoryRoute = MemoryRouteImport.update({
+  id: '/memory',
+  path: '/memory',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChatRoute = ChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AnalyticsRoute = AnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -23,49 +64,246 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AnalyticsIndexRoute = AnalyticsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AnalyticsRoute,
+} as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/auth/callback',
   path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AnalyticsTrendRoute = AnalyticsTrendRouteImport.update({
+  id: '/trend',
+  path: '/trend',
+  getParentRoute: () => AnalyticsRoute,
+} as any)
+const AnalyticsForecastRoute = AnalyticsForecastRouteImport.update({
+  id: '/forecast',
+  path: '/forecast',
+  getParentRoute: () => AnalyticsRoute,
+} as any)
+const AnalyticsDrilldownRoute = AnalyticsDrilldownRouteImport.update({
+  id: '/drilldown',
+  path: '/drilldown',
+  getParentRoute: () => AnalyticsRoute,
+} as any)
+const AnalyticsAnomalyRoute = AnalyticsAnomalyRouteImport.update({
+  id: '/anomaly',
+  path: '/anomaly',
+  getParentRoute: () => AnalyticsRoute,
+} as any)
+const AdminUsersRoute = AdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminRolesRoute = AdminRolesRouteImport.update({
+  id: '/roles',
+  path: '/roles',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminDocumentsRoute = AdminDocumentsRouteImport.update({
+  id: '/documents',
+  path: '/documents',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminDataSourcesRoute = AdminDataSourcesRouteImport.update({
+  id: '/data-sources',
+  path: '/data-sources',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAuditLogRoute = AdminAuditLogRouteImport.update({
+  id: '/audit-log',
+  path: '/audit-log',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
+  '/analytics': typeof AnalyticsRouteWithChildren
+  '/chat': typeof ChatRoute
   '/login': typeof LoginRoute
+  '/memory': typeof MemoryRoute
+  '/semantic': typeof SemanticRoute
+  '/admin/audit-log': typeof AdminAuditLogRoute
+  '/admin/data-sources': typeof AdminDataSourcesRoute
+  '/admin/documents': typeof AdminDocumentsRoute
+  '/admin/roles': typeof AdminRolesRoute
+  '/admin/users': typeof AdminUsersRoute
+  '/analytics/anomaly': typeof AnalyticsAnomalyRoute
+  '/analytics/drilldown': typeof AnalyticsDrilldownRoute
+  '/analytics/forecast': typeof AnalyticsForecastRoute
+  '/analytics/trend': typeof AnalyticsTrendRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/admin/': typeof AdminIndexRoute
+  '/analytics/': typeof AnalyticsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/chat': typeof ChatRoute
   '/login': typeof LoginRoute
+  '/memory': typeof MemoryRoute
+  '/semantic': typeof SemanticRoute
+  '/admin/audit-log': typeof AdminAuditLogRoute
+  '/admin/data-sources': typeof AdminDataSourcesRoute
+  '/admin/documents': typeof AdminDocumentsRoute
+  '/admin/roles': typeof AdminRolesRoute
+  '/admin/users': typeof AdminUsersRoute
+  '/analytics/anomaly': typeof AnalyticsAnomalyRoute
+  '/analytics/drilldown': typeof AnalyticsDrilldownRoute
+  '/analytics/forecast': typeof AnalyticsForecastRoute
+  '/analytics/trend': typeof AnalyticsTrendRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/admin': typeof AdminIndexRoute
+  '/analytics': typeof AnalyticsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
+  '/analytics': typeof AnalyticsRouteWithChildren
+  '/chat': typeof ChatRoute
   '/login': typeof LoginRoute
+  '/memory': typeof MemoryRoute
+  '/semantic': typeof SemanticRoute
+  '/admin/audit-log': typeof AdminAuditLogRoute
+  '/admin/data-sources': typeof AdminDataSourcesRoute
+  '/admin/documents': typeof AdminDocumentsRoute
+  '/admin/roles': typeof AdminRolesRoute
+  '/admin/users': typeof AdminUsersRoute
+  '/analytics/anomaly': typeof AnalyticsAnomalyRoute
+  '/analytics/drilldown': typeof AnalyticsDrilldownRoute
+  '/analytics/forecast': typeof AnalyticsForecastRoute
+  '/analytics/trend': typeof AnalyticsTrendRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/admin/': typeof AdminIndexRoute
+  '/analytics/': typeof AnalyticsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/auth/callback'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/analytics'
+    | '/chat'
+    | '/login'
+    | '/memory'
+    | '/semantic'
+    | '/admin/audit-log'
+    | '/admin/data-sources'
+    | '/admin/documents'
+    | '/admin/roles'
+    | '/admin/users'
+    | '/analytics/anomaly'
+    | '/analytics/drilldown'
+    | '/analytics/forecast'
+    | '/analytics/trend'
+    | '/auth/callback'
+    | '/admin/'
+    | '/analytics/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/auth/callback'
-  id: '__root__' | '/' | '/login' | '/auth/callback'
+  to:
+    | '/'
+    | '/chat'
+    | '/login'
+    | '/memory'
+    | '/semantic'
+    | '/admin/audit-log'
+    | '/admin/data-sources'
+    | '/admin/documents'
+    | '/admin/roles'
+    | '/admin/users'
+    | '/analytics/anomaly'
+    | '/analytics/drilldown'
+    | '/analytics/forecast'
+    | '/analytics/trend'
+    | '/auth/callback'
+    | '/admin'
+    | '/analytics'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/analytics'
+    | '/chat'
+    | '/login'
+    | '/memory'
+    | '/semantic'
+    | '/admin/audit-log'
+    | '/admin/data-sources'
+    | '/admin/documents'
+    | '/admin/roles'
+    | '/admin/users'
+    | '/analytics/anomaly'
+    | '/analytics/drilldown'
+    | '/analytics/forecast'
+    | '/analytics/trend'
+    | '/auth/callback'
+    | '/admin/'
+    | '/analytics/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRouteWithChildren
+  AnalyticsRoute: typeof AnalyticsRouteWithChildren
+  ChatRoute: typeof ChatRoute
   LoginRoute: typeof LoginRoute
+  MemoryRoute: typeof MemoryRoute
+  SemanticRoute: typeof SemanticRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/semantic': {
+      id: '/semantic'
+      path: '/semantic'
+      fullPath: '/semantic'
+      preLoaderRoute: typeof SemanticRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/memory': {
+      id: '/memory'
+      path: '/memory'
+      fullPath: '/memory'
+      preLoaderRoute: typeof MemoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chat': {
+      id: '/chat'
+      path: '/chat'
+      fullPath: '/chat'
+      preLoaderRoute: typeof ChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/analytics': {
+      id: '/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -75,6 +313,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/analytics/': {
+      id: '/analytics/'
+      path: '/'
+      fullPath: '/analytics/'
+      preLoaderRoute: typeof AnalyticsIndexRouteImport
+      parentRoute: typeof AnalyticsRoute
+    }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/auth/callback': {
       id: '/auth/callback'
       path: '/auth/callback'
@@ -82,12 +334,120 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/analytics/trend': {
+      id: '/analytics/trend'
+      path: '/trend'
+      fullPath: '/analytics/trend'
+      preLoaderRoute: typeof AnalyticsTrendRouteImport
+      parentRoute: typeof AnalyticsRoute
+    }
+    '/analytics/forecast': {
+      id: '/analytics/forecast'
+      path: '/forecast'
+      fullPath: '/analytics/forecast'
+      preLoaderRoute: typeof AnalyticsForecastRouteImport
+      parentRoute: typeof AnalyticsRoute
+    }
+    '/analytics/drilldown': {
+      id: '/analytics/drilldown'
+      path: '/drilldown'
+      fullPath: '/analytics/drilldown'
+      preLoaderRoute: typeof AnalyticsDrilldownRouteImport
+      parentRoute: typeof AnalyticsRoute
+    }
+    '/analytics/anomaly': {
+      id: '/analytics/anomaly'
+      path: '/anomaly'
+      fullPath: '/analytics/anomaly'
+      preLoaderRoute: typeof AnalyticsAnomalyRouteImport
+      parentRoute: typeof AnalyticsRoute
+    }
+    '/admin/users': {
+      id: '/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AdminUsersRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/roles': {
+      id: '/admin/roles'
+      path: '/roles'
+      fullPath: '/admin/roles'
+      preLoaderRoute: typeof AdminRolesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/documents': {
+      id: '/admin/documents'
+      path: '/documents'
+      fullPath: '/admin/documents'
+      preLoaderRoute: typeof AdminDocumentsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/data-sources': {
+      id: '/admin/data-sources'
+      path: '/data-sources'
+      fullPath: '/admin/data-sources'
+      preLoaderRoute: typeof AdminDataSourcesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/audit-log': {
+      id: '/admin/audit-log'
+      path: '/audit-log'
+      fullPath: '/admin/audit-log'
+      preLoaderRoute: typeof AdminAuditLogRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
 
+interface AdminRouteChildren {
+  AdminAuditLogRoute: typeof AdminAuditLogRoute
+  AdminDataSourcesRoute: typeof AdminDataSourcesRoute
+  AdminDocumentsRoute: typeof AdminDocumentsRoute
+  AdminRolesRoute: typeof AdminRolesRoute
+  AdminUsersRoute: typeof AdminUsersRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminAuditLogRoute: AdminAuditLogRoute,
+  AdminDataSourcesRoute: AdminDataSourcesRoute,
+  AdminDocumentsRoute: AdminDocumentsRoute,
+  AdminRolesRoute: AdminRolesRoute,
+  AdminUsersRoute: AdminUsersRoute,
+  AdminIndexRoute: AdminIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
+interface AnalyticsRouteChildren {
+  AnalyticsAnomalyRoute: typeof AnalyticsAnomalyRoute
+  AnalyticsDrilldownRoute: typeof AnalyticsDrilldownRoute
+  AnalyticsForecastRoute: typeof AnalyticsForecastRoute
+  AnalyticsTrendRoute: typeof AnalyticsTrendRoute
+  AnalyticsIndexRoute: typeof AnalyticsIndexRoute
+}
+
+const AnalyticsRouteChildren: AnalyticsRouteChildren = {
+  AnalyticsAnomalyRoute: AnalyticsAnomalyRoute,
+  AnalyticsDrilldownRoute: AnalyticsDrilldownRoute,
+  AnalyticsForecastRoute: AnalyticsForecastRoute,
+  AnalyticsTrendRoute: AnalyticsTrendRoute,
+  AnalyticsIndexRoute: AnalyticsIndexRoute,
+}
+
+const AnalyticsRouteWithChildren = AnalyticsRoute._addFileChildren(
+  AnalyticsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRouteWithChildren,
+  AnalyticsRoute: AnalyticsRouteWithChildren,
+  ChatRoute: ChatRoute,
   LoginRoute: LoginRoute,
+  MemoryRoute: MemoryRoute,
+  SemanticRoute: SemanticRoute,
   AuthCallbackRoute: AuthCallbackRoute,
 }
 export const routeTree = rootRouteImport

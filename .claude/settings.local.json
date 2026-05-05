@@ -9,7 +9,13 @@
       "Bash(where python *)",
       "Bash(D:\\\\WORKING\\\\AIAL\\\\.venv\\\\Scripts\\\\python.exe -c \"import jwt; print\\('jwt ok'\\)\")",
       "Bash(D:\\\\WORKING\\\\AIAL\\\\.venv\\\\Scripts\\\\python.exe -m pytest tests/test_auth_cerbos.py -q)",
-      "Bash(\"/d/WORKING/AIAL/.venv/Scripts/python.exe\" -m pytest tests/test_auth_cerbos.py -q)"
+      "Bash(\"/d/WORKING/AIAL/.venv/Scripts/python.exe\" -m pytest tests/test_auth_cerbos.py -q)",
+      "Bash(Get-ChildItem -Path \"D:\\\\WORKING\\\\AIAL\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(grep -E \"\\\\.\\(py|yml|yaml\\)$\")",
+      "Bash(xargs wc -l)",
+      "Bash(xargs grep -l \"export function\")"
     ]
   }
 }

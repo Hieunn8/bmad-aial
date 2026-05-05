@@ -3,7 +3,8 @@ import { Area, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tool
 import { ChartReveal, useChartTheme } from '@aial/ui/chart-reveal';
 import { ConfidenceBreakdownCard } from '@aial/ui/confidence-breakdown-card';
 import { ExportJobStatus } from '@aial/ui/export-job-status';
-import { API_BASE, apiRequest } from '../../api/client';
+import { apiRequest } from '../../api/client';
+import { useAuth } from '../../auth/AuthProvider';
 
 type ForecastJobHandle = {
   job_id: string;
@@ -82,6 +83,12 @@ const buttonStyle: React.CSSProperties = {
   cursor: 'pointer',
 };
 
+const ghostButtonStyle: React.CSSProperties = {
+  ...buttonStyle,
+  background: 'rgba(154, 52, 18, 0.09)',
+  color: '#9a3412',
+};
+
 function formatForecastFailure(errorCode?: string | null): string {
   if (errorCode === 'queue_timeout') {
     return 'Forecast job đã chờ quá 30 phút trong hàng đợi forecast-batch. Hãy thử lại.';
@@ -93,6 +100,7 @@ function formatForecastFailure(errorCode?: string | null): string {
 }
 
 export function ForecastStudio(): React.JSX.Element {
+  const auth = useAuth();
   const chartTheme = useChartTheme();
   const [query, setQuery] = useState('Dự báo doanh thu Q3 2026 theo kênh phân phối');
   const [job, setJob] = useState<ForecastJobHandle | null>(null);
@@ -201,6 +209,24 @@ export function ForecastStudio(): React.JSX.Element {
     } catch (runError) {
       setError(runError instanceof Error ? runError.message : 'Không thể chạy forecast');
     }
+  }
+
+  async function handleDownload(): Promise<void> {
+    if (!job?.job_id) {
+      return;
+    }
+    const response = await fetch(`/v1/forecast/${job.job_id}/download`, {
+      headers: auth.session?.accessToken ? { Authorization: `Bearer ${auth.session.accessToken}` } : undefined,
+    });
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') ?? '';
+    const filename = disposition.match(/filename="(.+)"/)?.[1] ?? `forecast-${job.job_id}.xlsx`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   const jobVisualState =
@@ -321,16 +347,14 @@ export function ForecastStudio(): React.JSX.Element {
             <p style={{ margin: '0.45rem 0 0', color: 'var(--color-neutral-700)', lineHeight: 1.6 }}>
               {result?.summary ?? 'Summary sẽ xuất hiện khi forecast hoàn tất.'}
             </p>
-            {jobStatus?.download_url ? (
+            {jobStatus?.status === 'completed' && job?.job_id ? (
               <a
-                href={`${API_BASE}${jobStatus.download_url}`}
-                style={{
-                  display: 'inline-block',
-                  marginTop: '0.8rem',
-                  textDecoration: 'none',
-                  color: '#9a3412',
-                  fontWeight: 700,
+                href={`/v1/forecast/${job.job_id}/download`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void handleDownload();
                 }}
+                style={{ display: 'inline-block', textDecoration: 'none', ...ghostButtonStyle, marginTop: '0.8rem' }}
               >
                 Download forecast JSON
               </a>

@@ -5,21 +5,10 @@ interface AppLayoutProps {
   children: ReactNode;
 }
 
-const navItemStyle: React.CSSProperties = {
-  display: 'block',
-  padding: '0.8rem 0.95rem',
-  borderRadius: '1rem',
-  color: 'var(--color-neutral-700)',
-  textDecoration: 'none',
-  fontSize: '0.95rem',
-  fontWeight: 600,
-  background: 'rgba(255,255,255,0.72)',
-};
-
 export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
   const auth = useAuth();
   const roles = auth.session?.claims.roles ?? [];
-  const canManageDocuments = roles.includes('admin') || roles.includes('data_owner');
+  const isAdminOrDataOwner = roles.includes('admin') || roles.includes('data_owner');
 
   return (
     <div
@@ -67,7 +56,7 @@ export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
           </span>
           <div>
             <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-neutral-900)' }}>AIAL</div>
-            <div style={{ fontSize: '0.82rem', color: 'var(--color-neutral-500)' }}>Epic 5B + 6 workspace</div>
+            <div style={{ fontSize: '0.82rem', color: 'var(--color-neutral-500)' }}>AI Assistant</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -104,45 +93,34 @@ export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
             flexDirection: 'column',
             overflowY: 'auto',
             padding: '1.05rem 0.9rem',
-            gap: '1rem',
+            gap: '0.5rem',
           }}
         >
-          <div>
-            <div
-              style={{
-                fontSize: '0.78rem',
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-                color: 'var(--color-neutral-500)',
-              }}
-            >
-              Workspace
-            </div>
-            <ul
-              role="list"
-              style={{ margin: '0.7rem 0 0', padding: 0, listStyle: 'none', display: 'grid', gap: '0.55rem' }}
-            >
-              <li><a href="#chat-assistant" style={navItemStyle}>Chat assistant</a></li>
-              {canManageDocuments ? <li><a href="#document-admin" style={navItemStyle}>Document admin</a></li> : null}
-              <li><a href="#semantic-studio" style={navItemStyle}>Semantic studio</a></li>
-              <li><a href="#memory-studio" style={navItemStyle}>Memory studio</a></li>
-              <li><a href="#history-studio" style={navItemStyle}>History studio</a></li>
-            </ul>
-          </div>
-          <div
-            style={{
-              borderRadius: '1.1rem',
-              background: 'linear-gradient(160deg, rgba(15,118,110,0.08) 0%, rgba(17,94,89,0.02) 100%)',
-              padding: '0.95rem 1rem',
-              color: 'var(--color-neutral-700)',
-              lineHeight: 1.6,
-            }}
-          >
-            <div style={{ fontWeight: 700, marginBottom: '0.3rem' }}>Delivery note</div>
-            <div style={{ fontSize: '0.88rem' }}>
-              This workspace now carries Epic 5B UI plus the first Epic 6 export flow on top of the governed backend APIs.
-            </div>
-          </div>
+          <NavSection label="Ung dung">
+            <NavLink to="/chat">Chat</NavLink>
+            <NavLink to="/analytics/forecast">Du bao</NavLink>
+            <NavLink to="/analytics/anomaly">Bat thuong</NavLink>
+            <NavLink to="/analytics/trend">Xu huong</NavLink>
+            <NavLink to="/analytics/drilldown">Drill-down</NavLink>
+            <NavLink to="/memory">Memory Studio</NavLink>
+          </NavSection>
+
+          {isAdminOrDataOwner && (
+            <NavSection label="Quan ly">
+              <NavLink to="/semantic">Semantic Studio</NavLink>
+            </NavSection>
+          )}
+
+          {isAdminOrDataOwner && (
+            <NavSection label="Quan tri">
+              <NavLink to="/admin">Dashboard</NavLink>
+              <NavLink to="/admin/users">Nguoi dung</NavLink>
+              <NavLink to="/admin/roles">Vai tro</NavLink>
+              <NavLink to="/admin/data-sources">Nguon du lieu</NavLink>
+              <NavLink to="/admin/documents">Tai lieu</NavLink>
+              <NavLink to="/admin/audit-log">Audit Log</NavLink>
+            </NavSection>
+          )}
         </nav>
 
         <main
@@ -160,5 +138,50 @@ export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
         </main>
       </div>
     </div>
+  );
+}
+
+function NavSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div
+        style={{
+          fontSize: '0.75rem',
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+          color: 'var(--color-neutral-400)',
+          fontWeight: 600,
+          padding: '0.5rem 0.5rem 0.3rem',
+        }}
+      >
+        {label}
+      </div>
+      <ul role="list" style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: '0.3rem' }}>
+        {children}
+      </ul>
+    </div>
+  );
+}
+
+function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
+  const isActive = typeof window !== 'undefined' && window.location.pathname === to;
+  return (
+    <li>
+      <a
+        href={to}
+        style={{
+          display: 'block',
+          padding: '0.65rem 0.85rem',
+          borderRadius: '0.85rem',
+          color: isActive ? '#0f766e' : 'var(--color-neutral-700)',
+          textDecoration: 'none',
+          fontSize: '0.92rem',
+          fontWeight: isActive ? 600 : 500,
+          background: isActive ? 'rgba(15, 118, 110, 0.10)' : undefined,
+        }}
+      >
+        {children}
+      </a>
+    </li>
   );
 }
