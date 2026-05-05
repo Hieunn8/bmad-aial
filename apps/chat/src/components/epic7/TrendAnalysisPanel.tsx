@@ -199,7 +199,7 @@ export function TrendAnalysisPanel(): React.JSX.Element {
             ) : null}
             {result && result.drilldown.length > 0 ? (
               <button type="button" onClick={handleExcelExport} style={{ ...ghostButtonStyle, marginTop: '0.8rem' }}>
-                Xuat Excel
+                Xuất Excel
               </button>
             ) : null}
           </div>

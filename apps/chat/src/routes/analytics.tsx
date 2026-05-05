@@ -10,10 +10,10 @@ export const Route = createFileRoute('/analytics')({
 });
 
 const tabs = [
-  { to: '/analytics/forecast', label: 'Du bao' },
-  { to: '/analytics/anomaly', label: 'Bat thuong' },
-  { to: '/analytics/trend', label: 'Xu huong' },
-  { to: '/analytics/drilldown', label: 'Drill-down' },
+  { to: '/analytics/forecast', label: 'Dự báo', note: 'Forecast' },
+  { to: '/analytics/anomaly', label: 'Bất thường', note: 'Anomaly' },
+  { to: '/analytics/trend', label: 'Xu hướng', note: 'Trend' },
+  { to: '/analytics/drilldown', label: 'Drill-down', note: 'Phân rã chỉ tiêu' },
 ];
 
 function AnalyticsLayout() {
@@ -54,6 +54,9 @@ function AnalyticsLayout() {
             }}
           >
             {tab.label}
+            <span style={{ display: 'block', fontSize: '0.74rem', fontWeight: 500, color: 'var(--color-neutral-500)' }}>
+              {tab.note}
+            </span>
           </Link>
         ))}
       </div>

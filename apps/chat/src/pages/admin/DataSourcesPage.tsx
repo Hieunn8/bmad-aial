@@ -41,7 +41,9 @@ export function DataSourcesPage(): React.JSX.Element {
   }
 
   useEffect(() => {
-    void loadDataSources().catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : 'Khong tai duoc data sources'));
+    void loadDataSources().catch((loadError: unknown) =>
+      setError(loadError instanceof Error ? loadError.message : 'Không tải được nguồn dữ liệu')
+    );
   }, []);
 
   function startEdit(source: DataSource): void {
@@ -84,15 +86,8 @@ export function DataSourcesPage(): React.JSX.Element {
       setForm(emptyForm);
       await loadDataSources();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Luu data source that bai');
+      setError(submitError instanceof Error ? submitError.message : 'Lưu nguồn dữ liệu thất bại');
     }
-  }
-
-  function statusDot(status: string): string {
-    if (status === 'active') return '●';
-    if (status === 'error') return '●';
-    if (status === 'unreachable') return '●';
-    return '○';
   }
 
   function statusColor(status: string): string {
@@ -103,24 +98,24 @@ export function DataSourcesPage(): React.JSX.Element {
   }
 
   return (
-    <AdminPageShell title="Nguon du lieu Oracle">
+    <AdminPageShell title="Nguồn dữ liệu Oracle">
       {error && <div role="alert" style={{ ...adminCard, color: '#991b1b', marginBottom: '1rem' }}>{error}</div>}
       <form onSubmit={(event) => void handleSubmit(event)} style={{ ...adminCard, display: 'grid', gap: '0.8rem', marginBottom: '1rem' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.8rem' }}>
-          <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} style={inputStyle} placeholder="name" disabled={Boolean(editing)} required />
-          <input value={form.host} onChange={(event) => setForm((current) => ({ ...current, host: event.target.value }))} style={inputStyle} placeholder="host" required />
-          <input value={form.port} onChange={(event) => setForm((current) => ({ ...current, port: event.target.value }))} style={inputStyle} placeholder="port" type="number" required />
-          <input value={form.service_name} onChange={(event) => setForm((current) => ({ ...current, service_name: event.target.value }))} style={inputStyle} placeholder="service name" required />
-          <input value={form.username} onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))} style={inputStyle} placeholder="username" required />
-          <input value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} style={inputStyle} placeholder={editing ? 'password moi neu doi' : 'password'} type="password" required={!editing} />
-          <input value={form.query_timeout_seconds} onChange={(event) => setForm((current) => ({ ...current, query_timeout_seconds: event.target.value }))} style={inputStyle} placeholder="timeout" type="number" />
-          <input value={form.row_limit} onChange={(event) => setForm((current) => ({ ...current, row_limit: event.target.value }))} style={inputStyle} placeholder="row limit" type="number" />
+          <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} style={inputStyle} placeholder="Tên nguồn (name)" disabled={Boolean(editing)} required />
+          <input value={form.host} onChange={(event) => setForm((current) => ({ ...current, host: event.target.value }))} style={inputStyle} placeholder="Máy chủ (host)" required />
+          <input value={form.port} onChange={(event) => setForm((current) => ({ ...current, port: event.target.value }))} style={inputStyle} placeholder="Cổng (port)" type="number" required />
+          <input value={form.service_name} onChange={(event) => setForm((current) => ({ ...current, service_name: event.target.value }))} style={inputStyle} placeholder="Tên service Oracle" required />
+          <input value={form.username} onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))} style={inputStyle} placeholder="Tài khoản (username)" required />
+          <input value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} style={inputStyle} placeholder={editing ? 'Mật khẩu mới nếu đổi' : 'Mật khẩu'} type="password" required={!editing} />
+          <input value={form.query_timeout_seconds} onChange={(event) => setForm((current) => ({ ...current, query_timeout_seconds: event.target.value }))} style={inputStyle} placeholder="Timeout truy vấn, giây" type="number" />
+          <input value={form.row_limit} onChange={(event) => setForm((current) => ({ ...current, row_limit: event.target.value }))} style={inputStyle} placeholder="Giới hạn dòng (row limit)" type="number" />
         </div>
-        <textarea value={form.schema_allowlist} onChange={(event) => setForm((current) => ({ ...current, schema_allowlist: event.target.value }))} style={{ ...inputStyle, minHeight: '4.5rem' }} placeholder="schema allowlist, moi dong mot schema" />
-        <input value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} style={inputStyle} placeholder="description" />
+        <textarea value={form.schema_allowlist} onChange={(event) => setForm((current) => ({ ...current, schema_allowlist: event.target.value }))} style={{ ...inputStyle, minHeight: '4.5rem' }} placeholder="Danh sách schema được phép, mỗi dòng một schema" />
+        <input value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} style={inputStyle} placeholder="Mô tả (description)" />
         <div style={{ display: 'flex', gap: '0.7rem' }}>
-          <button type="submit" style={buttonStyle}>{editing ? 'Sua cau hinh' : 'Them nguon du lieu'}</button>
-          {editing && <button type="button" style={ghostButtonStyle} onClick={() => { setEditing(null); setForm(emptyForm); }}>Huy</button>}
+          <button type="submit" style={buttonStyle}>{editing ? 'Sửa cấu hình' : 'Thêm nguồn dữ liệu'}</button>
+          {editing && <button type="button" style={ghostButtonStyle} onClick={() => { setEditing(null); setForm(emptyForm); }}>Hủy</button>}
         </div>
       </form>
       <div style={{ display: 'grid', gap: '1rem' }}>
@@ -128,12 +123,15 @@ export function DataSourcesPage(): React.JSX.Element {
           <article key={source.name} style={adminCard}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
               <div>
-                <h2 style={{ margin: 0, fontSize: '1.15rem' }}><span style={{ color: statusColor(source.status) }}>{statusDot(source.status)}</span> {source.name}</h2>
+                <h2 style={{ margin: 0, fontSize: '1.15rem' }}>
+                  <span aria-hidden="true" style={{ display: 'inline-block', width: '0.7rem', height: '0.7rem', borderRadius: '999px', background: statusColor(source.status), marginRight: '0.45rem' }} />
+                  {source.name}
+                </h2>
                 <p style={{ color: 'var(--color-neutral-600)' }}>{source.description}</p>
-                <div>Host: {source.host}:{source.port} | Service: {source.service_name}</div>
-                <div>Schema: {source.schema_allowlist.join(', ') || 'none'} | Timeout: {source.query_timeout_seconds}s | Row limit: {source.row_limit.toLocaleString('vi-VN')}</div>
+                <div>Máy chủ: {source.host}:{source.port} | Service: {source.service_name}</div>
+                <div>Schema: {source.schema_allowlist.join(', ') || 'Không có'} | Timeout: {source.query_timeout_seconds}s | Giới hạn dòng: {source.row_limit.toLocaleString('vi-VN')}</div>
               </div>
-              <button type="button" style={ghostButtonStyle} onClick={() => startEdit(source)}>Sua cau hinh</button>
+              <button type="button" style={ghostButtonStyle} onClick={() => startEdit(source)}>Sửa cấu hình</button>
             </div>
           </article>
         ))}

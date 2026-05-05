@@ -212,7 +212,7 @@ export function ChatAssistantConsole(): React.JSX.Element {
           return;
         }
         if (nextStatus.status === 'failed' || nextStatus.status === 'expired') {
-          setError(nextStatus.error ?? 'Export job khong thanh cong');
+          setError(nextStatus.error ?? 'Export job không thành công');
           return;
         }
         window.setTimeout(() => {
@@ -220,7 +220,7 @@ export function ChatAssistantConsole(): React.JSX.Element {
         }, 1200);
       } catch (pollError) {
         if (!cancelled) {
-          setError(pollError instanceof Error ? pollError.message : 'Khong the kiem tra export job');
+          setError(pollError instanceof Error ? pollError.message : 'Không thể kiểm tra export job');
         }
       }
     };
@@ -257,11 +257,11 @@ export function ChatAssistantConsole(): React.JSX.Element {
         }),
       });
       setRequestId(handle.request_id);
-      setStatusMessage(handle.message ?? 'Dang stream ket qua truy van...');
+      setStatusMessage(handle.message ?? 'Đang stream kết quả truy vấn...');
       setCacheState(buildCacheState(handle));
       setStreamPath(`/v1/chat/stream/${handle.request_id}`);
     } catch (queryError) {
-      setError(queryError instanceof Error ? queryError.message : 'Khong the chay truy van');
+      setError(queryError instanceof Error ? queryError.message : 'Không thể chạy truy vấn');
     }
   }
 
@@ -277,7 +277,7 @@ export function ChatAssistantConsole(): React.JSX.Element {
       setPreview(nextPreview);
       setShowConfirmation(true);
     } catch (previewError) {
-      setError(previewError instanceof Error ? previewError.message : 'Khong the tao export preview');
+      setError(previewError instanceof Error ? previewError.message : 'Không thể tạo export preview');
     }
   }
 
@@ -298,7 +298,7 @@ export function ChatAssistantConsole(): React.JSX.Element {
       setJobHandle(job);
       setStatusMessage(`Export job ${job.job_id} dang o hang doi ${job.queue_name}.`);
     } catch (exportError) {
-      setError(exportError instanceof Error ? exportError.message : 'Khong the tao export job');
+      setError(exportError instanceof Error ? exportError.message : 'Không thể tạo export job');
     }
   }
 
@@ -321,7 +321,7 @@ export function ChatAssistantConsole(): React.JSX.Element {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           style={inputStyle}
-          placeholder="Nhap cau hoi can giai dap tu du lieu va tai lieu noi bo"
+          placeholder="Nhập câu hỏi cần giải đáp từ dữ liệu và tài liệu nội bộ"
         />
         <button type="button" style={buttonStyle} onClick={() => void handleRunQuery()}>
           Ask AI

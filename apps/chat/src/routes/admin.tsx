@@ -14,68 +14,56 @@ export const Route = createFileRoute('/admin')({
 });
 
 const adminNavItems = [
-  { to: '/admin', label: 'Dashboard' },
-  { to: '/admin/users', label: 'Nguoi dung' },
-  { to: '/admin/roles', label: 'Vai tro' },
-  { to: '/admin/data-sources', label: 'Nguon du lieu' },
-  { to: '/admin/documents', label: 'Tai lieu' },
-  { to: '/admin/audit-log', label: 'Audit Log' },
+  { to: '/admin', label: 'Tổng quan', note: 'Dashboard' },
+  { to: '/admin/users', label: 'Người dùng', note: 'Users' },
+  { to: '/admin/roles', label: 'Vai trò', note: 'Roles' },
+  { to: '/admin/data-sources', label: 'Nguồn dữ liệu', note: 'Data sources' },
+  { to: '/admin/documents', label: 'Tài liệu', note: 'Documents' },
+  { to: '/admin/audit-log', label: 'Audit Log', note: 'Nhật ký kiểm toán' },
 ];
 
 function AdminLayout() {
   return (
-    <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
       <nav
         style={{
-          width: '13rem',
-          background: 'rgba(255,255,255,0.5)',
-          borderRight: '1px solid rgba(117, 94, 60, 0.12)',
-          padding: '1rem 0.7rem',
+          background: 'rgba(255,255,255,0.7)',
+          borderBottom: '1px solid rgba(117, 94, 60, 0.12)',
+          padding: '0.75rem 2.4rem 0',
           display: 'flex',
-          flexDirection: 'column',
-          gap: '0.3rem',
-          overflowY: 'auto',
+          gap: '0.4rem',
+          overflowX: 'auto',
         }}
       >
-        <div
-          style={{
-            fontSize: '0.75rem',
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            color: 'var(--color-neutral-400)',
-            fontWeight: 600,
-            padding: '0.3rem 0.5rem 0.5rem',
-          }}
-        >
-          Quan tri he thong
-        </div>
         {adminNavItems.map((item) => (
           <Link
             key={item.to}
             to={item.to}
             style={{
-              display: 'block',
-              padding: '0.6rem 0.8rem',
-              borderRadius: '0.75rem',
+              padding: '0.6rem 1.1rem',
+              borderRadius: '0.75rem 0.75rem 0 0',
               textDecoration: 'none',
-              fontSize: '0.9rem',
+              fontSize: '0.92rem',
               fontWeight: 500,
-              color: 'var(--color-neutral-700)',
+              color: 'var(--color-neutral-600)',
+              borderBottom: '2px solid transparent',
             }}
             activeProps={{
               style: {
-                display: 'block',
-                padding: '0.6rem 0.8rem',
-                borderRadius: '0.75rem',
+                padding: '0.6rem 1.1rem',
+                borderRadius: '0.75rem 0.75rem 0 0',
                 textDecoration: 'none',
-                fontSize: '0.9rem',
+                fontSize: '0.92rem',
                 fontWeight: 700,
                 color: '#0f766e',
-                background: 'rgba(15,118,110,0.10)',
+                borderBottom: '2px solid #0f766e',
               },
             }}
           >
             {item.label}
+            <span style={{ display: 'block', fontSize: '0.74rem', fontWeight: 500, color: 'var(--color-neutral-500)' }}>
+              {item.note}
+            </span>
           </Link>
         ))}
       </nav>

@@ -17,7 +17,7 @@ export function UsersPage(): React.JSX.Element {
   }
 
   useEffect(() => {
-    void loadUsers().catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : 'Khong tai duoc users'));
+    void loadUsers().catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : 'Không tải được danh sách người dùng'));
   }, []);
 
   async function handleSubmit(event: FormEvent): Promise<void> {
@@ -40,12 +40,12 @@ export function UsersPage(): React.JSX.Element {
       setForm({ user_id: '', email: '', department: '', roles: '', ldap_groups: '' });
       await loadUsers();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Luu user that bai');
+      setError(submitError instanceof Error ? submitError.message : 'Lưu người dùng thất bại');
     }
   }
 
   async function handleDelete(user: User): Promise<void> {
-    if (!window.confirm(`Xoa user ${user.user_id}?`)) return;
+    if (!window.confirm(`Xóa người dùng ${user.user_id}?`)) return;
     await apiRequest(`/v1/admin/users/${encodeURIComponent(user.user_id)}`, { method: 'DELETE' });
     await loadUsers();
   }
@@ -62,34 +62,34 @@ export function UsersPage(): React.JSX.Element {
   }
 
   return (
-    <AdminPageShell title="Quan ly nguoi dung">
+    <AdminPageShell title="Quản lý người dùng">
       {error && <div role="alert" style={{ ...adminCard, color: '#991b1b', marginBottom: '1rem' }}>{error}</div>}
       <form onSubmit={(event) => void handleSubmit(event)} style={{ ...adminCard, display: 'grid', gap: '0.8rem', marginBottom: '1rem' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '0.8rem' }}>
-          <input value={form.user_id} onChange={(event) => setForm((current) => ({ ...current, user_id: event.target.value }))} style={inputStyle} placeholder="user_id" disabled={Boolean(editing)} required />
-          <input value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} style={inputStyle} placeholder="email" required />
-          <input value={form.department} onChange={(event) => setForm((current) => ({ ...current, department: event.target.value }))} style={inputStyle} placeholder="department" required />
-          <input value={form.roles} onChange={(event) => setForm((current) => ({ ...current, roles: event.target.value }))} style={inputStyle} placeholder="roles" />
-          <input value={form.ldap_groups} onChange={(event) => setForm((current) => ({ ...current, ldap_groups: event.target.value }))} style={inputStyle} placeholder="ldap groups" />
+          <input value={form.user_id} onChange={(event) => setForm((current) => ({ ...current, user_id: event.target.value }))} style={inputStyle} placeholder="Mã người dùng (user_id)" disabled={Boolean(editing)} required />
+          <input value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} style={inputStyle} placeholder="Email" required />
+          <input value={form.department} onChange={(event) => setForm((current) => ({ ...current, department: event.target.value }))} style={inputStyle} placeholder="Phòng ban (department)" required />
+          <input value={form.roles} onChange={(event) => setForm((current) => ({ ...current, roles: event.target.value }))} style={inputStyle} placeholder="Vai trò (roles)" />
+          <input value={form.ldap_groups} onChange={(event) => setForm((current) => ({ ...current, ldap_groups: event.target.value }))} style={inputStyle} placeholder="Nhóm LDAP (LDAP groups)" />
         </div>
         <div style={{ display: 'flex', gap: '0.7rem' }}>
-          <button type="submit" style={buttonStyle}>{editing ? 'Cap nhat user' : 'Tao user'}</button>
-          {editing && <button type="button" style={ghostButtonStyle} onClick={() => setEditing(null)}>Huy</button>}
+          <button type="submit" style={buttonStyle}>{editing ? 'Cập nhật người dùng' : 'Tạo người dùng'}</button>
+          {editing && <button type="button" style={ghostButtonStyle} onClick={() => setEditing(null)}>Hủy</button>}
         </div>
       </form>
       <div style={adminCard}>
         <table style={tableStyle}>
-          <thead><tr><th style={cellStyle}>User</th><th style={cellStyle}>Email</th><th style={cellStyle}>Department</th><th style={cellStyle}>Roles</th><th style={cellStyle}>Thao tac</th></tr></thead>
+          <thead><tr><th style={cellStyle}>Người dùng</th><th style={cellStyle}>Email</th><th style={cellStyle}>Phòng ban</th><th style={cellStyle}>Vai trò</th><th style={cellStyle}>Thao tác</th></tr></thead>
           <tbody>
             {users.map((user) => (
               <tr key={user.user_id}>
                 <td style={cellStyle}>{user.user_id}</td>
                 <td style={cellStyle}>{user.email}</td>
                 <td style={cellStyle}>{user.department}</td>
-                <td style={cellStyle}>{user.roles.join(', ') || 'none'}</td>
+                <td style={cellStyle}>{user.roles.join(', ') || 'Không có'}</td>
                 <td style={cellStyle}>
-                  <button type="button" style={ghostButtonStyle} onClick={() => startEdit(user)}>Sua</button>{' '}
-                  <button type="button" style={dangerButtonStyle} onClick={() => void handleDelete(user)}>Xoa</button>
+                  <button type="button" style={ghostButtonStyle} onClick={() => startEdit(user)}>Sửa</button>{' '}
+                  <button type="button" style={dangerButtonStyle} onClick={() => void handleDelete(user)}>Xóa</button>
                 </td>
               </tr>
             ))}

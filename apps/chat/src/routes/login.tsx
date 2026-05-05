@@ -27,7 +27,7 @@ function LoginPage(): React.JSX.Element {
       await auth.loginWithPassword(username, password);
       void navigate({ to: '/' });
     } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : 'Dang nhap that bai');
+      setError(loginError instanceof Error ? loginError.message : 'Đăng nhập thất bại');
     } finally {
       setSubmitting(false);
     }
@@ -88,7 +88,7 @@ function LoginPage(): React.JSX.Element {
             AIAL Enterprise
           </h1>
           <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-neutral-500)', marginTop: 'var(--space-1)', textAlign: 'center' }}>
-            Dang nhap bang tai khoan noi bo hoac SSO
+            Đăng nhập bằng tài khoản nội bộ hoặc SSO
           </p>
         </div>
 
@@ -96,7 +96,7 @@ function LoginPage(): React.JSX.Element {
           <input
             value={username}
             onChange={(event) => setUsername(event.target.value)}
-            placeholder="Username"
+            placeholder="Tên đăng nhập (username)"
             style={{
               width: '100%',
               padding: 'var(--space-3)',
@@ -108,7 +108,7 @@ function LoginPage(): React.JSX.Element {
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="Password"
+            placeholder="Mật khẩu (password)"
             style={{
               width: '100%',
               padding: 'var(--space-3)',
@@ -131,7 +131,7 @@ function LoginPage(): React.JSX.Element {
               fontWeight: 'var(--font-weight-medium)',
             }}
           >
-            {submitting ? 'Dang dang nhap...' : 'Dang nhap bang user/pass'}
+            {submitting ? 'Đang đăng nhập...' : 'Đăng nhập bằng user/pass'}
           </button>
         </form>
 
@@ -151,7 +151,7 @@ function LoginPage(): React.JSX.Element {
               fontWeight: 'var(--font-weight-medium)',
             }}
           >
-            Dang nhap bang SSO
+            Đăng nhập bằng SSO
           </button>
           {error ? (
             <div role="alert" style={{ color: '#991b1b', fontSize: '0.9rem' }}>
@@ -159,7 +159,7 @@ function LoginPage(): React.JSX.Element {
             </div>
           ) : null}
           <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-neutral-400)', textAlign: 'center' }}>
-            Tai khoan mac dinh local: <strong>admin / admin123!</strong>
+            Tài khoản mặc định local: <strong>admin / admin123!</strong>
           </div>
         </div>
       </div>

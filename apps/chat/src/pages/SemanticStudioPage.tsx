@@ -38,12 +38,12 @@ export function SemanticStudioPage(): React.JSX.Element {
   const [selectedMetric, setSelectedMetric] = useState('');
   const [versions, setVersions] = useState<MetricVersion[]>([]);
   const [diffRows, setDiffRows] = useState<MetricDiffRow[]>([]);
-  const [rollbackReason, setRollbackReason] = useState('restore audited baseline');
+  const [rollbackReason, setRollbackReason] = useState('khôi phục baseline đã audit');
   const [flash, setFlash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
-    term: 'doanh thu thuan',
-    definition: 'Doanh thu sau dieu chinh hoan tra va giam tru',
+    term: 'doanh thu thuần',
+    definition: 'Doanh thu sau điều chỉnh hoàn trả và giảm trừ',
     formula: 'SUM(NET_REVENUE) - SUM(RETURNS)',
     owner: 'Finance',
     freshness_rule: 'daily',
@@ -85,11 +85,11 @@ export function SemanticStudioPage(): React.JSX.Element {
         method: 'POST',
         body: JSON.stringify(form),
       });
-      setFlash(`Da publish KPI ${form.term}`);
+      setFlash(`Đã publish KPI ${form.term}`);
       await loadMetrics(form.term);
       await loadVersions(form.term);
     } catch (publishError) {
-      setError(publishError instanceof Error ? publishError.message : 'Publish that bai');
+      setError(publishError instanceof Error ? publishError.message : 'Publish thất bại');
     }
   }
 
@@ -104,24 +104,24 @@ export function SemanticStudioPage(): React.JSX.Element {
           body: JSON.stringify({ version_id: versionId, reason: rollbackReason }),
         },
       );
-      setFlash(`Da rollback ${selectedMetric}`);
+      setFlash(`Đã rollback ${selectedMetric}`);
       await loadMetrics(selectedMetric);
       await loadVersions(selectedMetric);
     } catch (rollbackError) {
-      setError(rollbackError instanceof Error ? rollbackError.message : 'Rollback that bai');
+      setError(rollbackError instanceof Error ? rollbackError.message : 'Rollback thất bại');
     }
   }
 
   useEffect(() => {
     void loadMetrics().catch((loadError: unknown) => {
-      setError(loadError instanceof Error ? loadError.message : 'Khong tai duoc semantic metrics');
+      setError(loadError instanceof Error ? loadError.message : 'Không tải được semantic metrics');
     });
   }, []);
 
   useEffect(() => {
     if (selectedMetric) {
       void loadVersions(selectedMetric).catch((loadError: unknown) => {
-        setError(loadError instanceof Error ? loadError.message : 'Khong tai duoc lich su KPI');
+        setError(loadError instanceof Error ? loadError.message : 'Không tải được lịch sử KPI');
       });
     }
   }, [selectedMetric]);
@@ -130,7 +130,7 @@ export function SemanticStudioPage(): React.JSX.Element {
     <section style={pageShell}>
       <h1 style={pageTitle}>Semantic Studio</h1>
       <p style={{ margin: '0.45rem 0 1.2rem', color: 'var(--color-neutral-600)' }}>
-        Publish KPI versions, xem diff cong thuc va rollback co audit reason.
+        Publish KPI versions, xem diff công thức và rollback có audit reason.
       </p>
       {(flash || error) && (
         <div role={error ? 'alert' : 'status'} style={{ ...cardStyle, padding: '0.9rem 1rem', marginBottom: '1rem', color: error ? '#991b1b' : '#115e59' }}>
@@ -141,8 +141,8 @@ export function SemanticStudioPage(): React.JSX.Element {
         <section style={{ ...cardStyle, padding: '1.25rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Metric versions</h2>
-              <p style={{ color: 'var(--color-neutral-600)' }}>Active: {selectedMetricData?.term ?? 'chua co metric'}</p>
+              <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Metric versions - Phiên bản KPI</h2>
+              <p style={{ color: 'var(--color-neutral-600)' }}>Active - Đang dùng: {selectedMetricData?.term ?? 'chưa có metric'}</p>
             </div>
             <select value={selectedMetric} onChange={(event) => setSelectedMetric(event.target.value)} style={{ ...inputStyle, width: '15rem' }}>
               {metrics.map((metric) => <option key={metric.term} value={metric.term}>{metric.term}</option>)}
@@ -150,14 +150,14 @@ export function SemanticStudioPage(): React.JSX.Element {
           </div>
           <form onSubmit={(event) => void handlePublish(event)} style={{ display: 'grid', gap: '0.8rem', marginTop: '1rem' }}>
             <div style={{ display: 'grid', gap: '0.8rem', gridTemplateColumns: '1fr 1fr' }}>
-              <input value={form.term} onChange={(event) => setForm((current) => ({ ...current, term: event.target.value }))} style={inputStyle} placeholder="Ten KPI" />
+              <input value={form.term} onChange={(event) => setForm((current) => ({ ...current, term: event.target.value }))} style={inputStyle} placeholder="Tên KPI" />
               <input value={form.owner} onChange={(event) => setForm((current) => ({ ...current, owner: event.target.value }))} style={inputStyle} placeholder="Owner" />
             </div>
-            <textarea value={form.definition} onChange={(event) => setForm((current) => ({ ...current, definition: event.target.value }))} style={{ ...inputStyle, minHeight: '5rem' }} placeholder="Dien giai business" />
-            <textarea value={form.formula} onChange={(event) => setForm((current) => ({ ...current, formula: event.target.value }))} style={{ ...inputStyle, minHeight: '5rem', fontFamily: 'ui-monospace, SFMono-Regular, monospace' }} placeholder="Cong thuc KPI" />
+            <textarea value={form.definition} onChange={(event) => setForm((current) => ({ ...current, definition: event.target.value }))} style={{ ...inputStyle, minHeight: '5rem' }} placeholder="Diễn giải business" />
+            <textarea value={form.formula} onChange={(event) => setForm((current) => ({ ...current, formula: event.target.value }))} style={{ ...inputStyle, minHeight: '5rem', fontFamily: 'ui-monospace, SFMono-Regular, monospace' }} placeholder="Công thức KPI" />
             <div style={{ display: 'flex', gap: '0.8rem' }}>
               <input value={form.freshness_rule} onChange={(event) => setForm((current) => ({ ...current, freshness_rule: event.target.value }))} style={{ ...inputStyle, maxWidth: '10rem' }} placeholder="daily" />
-              <button type="submit" style={buttonStyle}>Publish Version</button>
+              <button type="submit" style={buttonStyle}>Publish Version - Xuất bản phiên bản</button>
             </div>
           </form>
           <div style={{ marginTop: '1.2rem', display: 'grid', gap: '0.8rem' }}>
@@ -181,11 +181,11 @@ export function SemanticStudioPage(): React.JSX.Element {
           </div>
         </section>
         <aside style={{ ...cardStyle, padding: '1.25rem' }}>
-          <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Diff view</h2>
-          <input value={rollbackReason} onChange={(event) => setRollbackReason(event.target.value)} style={{ ...inputStyle, marginTop: '1rem' }} placeholder="Rollback reason" />
+          <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Diff view - So sánh công thức</h2>
+          <input value={rollbackReason} onChange={(event) => setRollbackReason(event.target.value)} style={{ ...inputStyle, marginTop: '1rem' }} placeholder="Lý do rollback" />
           <div style={{ marginTop: '1rem', borderRadius: '1rem', background: 'rgba(246,241,232,0.9)', padding: '1rem', minHeight: '16rem' }}>
             {diffRows.length === 0 ? (
-              <p style={{ margin: 0, color: 'var(--color-neutral-500)' }}>Chua du version de tao diff.</p>
+              <p style={{ margin: 0, color: 'var(--color-neutral-500)' }}>Chưa đủ version để tạo diff.</p>
             ) : (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
                 {diffRows.map((row, index) => (

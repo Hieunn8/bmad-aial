@@ -56,12 +56,14 @@ export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
           </span>
           <div>
             <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-neutral-900)' }}>AIAL</div>
-            <div style={{ fontSize: '0.82rem', color: 'var(--color-neutral-500)' }}>AI Assistant</div>
+            <div style={{ fontSize: '0.82rem', color: 'var(--color-neutral-500)' }}>
+              AI Assistant - Trợ lý dữ liệu nội bộ
+            </div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <div style={{ color: 'var(--color-neutral-500)', fontSize: '0.88rem', textAlign: 'right' }}>
-            <div>{auth.session?.claims.name ?? auth.session?.claims.email ?? 'Guest'}</div>
+            <div>{auth.session?.claims.name ?? auth.session?.claims.email ?? 'Khách'}</div>
             <div>{roles.join(', ') || 'user'}</div>
           </div>
           <button
@@ -77,14 +79,14 @@ export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
               fontWeight: 600,
             }}
           >
-            Logout
+            Đăng xuất
           </button>
         </div>
       </header>
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <nav
-          aria-label="Primary navigation"
+          aria-label="Điều hướng chính"
           style={{
             width: 'var(--sidebar-width)',
             background: 'rgba(255,255,255,0.58)',
@@ -96,29 +98,21 @@ export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
             gap: '0.5rem',
           }}
         >
-          <NavSection label="Ung dung">
-            <NavLink to="/chat">Chat</NavLink>
-            <NavLink to="/analytics/forecast">Du bao</NavLink>
-            <NavLink to="/analytics/anomaly">Bat thuong</NavLink>
-            <NavLink to="/analytics/trend">Xu huong</NavLink>
-            <NavLink to="/analytics/drilldown">Drill-down</NavLink>
-            <NavLink to="/memory">Memory Studio</NavLink>
+          <NavSection label="Ứng dụng">
+            <NavLink to="/chat">Chat - Hỏi đáp dữ liệu</NavLink>
+            <NavLink to="/analytics/forecast" activePrefix="/analytics">Phân tích - Dự báo</NavLink>
+            <NavLink to="/memory">Memory Studio - Bộ nhớ</NavLink>
           </NavSection>
 
           {isAdminOrDataOwner && (
-            <NavSection label="Quan ly">
-              <NavLink to="/semantic">Semantic Studio</NavLink>
+            <NavSection label="Quản lý">
+              <NavLink to="/semantic">Semantic Studio - Lớp KPI</NavLink>
             </NavSection>
           )}
 
           {isAdminOrDataOwner && (
-            <NavSection label="Quan tri">
-              <NavLink to="/admin">Dashboard</NavLink>
-              <NavLink to="/admin/users">Nguoi dung</NavLink>
-              <NavLink to="/admin/roles">Vai tro</NavLink>
-              <NavLink to="/admin/data-sources">Nguon du lieu</NavLink>
-              <NavLink to="/admin/documents">Tai lieu</NavLink>
-              <NavLink to="/admin/audit-log">Audit Log</NavLink>
+            <NavSection label="Quản trị">
+              <NavLink to="/admin" activePrefix="/admin">Admin - Quản trị hệ thống</NavLink>
             </NavSection>
           )}
         </nav>
@@ -126,7 +120,7 @@ export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
         <main
           id="main-content"
           role="main"
-          aria-label="Main content"
+          aria-label="Nội dung chính"
           style={{
             flex: 1,
             overflowY: 'auto',
@@ -163,8 +157,9 @@ function NavSection({ label, children }: { label: string; children: React.ReactN
   );
 }
 
-function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
-  const isActive = typeof window !== 'undefined' && window.location.pathname === to;
+function NavLink({ to, activePrefix, children }: { to: string; activePrefix?: string; children: React.ReactNode }) {
+  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+  const isActive = activePrefix ? pathname.startsWith(activePrefix) : pathname === to;
   return (
     <li>
       <a

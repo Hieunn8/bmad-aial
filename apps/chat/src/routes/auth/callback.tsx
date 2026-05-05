@@ -9,7 +9,7 @@ export const Route = createFileRoute('/auth/callback')({
 function AuthCallbackPage(): React.JSX.Element {
   const auth = useAuth();
   const navigate = useNavigate();
-  const [message, setMessage] = useState('Dang xac thuc, vui long cho...');
+  const [message, setMessage] = useState('Đang xác thực, vui lòng chờ...');
 
   useEffect(() => {
     let active = true;
@@ -17,7 +17,7 @@ function AuthCallbackPage(): React.JSX.Element {
     const run = async (): Promise<void> => {
       const params = new URLSearchParams(window.location.search);
       if (params.get('error')) {
-        setMessage('Dang nhap that bai. Dang quay lai man login...');
+        setMessage('Đăng nhập thất bại. Đang quay lại màn login...');
         void navigate({ to: '/login' });
         return;
       }
@@ -30,7 +30,7 @@ function AuthCallbackPage(): React.JSX.Element {
         void navigate({ to: '/' });
       } catch {
         if (active) {
-          setMessage('Khong the hoan tat dang nhap. Dang quay lai man login...');
+          setMessage('Không thể hoàn tất đăng nhập. Đang quay lại màn login...');
           window.setTimeout(() => {
             void navigate({ to: '/login' });
           }, 1200);
@@ -48,7 +48,7 @@ function AuthCallbackPage(): React.JSX.Element {
     <div
       role="status"
       aria-live="polite"
-      aria-label="Dang xac thuc"
+      aria-label="Đang xác thực"
       style={{
         display: 'flex',
         alignItems: 'center',

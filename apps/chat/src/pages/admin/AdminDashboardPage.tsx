@@ -18,18 +18,18 @@ export function AdminDashboardPage(): React.JSX.Element {
       ]);
       setSummary({ users, roles, data_sources: dataSources, audit });
     }
-    void load().catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : 'Khong tai duoc dashboard'));
+    void load().catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : 'Không tải được dashboard'));
   }, []);
 
   const cards = [
-    { label: 'Nguoi dung', value: summary.users?.total ?? 0 },
-    { label: 'Vai tro', value: summary.roles?.total ?? 0 },
-    { label: 'Nguon du lieu', value: summary.data_sources?.total ?? 0 },
-    { label: 'Audit records', value: summary.audit?.total ?? 0 },
+    { label: 'Người dùng', value: summary.users?.total ?? 0 },
+    { label: 'Vai trò', value: summary.roles?.total ?? 0 },
+    { label: 'Nguồn dữ liệu', value: summary.data_sources?.total ?? 0 },
+    { label: 'Audit records - Nhật ký kiểm toán', value: summary.audit?.total ?? 0 },
   ];
 
   return (
-    <AdminPageShell title="Admin Dashboard">
+    <AdminPageShell title="Tổng quan quản trị - Admin Dashboard">
       {error && <div role="alert" style={{ ...adminCard, color: '#991b1b', marginBottom: '1rem' }}>{error}</div>}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '1rem' }}>
         {cards.map((card) => (
