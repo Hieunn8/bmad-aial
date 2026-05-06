@@ -106,7 +106,7 @@ export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
 
           {isAdminOrDataOwner && (
             <NavSection label="Quản lý">
-              <NavLink to="/semantic">Semantic Studio - Lớp KPI</NavLink>
+              <NavLink to="/semantic">Semantic Studio - Tri thức nghiệp vụ</NavLink>
             </NavSection>
           )}
 

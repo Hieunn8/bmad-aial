@@ -495,6 +495,22 @@ class TestChatQueryEndpoint:
             clearance=sample_claims.clearance,
             raw=sample_claims.raw,
         )
+        get_semantic_layer_service().publish_metric(
+            term="doanh thu",
+            definition="Tổng doanh thu gộp từ bán hàng và cung cấp dịch vụ",
+            formula="SUM(GROSS_REVENUE)",
+            owner="Finance",
+            freshness_rule="daily",
+            changed_by="test",
+        )
+        get_semantic_layer_service().publish_metric(
+            term="so luong khach hang",
+            definition="Tổng số khách hàng đang hoạt động trong kỳ",
+            formula="COUNT(DISTINCT CUSTOMER_ID)",
+            owner="Sales",
+            freshness_rule="daily",
+            changed_by="test",
+        )
         allowed = service.allowed_metrics_for_principal(claims)
         metrics = get_semantic_layer_service().match_query("doanh thu va so luong khach hang")
         filtered = [metric for metric in metrics if str(metric.get("term", "")).casefold() in allowed]

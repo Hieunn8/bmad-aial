@@ -12,12 +12,12 @@ from pydantic import BaseModel
 
 from aial_shared.auth.fastapi_deps import get_current_user
 from aial_shared.auth.keycloak import JWTClaims
-from orchestration.config_catalog import CONFIG_CATALOG_TEMPLATE
 from orchestration.admin_control.user_role_management import (
     RoleDefinition,
     get_user_role_management_service,
 )
 from orchestration.audit.read_model import AuditFilter, AuditRecord, get_audit_read_model
+from orchestration.config_catalog import CONFIG_CATALOG_TEMPLATE
 from orchestration.semantic.management import get_semantic_layer_service
 
 router = APIRouter(prefix="/v1/admin")
@@ -59,6 +59,12 @@ class RoleCreateRequest(BaseModel):
     description: str | None = None
     data_source_names: list[str] = []
     metric_allowlist: list[str] = []
+
+
+class DepartmentCreateRequest(BaseModel):
+    code: str
+    name: str | None = None
+    description: str | None = None
 
 
 class UserCreateRequest(BaseModel):
@@ -138,11 +144,17 @@ class SemanticMetricPublishRequest(BaseModel):
     source: dict[str, object] | None = None
     joins: list[dict[str, str]] = []
     certified_filters: list[str] = []
+    examples: list[str] = []
+    negative_examples: list[str] = []
     security: dict[str, object] | None = None
 
 
 class SemanticMetricRollbackRequest(BaseModel):
     version_id: str
+    reason: str | None = None
+
+
+class SemanticMetricDeleteRequest(BaseModel):
     reason: str | None = None
 
 
@@ -173,6 +185,8 @@ class CatalogSemanticMetricRequest(BaseModel):
     source: dict[str, object] | None = None
     joins: list[dict[str, str]] = []
     certified_filters: list[str] = []
+    examples: list[str] = []
+    negative_examples: list[str] = []
     security: dict[str, object] | None = None
 
 
@@ -321,6 +335,38 @@ async def list_roles(principal: JWTClaims = CURRENT_USER_DEP) -> dict[str, Any]:
     _require_admin(principal)
     roles = get_user_role_management_service().list_roles()
     return {"roles": [_role_to_dict(role) for role in roles], "total": len(roles)}
+
+
+@router.post("/departments", status_code=201)
+async def create_department(
+    body: DepartmentCreateRequest,
+    principal: JWTClaims = CURRENT_USER_DEP,
+) -> dict[str, Any]:
+    _require_data_owner_or_admin(principal)
+    service = get_user_role_management_service()
+    try:
+        department = service.create_department(
+            code=body.code,
+            name=body.name,
+            description=body.description,
+            actor=principal.sub,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _append_admin_audit(
+        principal,
+        intent_type="admin:department_create",
+        data_sources=[department.code],
+        status="SUCCESS",
+    )
+    return {"department": department.to_dict()}
+
+
+@router.get("/departments")
+async def list_departments(principal: JWTClaims = CURRENT_USER_DEP) -> dict[str, Any]:
+    _require_data_owner_or_admin(principal)
+    departments = get_user_role_management_service().list_departments()
+    return {"departments": [department.to_dict() for department in departments], "total": len(departments)}
 
 
 @router.post("/users", status_code=201)
@@ -681,6 +727,8 @@ async def publish_semantic_metric(
         source=body.source,
         joins=body.joins,
         certified_filters=body.certified_filters,
+        examples=body.examples,
+        negative_examples=body.negative_examples,
         security=body.security,
     )
     _append_admin_audit(
@@ -737,6 +785,8 @@ async def import_config_catalog(
                 source=metric.source,
                 joins=metric.joins,
                 certified_filters=metric.certified_filters,
+                examples=metric.examples,
+                negative_examples=metric.negative_examples,
                 security=metric.security,
             )
             for metric in body.semantic_metrics
@@ -810,6 +860,34 @@ async def rollback_semantic_metric(
             "rollback_reason": body.reason,
             "new_formula": version.formula,
             "cache_invalidated_at": get_semantic_layer_service().cache_invalidated_at.isoformat(),
+        },
+    )
+    return {"version": version.to_dict()}
+
+
+@router.delete("/semantic-layer/metrics/{term}", status_code=200)
+async def delete_semantic_metric(
+    term: str,
+    body: SemanticMetricDeleteRequest | None = None,
+    principal: JWTClaims = CURRENT_USER_DEP,
+) -> dict[str, Any]:
+    _require_data_owner_or_admin(principal)
+    try:
+        version = get_semantic_layer_service().delete_metric(
+            term=term,
+            changed_by=principal.sub,
+            reason=body.reason if body else None,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Metric not found") from exc
+    _append_admin_audit(
+        principal,
+        intent_type="admin:semantic_metric_delete",
+        data_sources=[term],
+        status="SUCCESS",
+        metadata={
+            "version_id": version.version_id,
+            "reason": body.reason if body else None,
         },
     )
     return {"version": version.to_dict()}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from typing import Any
 
@@ -68,7 +69,9 @@ class GlossaryRepository:
     def find(self, term: str) -> dict[str, object] | None:
         normalized = term.strip().lower()
         if self._factory is None:
-            return _SEED_INDEX.get(normalized)
+            if os.getenv("AIAL_SEED_SEMANTIC_GLOSSARY", "").strip().lower() in {"1", "true", "yes", "on"}:
+                return _SEED_INDEX.get(normalized)
+            return None
         with self._factory() as conn:
             with conn.cursor() as cur:
                 cur.execute(

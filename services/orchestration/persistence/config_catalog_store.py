@@ -78,6 +78,24 @@ class ConfigCatalogStore:
                 )
                 cur.execute(
                     f"""
+                    CREATE TABLE IF NOT EXISTS {self._qualified("catalog_departments")} (
+                        code TEXT PRIMARY KEY,
+                        payload JSONB NOT NULL,
+                        updated_at TIMESTAMPTZ NOT NULL
+                    )
+                    """
+                )
+                cur.execute(
+                    f"""
+                    CREATE TABLE IF NOT EXISTS {self._qualified("catalog_users")} (
+                        user_id TEXT PRIMARY KEY,
+                        payload JSONB NOT NULL,
+                        updated_at TIMESTAMPTZ NOT NULL
+                    )
+                    """
+                )
+                cur.execute(
+                    f"""
                     CREATE TABLE IF NOT EXISTS {self._qualified("semantic_metric_versions")} (
                         version_id TEXT PRIMARY KEY,
                         term_normalized TEXT NOT NULL,
@@ -96,12 +114,66 @@ class ConfigCatalogStore:
                 )
                 cur.execute(
                     f"""
+                    CREATE TABLE IF NOT EXISTS {self._qualified("semantic_metric_embeddings")} (
+                        version_id TEXT PRIMARY KEY,
+                        term_normalized TEXT NOT NULL,
+                        retrieval_text TEXT NOT NULL,
+                        embedding_model TEXT NOT NULL,
+                        embedding_dimensions INTEGER NOT NULL,
+                        vector DOUBLE PRECISION[],
+                        updated_at TIMESTAMPTZ NOT NULL
+                    )
+                    """
+                )
+                cur.execute(
+                    f"""
                     CREATE INDEX IF NOT EXISTS idx_semantic_metric_versions_term
                     ON {self._qualified("semantic_metric_versions")} (term_normalized, created_at)
                     """
                 )
+                cur.execute(
+                    f"""
+                    CREATE INDEX IF NOT EXISTS idx_semantic_metric_embeddings_term
+                    ON {self._qualified("semantic_metric_embeddings")} (term_normalized)
+                    """
+                )
             conn.commit()
         self._schema_ready = True
+
+    def upsert_semantic_embedding(self, payload: dict[str, object], *, updated_at: datetime) -> None:
+        self.ensure_schema()
+        vector = payload.get("vector")
+        if not isinstance(vector, list):
+            vector = None
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    INSERT INTO {self._qualified("semantic_metric_embeddings")}
+                    (
+                        version_id, term_normalized, retrieval_text, embedding_model,
+                        embedding_dimensions, vector, updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (version_id) DO UPDATE SET
+                        term_normalized = EXCLUDED.term_normalized,
+                        retrieval_text = EXCLUDED.retrieval_text,
+                        embedding_model = EXCLUDED.embedding_model,
+                        embedding_dimensions = EXCLUDED.embedding_dimensions,
+                        vector = EXCLUDED.vector,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (
+                        str(payload["version_id"]),
+                        str(payload["term_normalized"]),
+                        str(payload["retrieval_text"]),
+                        str(payload["embedding_model"]),
+                        int(payload["embedding_dimensions"]),
+                        vector,
+                        updated_at,
+                    ),
+                )
+            conn.commit()
 
     def load_roles(self) -> list[dict[str, object]]:
         self.ensure_schema()
@@ -110,6 +182,54 @@ class ConfigCatalogStore:
                 cur.execute(f"SELECT payload FROM {self._qualified('catalog_roles')} ORDER BY name")
                 rows = cur.fetchall()
         return [dict(row[0]) for row in rows]
+
+    def load_departments(self) -> list[dict[str, object]]:
+        self.ensure_schema()
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT payload FROM {self._qualified('catalog_departments')} ORDER BY code")
+                rows = cur.fetchall()
+        return [dict(row[0]) for row in rows]
+
+    def upsert_department(self, payload: dict[str, object], *, updated_at: datetime) -> None:
+        self.ensure_schema()
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    INSERT INTO {self._qualified("catalog_departments")} (code, payload, updated_at)
+                    VALUES (%s, %s::jsonb, %s)
+                    ON CONFLICT (code) DO UPDATE SET
+                        payload = EXCLUDED.payload,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (str(payload["code"]), json.dumps(payload), updated_at),
+                )
+            conn.commit()
+
+    def load_users(self) -> list[dict[str, object]]:
+        self.ensure_schema()
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT payload FROM {self._qualified('catalog_users')} ORDER BY user_id")
+                rows = cur.fetchall()
+        return [dict(row[0]) for row in rows]
+
+    def upsert_user(self, payload: dict[str, object], *, updated_at: datetime) -> None:
+        self.ensure_schema()
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    INSERT INTO {self._qualified("catalog_users")} (user_id, payload, updated_at)
+                    VALUES (%s, %s::jsonb, %s)
+                    ON CONFLICT (user_id) DO UPDATE SET
+                        payload = EXCLUDED.payload,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (str(payload["user_id"]), json.dumps(payload), updated_at),
+                )
+            conn.commit()
 
     def upsert_role(self, payload: dict[str, object], *, updated_at: datetime) -> None:
         self.ensure_schema()

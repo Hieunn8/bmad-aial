@@ -32,6 +32,26 @@ _DEFAULT_LATENCY_THRESHOLD_MS = 8_000
 
 
 @dataclass
+class DepartmentDefinition:
+    code: str
+    name: str
+    description: str | None
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "code": self.code,
+            "name": self.name,
+            "description": self.description,
+            "created_by": self.created_by,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+        }
+
+
+@dataclass
 class RoleDefinition:
     name: str
     schema_allowlist: list[str]
@@ -220,6 +240,7 @@ class HealthSnapshot:
 class UserRoleManagementService:
     def __init__(self, *, catalog_store: Any | None = None) -> None:
         self._users: dict[str, UserAccount] = {}
+        self._departments: dict[str, DepartmentDefinition] = {}
         self._roles: dict[str, RoleDefinition] = {}
         self._sync_status = LdapSyncStatus()
         self._data_sources: dict[str, DataSourceConfig] = {}
@@ -243,6 +264,12 @@ class UserRoleManagementService:
     def _load_persisted_catalog(self) -> None:
         if self._catalog_store is None:
             return
+        for payload in _call_store_list(self._catalog_store, "load_departments"):
+            department = _department_from_payload(payload)
+            self._departments[department.code] = department
+        for payload in _call_store_list(self._catalog_store, "load_users"):
+            user = _user_from_payload(payload)
+            self._users[user.user_id] = user
         for payload in self._catalog_store.load_roles():
             role = _role_from_payload(payload)
             self._roles[role.name] = role
@@ -296,6 +323,44 @@ class UserRoleManagementService:
     def list_roles(self) -> list[RoleDefinition]:
         return sorted(self._roles.values(), key=lambda role: role.name)
 
+    def create_department(
+        self,
+        *,
+        code: str,
+        actor: str,
+        name: str | None = None,
+        description: str | None = None,
+    ) -> DepartmentDefinition:
+        normalized = code.strip().casefold()
+        if not normalized:
+            raise ValueError("department code is required")
+        if normalized in self._departments:
+            raise ValueError("department already exists")
+        now = datetime.now(UTC)
+        department = DepartmentDefinition(
+            code=normalized,
+            name=(name or normalized).strip(),
+            description=description.strip() if description else None,
+            created_by=actor,
+            created_at=now,
+            updated_at=now,
+        )
+        self._departments[normalized] = department
+        self._persist_department(department)
+        return department
+
+    def ensure_department(self, code: str, *, actor: str = "system") -> DepartmentDefinition:
+        normalized = code.strip().casefold()
+        if not normalized:
+            raise ValueError("department code is required")
+        existing = self._departments.get(normalized)
+        if existing is not None:
+            return existing
+        return self.create_department(code=normalized, actor=actor)
+
+    def list_departments(self) -> list[DepartmentDefinition]:
+        return sorted(self._departments.values(), key=lambda department: department.code)
+
     def create_user(
         self,
         *,
@@ -311,6 +376,7 @@ class UserRoleManagementService:
         if normalized_user_id in self._users and not self._users[normalized_user_id].is_deleted:
             raise ValueError("user already exists")
         self._validate_roles(roles)
+        self.ensure_department(department, actor="admin:user_create")
         now = datetime.now(UTC)
         user = UserAccount(
             user_id=normalized_user_id,
@@ -322,6 +388,7 @@ class UserRoleManagementService:
             updated_at=now,
         )
         self._users[normalized_user_id] = user
+        self._persist_user(user)
         return user
 
     def list_users(self, *, include_deleted: bool = False) -> list[UserAccount]:
@@ -351,10 +418,12 @@ class UserRoleManagementService:
         if email is not None:
             user.email = email.strip()
         if department is not None:
+            self.ensure_department(department, actor="admin:user_update")
             user.department = department.strip()
         user.updated_at = datetime.now(UTC)
         user.is_deleted = False
         self._invalidate_query_cache_for_user(user.user_id)
+        self._persist_user(user)
         return user
 
     def soft_delete_user(self, user_id: str) -> UserAccount:
@@ -366,6 +435,7 @@ class UserRoleManagementService:
         user.sessions_revoked_at = now
         user.updated_at = now
         self._invalidate_query_cache_for_user(user.user_id)
+        self._persist_user(user)
         return user
 
     def preview_bulk_import(self, csv_content: str) -> dict[str, object]:
@@ -887,6 +957,16 @@ class UserRoleManagementService:
             return
         self._catalog_store.upsert_role(_role_to_payload(role), updated_at=role.updated_at)
 
+    def _persist_department(self, department: DepartmentDefinition) -> None:
+        if self._catalog_store is None or not hasattr(self._catalog_store, "upsert_department"):
+            return
+        self._catalog_store.upsert_department(department.to_dict(), updated_at=department.updated_at)
+
+    def _persist_user(self, user: UserAccount) -> None:
+        if self._catalog_store is None or not hasattr(self._catalog_store, "upsert_user"):
+            return
+        self._catalog_store.upsert_user(user.to_dict(), updated_at=user.updated_at)
+
     def _persist_data_source(self, config: DataSourceConfig, *, username: str, password: str) -> None:
         if self._catalog_store is None:
             return
@@ -928,6 +1008,43 @@ def _normalize_schema_allowlist(values: list[str]) -> list[str]:
 
 def _split_csv_multi_value(value: str) -> list[str]:
     return [item.strip() for item in value.split("|") if item.strip()]
+
+
+def _call_store_list(store: Any, method_name: str) -> list[dict[str, object]]:
+    method = getattr(store, method_name, None)
+    if method is None:
+        return []
+    return [dict(item) for item in method()]
+
+
+def _department_from_payload(payload: dict[str, object]) -> DepartmentDefinition:
+    return DepartmentDefinition(
+        code=str(payload["code"]),
+        name=str(payload.get("name") or payload["code"]),
+        description=str(payload["description"]) if payload.get("description") else None,
+        created_by=str(payload.get("created_by", "system")),
+        created_at=_parse_datetime(payload["created_at"]),
+        updated_at=_parse_datetime(payload["updated_at"]),
+    )
+
+
+def _user_from_payload(payload: dict[str, object]) -> UserAccount:
+    deleted_at = payload.get("deleted_at")
+    retention_until = payload.get("retention_until")
+    sessions_revoked_at = payload.get("sessions_revoked_at")
+    return UserAccount(
+        user_id=str(payload["user_id"]),
+        email=str(payload["email"]),
+        department=str(payload["department"]),
+        roles=[str(item) for item in payload.get("roles", [])],
+        ldap_groups=[str(item) for item in payload.get("ldap_groups", [])],
+        created_at=_parse_datetime(payload["created_at"]),
+        updated_at=_parse_datetime(payload["updated_at"]),
+        is_deleted=bool(payload.get("is_deleted", False)),
+        deleted_at=_parse_datetime(deleted_at) if deleted_at else None,
+        retention_until=_parse_datetime(retention_until) if retention_until else None,
+        sessions_revoked_at=_parse_datetime(sessions_revoked_at) if sessions_revoked_at else None,
+    )
 
 
 def _role_to_payload(role: RoleDefinition) -> dict[str, object]:

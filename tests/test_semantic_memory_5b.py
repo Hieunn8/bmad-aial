@@ -120,6 +120,8 @@ class TestSemanticLayerManagement:
             source={"data_source": "oracle-finance", "schema": "FINANCE_ANALYTICS", "table": "F_SALES"},
             joins=[{"target": "D_CUSTOMER", "on": "F_SALES.CUSTOMER_ID = D_CUSTOMER.CUSTOMER_ID"}],
             certified_filters=["IS_DELETED = 0"],
+            examples=["tình hình kinh doanh theo khu vực"],
+            negative_examples=["doanh thu ngân sách"],
             security={"sensitivity_tier": 1, "allowed_roles": ["finance_analyst"]},
         )
 
@@ -129,6 +131,8 @@ class TestSemanticLayerManagement:
         assert metric is not None
         assert metric.version_id == published.version_id
         assert metric.aliases == ["net revenue"]
+        assert metric.examples == ["tình hình kinh doanh theo khu vực"]
+        assert metric.negative_examples == ["doanh thu ngân sách"]
         assert metric.source is not None
         assert metric.source["table"] == "F_SALES"
 
@@ -145,10 +149,24 @@ class TestSemanticLayerManagement:
     ) -> None:
         _auth(mock_cerbos_cls, mock_validate, mock_decode, data_owner_claims)
         headers = {"Authorization": "Bearer fake-jwt"}
+        previous_formula = "SUM(NET_REVENUE)"
+
+        baseline_resp = client.post(
+            "/v1/admin/semantic-layer/metrics/publish",
+            json={
+                "term": "doanh thu thuần",
+                "definition": "Doanh thu sau khi trừ chiết khấu và hàng trả lại",
+                "formula": previous_formula,
+                "owner": "Finance",
+                "freshness_rule": "daily",
+            },
+            headers=headers,
+        )
+        assert baseline_resp.status_code == 201
 
         before = client.get("/v1/glossary/doanh%20thu%20thu%E1%BA%A7n", headers=headers)
         assert before.status_code == 200
-        previous_formula = before.json()["formula"]
+        assert before.json()["formula"] == previous_formula
 
         publish_resp = client.post(
             "/v1/admin/semantic-layer/metrics/publish",
@@ -212,6 +230,67 @@ class TestSemanticLayerManagement:
         glossary_after = client.get("/v1/glossary/doanh%20thu%20thu%E1%BA%A7n", headers=headers)
         assert glossary_after.status_code == 200
         assert glossary_after.json()["formula"] == previous_formula
+
+    @patch("aial_shared.auth.fastapi_deps.decode_jwt")
+    @patch("aial_shared.auth.fastapi_deps.validate_token_claims")
+    @patch("aial_shared.auth.fastapi_deps.CerbosClient")
+    def test_delete_metric_hides_from_active_list_but_keeps_history(
+        self,
+        mock_cerbos_cls: MagicMock,
+        mock_validate: MagicMock,
+        mock_decode: MagicMock,
+        client: TestClient,
+        data_owner_claims: JWTClaims,
+    ) -> None:
+        _auth(mock_cerbos_cls, mock_validate, mock_decode, data_owner_claims)
+        headers = {"Authorization": "Bearer fake-jwt"}
+
+        publish_resp = client.post(
+            "/v1/admin/semantic-layer/metrics/publish",
+            json={
+                "term": "số đơn hàng",
+                "definition": "Tổng số đơn hàng hợp lệ",
+                "formula": "SUM(ORDER_COUNT)",
+                "owner": "Sales",
+                "freshness_rule": "daily",
+            },
+            headers=headers,
+        )
+        assert publish_resp.status_code == 201
+
+        delete_resp = client.request(
+            "DELETE",
+            "/v1/admin/semantic-layer/metrics/số đơn hàng",
+            json={"reason": "retire duplicated semantic"},
+            headers=headers,
+        )
+        assert delete_resp.status_code == 200
+        assert delete_resp.json()["version"]["action"] == "delete"
+
+        list_resp = client.get("/v1/admin/semantic-layer/metrics", headers=headers)
+        assert list_resp.status_code == 200
+        assert all(metric["term"] != "số đơn hàng" for metric in list_resp.json()["metrics"])
+
+        versions_resp = client.get("/v1/admin/semantic-layer/metrics/số đơn hàng/versions", headers=headers)
+        assert versions_resp.status_code == 200
+        assert [version["action"] for version in versions_resp.json()["versions"]] == ["publish", "delete"]
+
+    def test_match_query_uses_aliases_without_vietnamese_accents(self) -> None:
+        service = SemanticLayerService(catalog_store=None)
+        service.publish_metric(
+            term="doanh thu thuần",
+            aliases=["doanh thu"],
+            definition="Doanh thu sau hoàn trả",
+            formula="SUM(NET_REVENUE)",
+            owner="Sales",
+            freshness_rule="daily",
+            changed_by="test",
+        )
+
+        matches = service.match_query("Doanh thu thang nay")
+
+        assert len(matches) == 1
+        assert matches[0]["term"] == "doanh thu thuần"
 
 
 class TestConversationMemoryRoutes:

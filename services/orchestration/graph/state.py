@@ -13,8 +13,11 @@ from aial_shared.auth.keycloak import JWTClaims
 class AIALGraphState(TypedDict, total=False):
     trace_id: str
     session_id: str
+    query: str
     user_id: str
     department_id: str
+    roles: list[str]
+    clearance: int
     messages: list[BaseMessage]
     intent_type: str
     current_node: str
@@ -54,8 +57,11 @@ def build_initial_state(
     return AIALGraphState(
         trace_id=trace_id,
         session_id=session_id,
+        query=query,
         user_id=principal.sub,
         department_id=principal.department,
+        roles=list(principal.roles),
+        clearance=principal.clearance,
         messages=[HumanMessage(content=query)],
         intent_type="pending",
         sql_result=None,

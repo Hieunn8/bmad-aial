@@ -97,6 +97,24 @@ class TestGlossaryEndpoint:
 
 
 class TestGlossaryRepository:
+    def test_seed_fallback_is_disabled_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from orchestration.semantic.glossary import GlossaryRepository
+
+        monkeypatch.delenv("AIAL_SEED_SEMANTIC_GLOSSARY", raising=False)
+
+        repo = GlossaryRepository(connection_factory=None)
+        assert repo.find("doanh thu thuần") is None
+
+    def test_seed_fallback_requires_explicit_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from orchestration.semantic.glossary import GlossaryRepository
+
+        monkeypatch.setenv("AIAL_SEED_SEMANTIC_GLOSSARY", "true")
+
+        repo = GlossaryRepository(connection_factory=None)
+        result = repo.find("doanh thu thuần")
+        assert result is not None
+        assert result["term"] == "doanh thu thuần"
+
     def test_find_returns_none_for_unknown_term(self) -> None:
         from orchestration.semantic.glossary import GlossaryRepository
 

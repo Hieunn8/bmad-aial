@@ -2,18 +2,40 @@
 
 from __future__ import annotations
 
+import os
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from difflib import ndiff
 from typing import Any
 from uuid import uuid4
 
+from embedding.client import BGE_MODEL_NAME, DIMS, _hash_embed
+
+from aial_shared.auth.keycloak import JWTClaims
 from orchestration.persistence.config_catalog_store import get_config_catalog_store
 from orchestration.semantic.glossary import SEED_GLOSSARY
+from orchestration.semantic.resolver import SemanticResolveDecision, SemanticResolver
 
 
 def _normalize_str_list(values: list[str] | None) -> list[str]:
     return [value.strip() for value in values or [] if value.strip()]
+
+
+def _stringify_retrieval_value(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, dict):
+        return " ".join(f"{key}: {_stringify_retrieval_value(item)}" for key, item in sorted(value.items()))
+    if isinstance(value, list):
+        return " ".join(_stringify_retrieval_value(item) for item in value)
+    return str(value)
+
+
+def _semantic_match_text(value: object) -> str:
+    normalized = unicodedata.normalize("NFD", str(value).casefold())
+    without_marks = "".join(char for char in normalized if unicodedata.category(char) != "Mn")
+    return " ".join(without_marks.replace("đ", "d").split())
 
 
 @dataclass(frozen=True)
@@ -36,8 +58,32 @@ class KpiDefinitionVersion:
     source: dict[str, object] | None = None
     joins: list[dict[str, str]] = field(default_factory=list)
     certified_filters: list[str] = field(default_factory=list)
+    examples: list[str] = field(default_factory=list)
+    negative_examples: list[str] = field(default_factory=list)
     security: dict[str, object] | None = None
     rollback_reason: str | None = None
+
+    @property
+    def retrieval_text(self) -> str:
+        parts = [
+            f"Tên semantic: {self.term}",
+            f"Từ đồng nghĩa: {', '.join(self.aliases)}",
+            f"Định nghĩa: {self.definition}",
+            f"Công thức: {self.formula}",
+            f"Chủ sở hữu: {self.owner}",
+            f"Độ tươi dữ liệu: {self.freshness_rule}",
+            f"Kiểu tổng hợp: {self.aggregation or ''}",
+            f"Hạt dữ liệu: {self.grain or ''}",
+            f"Đơn vị: {self.unit or ''}",
+            f"Chiều phân tích: {', '.join(self.dimensions)}",
+            f"Nguồn dữ liệu: {_stringify_retrieval_value(self.source)}",
+            f"Join: {_stringify_retrieval_value(self.joins)}",
+            f"Examples: {' '.join(self.examples)}",
+            f"Negative examples: {' '.join(self.negative_examples)}",
+            f"Bộ lọc chuẩn: {', '.join(self.certified_filters)}",
+            f"Bảo mật: {_stringify_retrieval_value(self.security)}",
+        ]
+        return " ".join(part for part in parts if part.strip())
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -59,9 +105,16 @@ class KpiDefinitionVersion:
             "source": self.source,
             "joins": self.joins,
             "certified_filters": self.certified_filters,
+            "examples": self.examples,
+            "negative_examples": self.negative_examples,
             "security": self.security,
             "rollback_reason": self.rollback_reason,
+            "retrieval_text": self.retrieval_text,
         }
+
+    @property
+    def is_deleted(self) -> bool:
+        return self.action == "delete"
 
 
 class SemanticLayerService:
@@ -70,8 +123,10 @@ class SemanticLayerService:
         self._active_versions: dict[str, str] = {}
         self._catalog_store = catalog_store
         self._cache_invalidated_at = datetime.now(UTC)
+        self._resolver = SemanticResolver()
         if not self._load_persisted_state():
-            self._seed()
+            if os.getenv("AIAL_SEED_SEMANTIC_GLOSSARY", "").strip().lower() in {"1", "true", "yes", "on"}:
+                self._seed()
 
     def _seed(self) -> None:
         for entry in SEED_GLOSSARY:
@@ -100,6 +155,10 @@ class SemanticLayerService:
             joins=[dict(join) for join in entry.get("joins", []) if isinstance(join, dict)],
             certified_filters=_normalize_str_list(
                 entry.get("certified_filters") if isinstance(entry.get("certified_filters"), list) else None
+            ),
+            examples=_normalize_str_list(entry.get("examples") if isinstance(entry.get("examples"), list) else None),
+            negative_examples=_normalize_str_list(
+                entry.get("negative_examples") if isinstance(entry.get("negative_examples"), list) else None
             ),
             security=dict(entry["security"]) if isinstance(entry.get("security"), dict) else None,
         )
@@ -148,6 +207,8 @@ class SemanticLayerService:
         active_id = self._active_versions[normalized]
         for version in versions:
             if version.version_id == active_id:
+                if version.is_deleted:
+                    return None
                 return version
         return None
 
@@ -171,6 +232,8 @@ class SemanticLayerService:
         source: dict[str, object] | None = None,
         joins: list[dict[str, str]] | None = None,
         certified_filters: list[str] | None = None,
+        examples: list[str] | None = None,
+        negative_examples: list[str] | None = None,
         security: dict[str, object] | None = None,
     ) -> KpiDefinitionVersion:
         normalized = term.strip().casefold()
@@ -194,6 +257,8 @@ class SemanticLayerService:
             source=dict(source) if source else None,
             joins=[dict(join) for join in joins or []],
             certified_filters=_normalize_str_list(certified_filters),
+            examples=_normalize_str_list(examples),
+            negative_examples=_normalize_str_list(negative_examples),
             security=dict(security) if security else None,
         )
         self._versions.setdefault(normalized, []).append(version)
@@ -233,7 +298,44 @@ class SemanticLayerService:
             source=dict(target.source) if target.source else None,
             joins=[dict(join) for join in target.joins],
             certified_filters=list(target.certified_filters),
+            examples=list(target.examples),
+            negative_examples=list(target.negative_examples),
             security=dict(target.security) if target.security else None,
+            rollback_reason=reason.strip() if reason else None,
+        )
+        normalized = term.strip().casefold()
+        self._versions.setdefault(normalized, []).append(version)
+        self._active_versions[normalized] = version.version_id
+        self._cache_invalidated_at = datetime.now(UTC)
+        self._persist_version(version, normalized)
+        return version
+
+    def delete_metric(self, *, term: str, changed_by: str, reason: str | None = None) -> KpiDefinitionVersion:
+        current = self.get_metric(term)
+        if current is None:
+            raise KeyError(term)
+        version = KpiDefinitionVersion(
+            version_id=str(uuid4()),
+            term=current.term,
+            definition=current.definition,
+            formula=current.formula,
+            owner=current.owner,
+            freshness_rule=current.freshness_rule,
+            changed_by=changed_by,
+            timestamp=datetime.now(UTC),
+            previous_formula=current.formula,
+            action="delete",
+            aliases=list(current.aliases),
+            aggregation=current.aggregation,
+            grain=current.grain,
+            unit=current.unit,
+            dimensions=list(current.dimensions),
+            source=dict(current.source) if current.source else None,
+            joins=[dict(join) for join in current.joins],
+            certified_filters=list(current.certified_filters),
+            examples=list(current.examples),
+            negative_examples=list(current.negative_examples),
+            security=dict(current.security) if current.security else None,
             rollback_reason=reason.strip() if reason else None,
         )
         normalized = term.strip().casefold()
@@ -265,13 +367,32 @@ class SemanticLayerService:
         }
 
     def match_query(self, query: str) -> list[dict[str, object]]:
-        normalized_query = query.casefold()
+        normalized_query = _semantic_match_text(query)
         matches: list[dict[str, object]] = []
         for metric in self.list_metrics():
-            terms = [str(metric["term"]).casefold(), *(alias.casefold() for alias in metric.get("aliases", []))]
+            terms = [
+                _semantic_match_text(metric["term"]),
+                *(_semantic_match_text(alias) for alias in metric.get("aliases", [])),
+            ]
             if any(term in normalized_query for term in terms):
                 matches.append(metric)
         return matches
+
+    def resolve_query(
+        self,
+        *,
+        query: str,
+        principal: JWTClaims | None = None,
+        allowed_terms: set[str] | None = None,
+        top_k: int = 5,
+    ) -> SemanticResolveDecision:
+        return self._resolver.resolve(
+            query=query,
+            metrics=self.list_metrics(),
+            principal=principal,
+            allowed_terms=allowed_terms,
+            top_k=top_k,
+        )
 
     @property
     def cache_invalidated_at(self) -> datetime:
@@ -286,6 +407,18 @@ class SemanticLayerService:
             active_version_id=version.version_id,
             created_at=version.timestamp,
         )
+        if hasattr(self._catalog_store, "upsert_semantic_embedding"):
+            self._catalog_store.upsert_semantic_embedding(
+                {
+                    "version_id": version.version_id,
+                    "term_normalized": normalized_term,
+                    "retrieval_text": version.retrieval_text,
+                    "embedding_model": BGE_MODEL_NAME,
+                    "embedding_dimensions": DIMS,
+                    "vector": _hash_embed(_semantic_match_text(version.retrieval_text), dims=DIMS),
+                },
+                updated_at=version.timestamp,
+            )
 
 
 def _version_from_payload(payload: dict[str, object]) -> KpiDefinitionVersion:
@@ -311,6 +444,10 @@ def _version_from_payload(payload: dict[str, object]) -> KpiDefinitionVersion:
         joins=[dict(join) for join in payload.get("joins", []) if isinstance(join, dict)],
         certified_filters=_normalize_str_list(
             payload.get("certified_filters") if isinstance(payload.get("certified_filters"), list) else None
+        ),
+        examples=_normalize_str_list(payload.get("examples") if isinstance(payload.get("examples"), list) else None),
+        negative_examples=_normalize_str_list(
+            payload.get("negative_examples") if isinstance(payload.get("negative_examples"), list) else None
         ),
         security=dict(payload["security"]) if isinstance(payload.get("security"), dict) else None,
         rollback_reason=str(payload["rollback_reason"]) if payload.get("rollback_reason") else None,

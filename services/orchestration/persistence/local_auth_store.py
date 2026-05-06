@@ -12,8 +12,6 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Any
 
-import psycopg
-
 _TABLE_NAME = "aial_local_auth_users"
 _HASH_PREFIX = "pbkdf2_sha256"
 _DEFAULT_ADMIN_USERNAME = os.getenv("AIAL_LOCAL_ADMIN_USERNAME", "admin")
@@ -82,9 +80,11 @@ class LocalAuthStore:
         self._memory_users: dict[str, LocalAuthUser] = {}
         self._seed_default_admin()
 
-    def _connect(self) -> psycopg.Connection[Any] | None:
+    def _connect(self) -> Any | None:
         if not self._dsn:
             return None
+        import psycopg
+
         connection = psycopg.connect(self._dsn)
         connection.execute(
             f"""

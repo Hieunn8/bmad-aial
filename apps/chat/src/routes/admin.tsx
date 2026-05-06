@@ -16,6 +16,7 @@ export const Route = createFileRoute('/admin')({
 const adminNavItems = [
   { to: '/admin', label: 'Tổng quan', note: 'Dashboard' },
   { to: '/admin/users', label: 'Người dùng', note: 'Users' },
+  { to: '/admin/departments', label: 'Phòng ban', note: 'Departments' },
   { to: '/admin/roles', label: 'Vai trò', note: 'Roles' },
   { to: '/admin/data-sources', label: 'Nguồn dữ liệu', note: 'Data sources' },
   { to: '/admin/documents', label: 'Tài liệu', note: 'Documents' },

@@ -11,6 +11,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import re
+import unicodedata
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -38,6 +40,7 @@ from orchestration.approval.workflow import (
     create_approval_request,
     get_approval_store,
 )
+from orchestration.audit.read_model import AuditRecord, get_audit_read_model
 from orchestration.cache.query_result_cache import (
     CachedQueryResult,
     CacheLookupResult,
@@ -54,6 +57,7 @@ from orchestration.memory.long_term import get_conversation_memory_service
 from orchestration.security.column_masker import ColumnSensitivity, apply_column_security
 from orchestration.security.pii_masker import PiiMasker
 from orchestration.semantic.management import get_semantic_layer_service
+from orchestration.semantic.resolver import SemanticResolveDecision
 from orchestration.streaming.events import make_done_event, make_error_event, make_row_event
 from orchestration.streaming.queue import get_stream_queue
 
@@ -331,6 +335,121 @@ def _apply_query_execution_settings(
         result["data_source_warning"] = execution_settings["warning"]
 
 
+def _build_semantic_no_data_answer(
+    *,
+    semantic_context: list[dict[str, Any]] | None,
+    generated_sql: str,
+    data_source: str | None,
+) -> str | None:
+    if not semantic_context:
+        return None
+    metric_term = str(semantic_context[0].get("term") or "semantic")
+    source = semantic_context[0].get("source", {})
+    source_value = source.get("data_source") if isinstance(source, dict) else None
+    source_name = data_source or (str(source_value) if source_value else "")
+    if not source_name:
+        return None
+    period_detail = ""
+    date_bounds = re.findall(r"DATE '(\d{4}-\d{2}-\d{2})'", generated_sql)
+    if len(date_bounds) >= 2:
+        period_detail = f" trong khoảng từ {date_bounds[0]} đến trước {date_bounds[1]}"
+    return (
+        f"Hệ thống đã nhận diện semantic `{metric_term}` và đã truy vấn {source_name}{period_detail}, "
+        "nhưng không có bản ghi dữ liệu phù hợp. Đây là trường hợp dữ liệu trống, không phải lỗi map semantic."
+    )
+
+
+def _normalize_vietnamese_intent(value: str) -> str:
+    normalized = unicodedata.normalize("NFD", value.casefold())
+    without_marks = "".join(char for char in normalized if unicodedata.category(char) != "Mn")
+    return " ".join(without_marks.replace("đ", "d").replace("Ä‘", "d").split())
+
+
+def _is_data_inventory_query(query: str) -> bool:
+    normalized = _normalize_vietnamese_intent(query)
+    patterns = (
+        "ban co du lieu gi",
+        "co du lieu gi",
+        "co nhung du lieu gi",
+        "dang co du lieu gi",
+        "danh sach du lieu",
+        "du lieu nao",
+        "co nhung semantic nao",
+        "semantic nao",
+    )
+    return any(pattern in normalized for pattern in patterns)
+
+
+def _build_data_inventory_answer(principal: JWTClaims) -> str:
+    allowed_terms = get_user_role_management_service().allowed_metrics_for_principal(principal)
+    metrics = get_semantic_layer_service().list_metrics()
+    visible_metrics = [
+        metric
+        for metric in metrics
+        if not allowed_terms or str(metric.get("term", "")).casefold() in allowed_terms
+    ]
+    if not visible_metrics:
+        return "Hiện chưa có semantic hoặc nguồn dữ liệu nào được publish cho vai trò của bạn."
+
+    lines = ["Bạn có thể hỏi các nhóm dữ liệu sau:"]
+    for metric in visible_metrics[:10]:
+        unit = metric.get("unit")
+        examples = [str(example) for example in metric.get("examples", [])[:2] if str(example).strip()]
+        detail_parts = [str(metric.get("term", ""))]
+        if unit:
+            detail_parts.append(f"đơn vị {unit}")
+        if examples:
+            detail_parts.append(f"ví dụ: {examples[0]}")
+        lines.append(f"- {'; '.join(detail_parts)}")
+    lines.append("Tôi sẽ tự chọn semantic phù hợp và chỉ hỏi lại khi câu hỏi bị mơ hồ.")
+    return "\n".join(lines)
+
+
+def _build_semantic_clarification_answer(decision: SemanticResolveDecision) -> str | None:
+    if decision.status not in {"ambiguous", "low_confidence"}:
+        return None
+    candidate_terms: list[str] = []
+    for candidate in decision.candidates:
+        if candidate.filtered_reason or candidate.validation_errors:
+            continue
+        term = str(candidate.metric.get("term", "")).strip()
+        if term and term not in candidate_terms:
+            candidate_terms.append(term)
+    if not candidate_terms:
+        return None
+    if decision.planner_output and decision.planner_output.clarification_question:
+        question = decision.planner_output.clarification_question
+    elif len(candidate_terms) == 1:
+        question = f"Có phải bạn muốn hỏi theo semantic chuẩn `{candidate_terms[0]}` không?"
+    else:
+        question = f"Bạn muốn dùng semantic chuẩn nào: {', '.join(candidate_terms[:4])}?"
+    examples = []
+    for candidate in decision.candidates[:3]:
+        for example in candidate.metric.get("examples", [])[:1]:
+            if isinstance(example, str) and example.strip():
+                examples.append(example.strip())
+    suffix = ""
+    if examples:
+        suffix = "\nVí dụ câu hỏi phù hợp: " + "; ".join(examples[:3])
+    return (
+        "Tôi chưa đủ chắc để tự chọn semantic và chạy dữ liệu. "
+        f"{question}{suffix}"
+    )
+
+
+def _has_meaningful_sql_values(rows: list[dict[str, Any]]) -> bool:
+    if not rows:
+        return False
+    for row in rows:
+        for value in row.values():
+            if value is None:
+                continue
+            if isinstance(value, str) and not value.strip():
+                continue
+            return True
+    return False
+
+
 def _record_query_interaction(
     *,
     query: str,
@@ -349,6 +468,33 @@ def _record_query_interaction(
         key_result_summary=f"Answer summary for {topic}",
         sensitivity_level=_classify_query_sensitivity(query),
         matched_metrics=[str(item["term"]) for item in semantic_context or []],
+    )
+
+
+def _record_semantic_resolve_audit(
+    *,
+    request_id: str,
+    principal: JWTClaims,
+    session_id: str,
+    decision: SemanticResolveDecision,
+) -> None:
+    get_audit_read_model().append(
+        AuditRecord(
+            request_id=request_id,
+            user_id=principal.sub,
+            department_id=principal.department,
+            session_id=session_id,
+            timestamp=datetime.now(UTC),
+            intent_type="semantic_resolve",
+            sensitivity_tier="SEMANTIC",
+            sql_hash=None,
+            data_sources=["semantic_registry"],
+            rows_returned=len(decision.semantic_context),
+            latency_ms=0,
+            policy_decision="allow" if decision.status == "selected" else "review",
+            status=decision.status,
+            metadata=decision.to_audit_dict(),
+        )
     )
 
 
@@ -595,6 +741,17 @@ async def _run_graph_and_cache_explanation(
             answer = llm_answer
         if result.get("data_source_warning"):
             answer = f"{answer}\n\n[warning] {result['data_source_warning']}"
+        if _is_data_inventory_query(query):
+            answer = _build_data_inventory_answer(principal)
+        semantic_no_data_answer = _build_semantic_no_data_answer(
+            semantic_context=semantic_context,
+            generated_sql=generated_sql,
+            data_source=str(result.get("data_source") or ""),
+        )
+        if semantic_no_data_answer and not _has_meaningful_sql_values(secured_rows):
+            answer = semantic_no_data_answer
+            if result.get("data_source_warning"):
+                answer = f"{answer}\n\n[warning] {result['data_source_warning']}"
         if cache_context is not None:
             get_query_result_cache().store(
                 CachedQueryResult.build(
@@ -712,14 +869,19 @@ async def chat_query(
     execution_settings = get_user_role_management_service().resolve_query_data_source(principal)
     if get_user_role_management_service().list_data_sources() and execution_settings is None:
         raise HTTPException(status_code=403, detail="No authorized data source is configured for this principal")
-    semantic_context = get_semantic_layer_service().match_query(payload.query)
     allowed_metrics = get_user_role_management_service().allowed_metrics_for_principal(principal)
-    if allowed_metrics:
-        semantic_context = [
-            metric
-            for metric in semantic_context
-            if str(metric.get("term", "")).casefold() in allowed_metrics
-        ]
+    semantic_decision = get_semantic_layer_service().resolve_query(
+        query=payload.query,
+        principal=principal,
+        allowed_terms=allowed_metrics,
+    )
+    semantic_context = semantic_decision.semantic_context
+    _record_semantic_resolve_audit(
+        request_id=request_id,
+        principal=principal,
+        session_id=str(payload.session_id),
+        decision=semantic_decision,
+    )
     memory_service = get_conversation_memory_service()
     memory_context = memory_service.build_context_bundle(
         user_id=principal.sub,
@@ -735,6 +897,8 @@ async def chat_query(
         execution_settings=execution_settings,
     )
     current_span.set_attribute("aial.semantic_match_count", len(semantic_context))
+    current_span.set_attribute("aial.semantic_resolve_status", semantic_decision.status)
+    current_span.set_attribute("aial.semantic_resolve_confidence", semantic_decision.confidence)
     current_span.set_attribute("aial.memory_summary_count", len(memory_context.get("summaries", [])))
     current_span.set_attribute("aial.query_cache.role_scope", cache_context.role_scope)
     current_span.set_attribute("aial.query_cache.semantic_layer_version", cache_context.semantic_layer_version)
@@ -770,6 +934,26 @@ async def chat_query(
             )
 
     get_stream_queue().create(request_id, owner_user_id=principal.sub)
+    semantic_clarification = _build_semantic_clarification_answer(semantic_decision)
+    if semantic_clarification:
+        _publish_query_result(
+            request_id=request_id,
+            trace_id=trace_id,
+            principal=principal,
+            sensitivity_tier=intent.sensitivity_tier,
+            rows=[],
+            answer=semantic_clarification,
+            data_source=None,
+            generated_sql="",
+            confidence_state=semantic_decision.status,
+            provenance=[semantic_decision.to_audit_dict()],
+        )
+        return ChatQueryStreamHandle(
+            request_id=request_id,
+            status="streaming",
+            trace_id=trace_id,
+            message="Cần xác nhận semantic trước khi truy vấn dữ liệu.",
+        )
     if is_cross_domain_query(payload.query):
         current_span.set_attribute("aial.query_mode", "cross_domain")
         asyncio.create_task(

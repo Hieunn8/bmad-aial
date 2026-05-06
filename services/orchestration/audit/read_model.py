@@ -6,6 +6,8 @@ PostgreSQL-backed implementation using the append-only audit_events table.
 
 from __future__ import annotations
 
+import json
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -69,11 +71,14 @@ class AuditFilter:
 
 
 class AuditReadModel:
-    def __init__(self) -> None:
+    def __init__(self, *, dsn: str | None = None) -> None:
         self._records: list[AuditRecord] = []
+        self._dsn = dsn.strip() if dsn else ""
+        self._schema_ready = False
 
     def append(self, record: AuditRecord) -> None:
         self._records.append(record)
+        self._persist(record)
 
     def search(
         self,
@@ -91,7 +96,7 @@ class AuditReadModel:
         return len(self.search_all(audit_filter))
 
     def search_all(self, audit_filter: AuditFilter) -> list[AuditRecord]:
-        results = list(self._records)
+        results = self._load_records()
 
         if audit_filter.request_id:
             results = [r for r in results if r.request_id == audit_filter.request_id]
@@ -113,9 +118,101 @@ class AuditReadModel:
             results = [r for r in results if r.timestamp <= audit_filter.date_to]
         return results
 
+    def _connect(self) -> Any | None:
+        if not self._dsn:
+            return None
+        import psycopg
 
-# Module-level in-memory store (replaced by DB in Epic 5A)
-_audit_read_model = AuditReadModel()
+        connection = psycopg.connect(self._dsn)
+        if not self._schema_ready:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS aial_audit_records (
+                    request_id TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
+                    department_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    timestamp TIMESTAMPTZ NOT NULL,
+                    payload JSONB NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_aial_audit_records_user_time ON aial_audit_records (user_id, timestamp DESC)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_aial_audit_records_department_time ON aial_audit_records (department_id, timestamp DESC)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_aial_audit_records_request ON aial_audit_records (request_id)"
+            )
+            connection.commit()
+            self._schema_ready = True
+        return connection
+
+    def _persist(self, record: AuditRecord) -> None:
+        connection = self._connect()
+        if connection is None:
+            return
+        try:
+            connection.execute(
+                """
+                INSERT INTO aial_audit_records (request_id, user_id, department_id, session_id, timestamp, payload)
+                VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+                """,
+                (
+                    record.request_id,
+                    record.user_id,
+                    record.department_id,
+                    record.session_id,
+                    record.timestamp,
+                    json.dumps(_record_to_payload(record)),
+                ),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+    def _load_records(self) -> list[AuditRecord]:
+        connection = self._connect()
+        if connection is None:
+            return list(self._records)
+        try:
+            rows = connection.execute("SELECT payload FROM aial_audit_records").fetchall()
+            return [_record_from_payload(dict(row[0])) for row in rows]
+        finally:
+            connection.close()
+
+
+def _record_to_payload(record: AuditRecord) -> dict[str, Any]:
+    payload = record.to_response_dict()
+    payload["stored_sql"] = record.stored_sql
+    return payload
+
+
+def _record_from_payload(payload: dict[str, Any]) -> AuditRecord:
+    return AuditRecord(
+        request_id=str(payload["request_id"]),
+        user_id=str(payload["user_id"]),
+        department_id=str(payload["department_id"]),
+        session_id=str(payload["session_id"]),
+        timestamp=datetime.fromisoformat(str(payload["timestamp"])),
+        intent_type=str(payload["intent_type"]),
+        sensitivity_tier=str(payload["sensitivity_tier"]),
+        sql_hash=str(payload["sql_hash"]) if payload.get("sql_hash") is not None else None,
+        data_sources=[str(item) for item in payload.get("data_sources", [])],
+        rows_returned=int(payload["rows_returned"]),
+        latency_ms=int(payload["latency_ms"]),
+        policy_decision=str(payload["policy_decision"]),
+        status=str(payload["status"]),
+        denial_reason=str(payload["denial_reason"]) if payload.get("denial_reason") is not None else None,
+        stored_sql=str(payload["stored_sql"]) if payload.get("stored_sql") is not None else None,
+        cerbos_rule=str(payload["cerbos_rule"]) if payload.get("cerbos_rule") is not None else None,
+        metadata=dict(payload.get("metadata", {})),
+    )
+
+
+_audit_read_model = AuditReadModel(dsn=os.getenv("DATABASE_URL", ""))
 
 
 def get_audit_read_model() -> AuditReadModel:

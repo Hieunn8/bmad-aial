@@ -1,0 +1,148 @@
+{
+  "catalog_version": "2026-05-06",
+  "data_sources": [
+    {
+      "name": "oracle-free-system",
+      "description": "Oracle Free sample schema from docs/sql/oracle-free-system-sample.sql",
+      "host": "localhost",
+      "port": 1521,
+      "service_name": "FREE",
+      "username": "system",
+      "password": "replace-me",
+      "schema_allowlist": ["SYSTEM"],
+      "query_timeout_seconds": 30,
+      "row_limit": 50000
+    }
+  ],
+  "semantic_metrics": [
+    {
+      "term": "doanh thu thuần",
+      "aliases": ["doanh thu", "net revenue", "doanh thu ròng", "doanh số", "bán hàng", "kinh doanh", "thu nhập"],
+      "definition": "Tổng doanh thu sau hoàn trả theo dữ liệu bán hàng đã POSTED.",
+      "formula": "SUM(NET_REVENUE)",
+      "aggregation": "sum",
+      "owner": "Sales",
+      "freshness_rule": "daily",
+      "grain": "daily_product_region_channel",
+      "unit": "VND",
+      "dimensions": ["PERIOD_DATE", "REGION_CODE", "CHANNEL_CODE", "PRODUCT_CODE", "CATEGORY_NAME"],
+      "examples": [
+        "doanh thu tháng này thế nào",
+        "doanh thu 7 ngày gần đây",
+        "tình hình kinh doanh theo khu vực",
+        "tất cả doanh thu",
+        "bán hàng mấy ngày nay theo vùng",
+        "thu nhập tuần này",
+        "thu nhập 7 ngày gần đây",
+        "bức tranh kinh doanh gần đây theo miền",
+        "doanh số theo kênh"
+      ],
+      "negative_examples": ["doanh thu ngân sách", "kế hoạch doanh thu", "budget revenue"],
+      "source": {
+        "data_source": "oracle-free-system",
+        "schema": "SYSTEM",
+        "table": "AIAL_SALES_DAILY_V"
+      },
+      "certified_filters": ["STATUS = 'POSTED' is enforced in AIAL_SALES_DAILY_V"],
+      "security": {
+        "sensitivity_tier": 1,
+        "allowed_roles": ["sales_analyst", "admin"]
+      }
+    },
+    {
+      "term": "lợi nhuận gộp",
+      "aliases": ["gross margin", "lãi gộp", "biên lợi nhuận"],
+      "definition": "Doanh thu thuần trừ chi phí vốn theo từng ngày, khu vực, kênh và sản phẩm.",
+      "formula": "SUM(GROSS_MARGIN)",
+      "aggregation": "sum",
+      "owner": "Sales",
+      "freshness_rule": "daily",
+      "grain": "daily_product_region_channel",
+      "unit": "VND",
+      "dimensions": ["PERIOD_DATE", "REGION_CODE", "CHANNEL_CODE", "PRODUCT_CODE", "CATEGORY_NAME"],
+      "examples": [
+        "lợi nhuận gộp theo khu vực",
+        "biên lợi nhuận bán hàng tháng này",
+        "lãi gộp 7 ngày gần đây theo kênh"
+      ],
+      "negative_examples": ["doanh thu thuần", "doanh thu ngân sách"],
+      "source": {
+        "data_source": "oracle-free-system",
+        "schema": "SYSTEM",
+        "table": "AIAL_SALES_DAILY_V"
+      },
+      "certified_filters": ["STATUS = 'POSTED' is enforced in AIAL_SALES_DAILY_V"],
+      "security": {
+        "sensitivity_tier": 2,
+        "allowed_roles": ["sales_analyst", "admin"]
+      }
+    },
+    {
+      "term": "số đơn hàng",
+      "aliases": ["order count", "orders", "đơn hàng", "lượng đơn"],
+      "definition": "Tổng số đơn hàng hợp lệ trong dữ liệu bán hàng đã POSTED.",
+      "formula": "SUM(ORDER_COUNT)",
+      "aggregation": "sum",
+      "owner": "Sales",
+      "freshness_rule": "daily",
+      "grain": "daily_product_region_channel",
+      "unit": "orders",
+      "dimensions": ["PERIOD_DATE", "REGION_CODE", "CHANNEL_CODE", "PRODUCT_CODE", "CATEGORY_NAME"],
+      "examples": [
+        "số đơn hàng 7 ngày gần đây",
+        "orders theo kênh",
+        "bao nhiêu đơn hàng tháng này",
+        "lượng đơn theo khu vực"
+      ],
+      "negative_examples": ["doanh thu", "lợi nhuận"],
+      "source": {
+        "data_source": "oracle-free-system",
+        "schema": "SYSTEM",
+        "table": "AIAL_SALES_DAILY_V"
+      },
+      "certified_filters": ["STATUS = 'POSTED' is enforced in AIAL_SALES_DAILY_V"],
+      "security": {
+        "sensitivity_tier": 1,
+        "allowed_roles": ["sales_analyst", "admin"]
+      }
+    },
+    {
+      "term": "doanh thu ngân sách",
+      "aliases": ["budget revenue", "ngân sách doanh thu", "kế hoạch doanh thu"],
+      "definition": "Tổng ngân sách doanh thu theo dữ liệu bán hàng mẫu.",
+      "formula": "SUM(BUDGET_AMOUNT)",
+      "aggregation": "sum",
+      "owner": "Sales",
+      "freshness_rule": "daily",
+      "grain": "daily_product_region_channel",
+      "unit": "VND",
+      "dimensions": ["PERIOD_DATE", "REGION_CODE", "CHANNEL_CODE", "PRODUCT_CODE", "CATEGORY_NAME"],
+      "examples": [
+        "doanh thu ngân sách năm nay",
+        "budget revenue theo khu vực",
+        "kế hoạch doanh thu",
+        "ngân sách doanh thu theo kênh"
+      ],
+      "negative_examples": ["doanh thu thực tế", "doanh thu thuần", "bán hàng thực tế"],
+      "source": {
+        "data_source": "oracle-free-system",
+        "schema": "SYSTEM",
+        "table": "AIAL_SALES_DAILY_V"
+      },
+      "certified_filters": ["STATUS = 'POSTED' is enforced in AIAL_SALES_DAILY_V"],
+      "security": {
+        "sensitivity_tier": 1,
+        "allowed_roles": ["sales_analyst", "admin"]
+      }
+    }
+  ],
+  "role_mappings": [
+    {
+      "name": "sales_analyst",
+      "description": "Sales analyst with access to Oracle Free sample semantic items",
+      "schema_allowlist": ["SYSTEM"],
+      "data_source_names": ["oracle-free-system"],
+      "metric_allowlist": ["doanh thu thuần", "lợi nhuận gộp", "số đơn hàng", "doanh thu ngân sách"]
+    }
+  ]
+}

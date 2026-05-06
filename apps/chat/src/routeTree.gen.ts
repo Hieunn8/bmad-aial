@@ -26,6 +26,7 @@ import { Route as AnalyticsAnomalyRouteImport } from './routes/analytics/anomaly
 import { Route as AdminUsersRouteImport } from './routes/admin/users'
 import { Route as AdminRolesRouteImport } from './routes/admin/roles'
 import { Route as AdminDocumentsRouteImport } from './routes/admin/documents'
+import { Route as AdminDepartmentsRouteImport } from './routes/admin/departments'
 import { Route as AdminDataSourcesRouteImport } from './routes/admin/data-sources'
 import { Route as AdminAuditLogRouteImport } from './routes/admin/audit-log'
 
@@ -114,6 +115,11 @@ const AdminDocumentsRoute = AdminDocumentsRouteImport.update({
   path: '/documents',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminDepartmentsRoute = AdminDepartmentsRouteImport.update({
+  id: '/departments',
+  path: '/departments',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminDataSourcesRoute = AdminDataSourcesRouteImport.update({
   id: '/data-sources',
   path: '/data-sources',
@@ -135,6 +141,7 @@ export interface FileRoutesByFullPath {
   '/semantic': typeof SemanticRoute
   '/admin/audit-log': typeof AdminAuditLogRoute
   '/admin/data-sources': typeof AdminDataSourcesRoute
+  '/admin/departments': typeof AdminDepartmentsRoute
   '/admin/documents': typeof AdminDocumentsRoute
   '/admin/roles': typeof AdminRolesRoute
   '/admin/users': typeof AdminUsersRoute
@@ -154,6 +161,7 @@ export interface FileRoutesByTo {
   '/semantic': typeof SemanticRoute
   '/admin/audit-log': typeof AdminAuditLogRoute
   '/admin/data-sources': typeof AdminDataSourcesRoute
+  '/admin/departments': typeof AdminDepartmentsRoute
   '/admin/documents': typeof AdminDocumentsRoute
   '/admin/roles': typeof AdminRolesRoute
   '/admin/users': typeof AdminUsersRoute
@@ -176,6 +184,7 @@ export interface FileRoutesById {
   '/semantic': typeof SemanticRoute
   '/admin/audit-log': typeof AdminAuditLogRoute
   '/admin/data-sources': typeof AdminDataSourcesRoute
+  '/admin/departments': typeof AdminDepartmentsRoute
   '/admin/documents': typeof AdminDocumentsRoute
   '/admin/roles': typeof AdminRolesRoute
   '/admin/users': typeof AdminUsersRoute
@@ -199,6 +208,7 @@ export interface FileRouteTypes {
     | '/semantic'
     | '/admin/audit-log'
     | '/admin/data-sources'
+    | '/admin/departments'
     | '/admin/documents'
     | '/admin/roles'
     | '/admin/users'
@@ -218,6 +228,7 @@ export interface FileRouteTypes {
     | '/semantic'
     | '/admin/audit-log'
     | '/admin/data-sources'
+    | '/admin/departments'
     | '/admin/documents'
     | '/admin/roles'
     | '/admin/users'
@@ -239,6 +250,7 @@ export interface FileRouteTypes {
     | '/semantic'
     | '/admin/audit-log'
     | '/admin/data-sources'
+    | '/admin/departments'
     | '/admin/documents'
     | '/admin/roles'
     | '/admin/users'
@@ -383,6 +395,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminDocumentsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/departments': {
+      id: '/admin/departments'
+      path: '/departments'
+      fullPath: '/admin/departments'
+      preLoaderRoute: typeof AdminDepartmentsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/data-sources': {
       id: '/admin/data-sources'
       path: '/data-sources'
@@ -403,6 +422,7 @@ declare module '@tanstack/react-router' {
 interface AdminRouteChildren {
   AdminAuditLogRoute: typeof AdminAuditLogRoute
   AdminDataSourcesRoute: typeof AdminDataSourcesRoute
+  AdminDepartmentsRoute: typeof AdminDepartmentsRoute
   AdminDocumentsRoute: typeof AdminDocumentsRoute
   AdminRolesRoute: typeof AdminRolesRoute
   AdminUsersRoute: typeof AdminUsersRoute
@@ -412,6 +432,7 @@ interface AdminRouteChildren {
 const AdminRouteChildren: AdminRouteChildren = {
   AdminAuditLogRoute: AdminAuditLogRoute,
   AdminDataSourcesRoute: AdminDataSourcesRoute,
+  AdminDepartmentsRoute: AdminDepartmentsRoute,
   AdminDocumentsRoute: AdminDocumentsRoute,
   AdminRolesRoute: AdminRolesRoute,
   AdminUsersRoute: AdminUsersRoute,

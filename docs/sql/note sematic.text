@@ -1,0 +1,231 @@
+LLM suy luận có giúp map semantic tốt hơn, nhất là với tiếng Việt dài,
+  từ đồng nghĩa, câu mô tả không đúng keyword. Nhưng LLM không nên là
+  “nguồn quyết định cuối cùng” nếu không có guardrails.
+
+  Vai trò đúng của từng lớp:
+
+  | Thành phần | Vai trò |
+  |---|---|
+  | Lexical/fuzzy | Bắt exact term, alias, lỗi gõ, không dấu |
+  | Vector search | Tìm semantic gần nghĩa khi user không dùng đúng
+  keyword |
+  | LLM rerank | So sánh top candidates và giải thích vì sao chọn |
+  | Validator | Kiểm tra quyền, grain, dimension, source, formula |
+  | Confidence gate | Quyết định chạy SQL, hỏi lại, hoặc từ chối |
+
+  Pipeline Production Đề Xuất
+
+  User question
+   -> Normalize tiếng Việt
+   -> Extract sơ bộ: metric, time, dimension, filter
+   -> Hybrid retrieval: BM25/fuzzy + vector search
+   -> Security filter theo role allowlist
+   -> LLM rerank trong candidate set đã lọc quyền
+   -> Validator kiểm tra metric/dimension/source/formula
+   -> Confidence gate
+   -> SQL planner chỉ dùng selected semantic ID/version
+   -> SQL validation
+   -> Execute DB
+   -> Audit đầy đủ
+
+  Không Nên Làm
+
+  Không nên làm kiểu:
+
+  User question -> LLM chọn semantic -> sinh SQL
+
+  Rủi ro cao:
+
+  - LLM chọn nhầm doanh thu thay vì doanh thu thuần.
+  - LLM tự hợp lý hóa metric không đúng.
+  - LLM có thể dùng semantic/schema user không có quyền.
+  - Khó audit vì quyết định phụ thuộc prompt/model.
+  - Khi catalog đổi version, cùng câu hỏi có thể ra semantic khác.
+
+  Cách Dùng LLM Đúng
+
+  LLM chỉ được chọn trong danh sách candidate đã retrieve và đã lọc quyền.
+
+  Ví dụ input cho LLM rerank:
+
+  {
+    "query": "Tình hình bán hàng tháng này thế nào?",
+    "candidates": [
+      {
+        "id": "semantic:net_revenue:v3",
+        "term": "doanh thu thuần",
+        "definition": "...",
+        "formula": "SUM(NET_REVENUE)",
+        "grain": "daily_product_region_channel",
+        "dimensions": ["PERIOD_DATE", "REGION_CODE", "CHANNEL_CODE"]
+      },
+      {
+        "id": "semantic:order_count:v1",
+        "term": "số đơn hàng",
+        "formula": "SUM(ORDER_COUNT)"
+      }
+    ]
+  }
+
+  LLM phải trả structured JSON:
+
+  {
+    "selected_semantic_ids": ["semantic:net_revenue:v3"],
+    "confidence": 0.82,
+    "reason": "Câu hỏi hỏi tình hình bán hàng, candidate doanh thu thuần
+  phù hợp nhất nhưng còn mơ hồ với số đơn hàng.",
+    "needs_clarification": true,
+    "clarification_question": "Bạn muốn xem doanh thu thuần, số đơn hàng,
+  hay cả hai?"
+  }
+
+  Sau đó validator mới quyết định chạy hay hỏi lại.
+
+  Confidence Policy
+
+  Đề xuất ngưỡng:
+
+  | Điều kiện | Hành động |
+  |---|---|
+  | score >= 0.85 và top-1 cách top-2 rõ | Tự chọn semantic và chạy SQL |
+  | 0.65 - 0.85 hoặc nhiều candidate gần nhau | Hỏi lại user |
+  | < 0.65 | Không map, báo không tìm thấy semantic đủ tin cậy |
+  | Candidate không có quyền | Loại bỏ trước LLM/rerank |
+  | Dimension/filter không tương thích | Hỏi lại hoặc reject |
+
+  Ví dụ câu:
+
+  Doanh thu tháng này
+
+  Nếu chỉ có semantic doanh thu thuần, có thể auto map.
+
+  Nhưng câu:
+
+  Tình hình bán hàng tháng này
+
+  có thể liên quan:
+
+  - doanh thu thuần
+  - số đơn hàng
+  - lợi nhuận gộp
+
+  Nên hỏi lại hoặc chọn nhiều semantic nếu hệ thống hỗ trợ multi-metric.
+
+  Yêu Cầu Dữ Liệu Semantic Cần Bổ Sung
+
+  Mỗi semantic item nên có thêm:
+
+  - business_examples: ví dụ câu hỏi người dùng
+  - negative_examples: câu gần nghĩa nhưng không nên match
+  - domain: sales, finance, hr
+  - metric_type: revenue, count, margin, policy, concept
+  - allowed_dimensions
+  - default_time_field
+  - default_aggregation
+  - retrieval_text: text tổng hợp để embed
+  - embedding_version
+  - semantic_version_id
+
+  Ví dụ:
+
+  {
+    "term": "doanh thu thuần",
+    "aliases": ["doanh thu", "net revenue", "doanh số sau hoàn trả"],
+    "business_examples": [
+      "Doanh thu tháng này",
+      "Tình hình doanh số quý 1 theo khu vực",
+      "Revenue theo kênh bán hàng"
+    ],
+    "negative_examples": [
+      "Ngân sách doanh thu",
+      "Số đơn hàng",
+      "Lợi nhuận gộp"
+    ]
+  }
+
+  Phương Án Cuối Tôi Đề Xuất
+
+  Chọn Option 2, nhưng triển khai đầy đủ thành Governed Semantic Resolver:
+
+  1. Lưu semantic registry có version.
+  2. Khi publish semantic, build retrieval_text.
+  3. Tạo embedding và index vào Weaviate hoặc pgvector.
+  4. Khi chat:
+      - lexical/fuzzy search
+      - vector search
+      - merge score
+      - role/security filter
+      - LLM rerank top-k
+      - validator
+      - confidence gate
+  5. Ghi audit toàn bộ quá trình resolve.
+  6. Có bộ regression test tiếng Việt cho synonym, câu dài, câu mơ hồ, câu
+     không dấu.
+
+  Chốt
+
+  LLM suy luận là cần thiết cho production, nhưng chỉ nên là lớp rerank +
+  disambiguation + explanation.
+
+  Nguồn sự thật vẫn là semantic catalog đã quản trị. Quyết định cuối phải
+  qua deterministic validator và confidence gate. Đây là hướng vừa thông
+  minh hơn keyword, vừa đủ kiểm soát để chạy production text-to-SQL.
+---------------------------------------------------------------------
+
+thiết kế đúng là: retrieve
+  top-k bằng vector/lexical, sau đó planner trả JSON có metric/time/
+  dimension/action/confidence, rồi validator + SQL builder dùng JSON đó.
+  Như vậy câu dài và đồng nghĩa không cần khớp keyword, nhưng vẫn có kiểm
+  soát và audit.
+
+--------------------------------------------------------------------
+
+   Đã làm luôn phần này.
+
+  Cụ thể đã bổ sung:
+
+  - Thêm lớp Semantic Planner structured output trong services/
+    orchestration/semantic/resolver.py.
+  - Flow mới:
+      - lexical/vector retrieve top-k candidates
+      - planner chọn selected_term
+      - planner xuất JSON có intent, time_filter, dimensions, confidence,
+        needs_clarification
+      - validator/confidence gate quyết định chạy SQL hay hỏi lại
+      - audit ghi thêm planner_output
+  - Có adapter LLM planner thật qua OpenAI nếu bật:
+      - AIAL_SEMANTIC_PLANNER_PROVIDER=openai
+      - OPENAI_API_KEY=...
+      - optional AIAL_SEMANTIC_PLANNER_MODEL=...
+  - Nếu chưa cấu hình LLM, hệ thống dùng deterministic planner cùng schema
+    để local/test vẫn chạy ổn.
+
+  Đã sửa semantic hiện tại:
+
+  - doanh thu thuần thêm examples như:
+      - “doanh thu tháng này thế nào”
+      - “doanh thu 7 ngày gần đây”
+      - “tình hình kinh doanh theo khu vực”
+      - “tất cả doanh thu”
+      - “bán hàng mấy ngày nay theo vùng”
+  - Thêm negative_examples để phân biệt với doanh thu ngân sách, kế hoạch
+    doanh thu.
+  - Các semantic khác cũng bổ sung examples/negative examples trong
+    services/orchestration/config_catalog.py và docs/sql/oracle-free-
+    semantic-catalog.json.
+
+  SQL builder cũng đã đọc _semantic_plan, nên câu dài như “bức tranh kinh
+  doanh mấy ngày nay theo vùng” có thể sinh:
+
+  - metric: doanh thu thuần
+  - time filter: recent_days = 7
+  - dimension: REGION_CODE
+
+  Đã kiểm tra:
+
+  - 52 passed
+  - ruff check: pass
+
+  Lưu ý thực tế: semantic đã persist trong DB từ trước sẽ vẫn là version
+  cũ. Cần import/publish lại catalog semantic để version active trong DB
+  có examples, negative_examples, và retrieval_text mới.

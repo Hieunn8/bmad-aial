@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from '../../api/client';
 import { useAuth } from '../../auth/AuthProvider';
+import { MultiSelectField } from '../../pages/admin/AdminShared';
 
 type ManagedDocument = {
   document_id: string;
@@ -32,6 +33,9 @@ type LocalAuthUser = {
   clearance: number;
   disabled: boolean;
 };
+
+type RoleDefinition = { name: string };
+type Department = { code: string; name: string; description: string | null };
 
 const cardStyle: React.CSSProperties = {
   background: 'rgba(255,255,255,0.78)',
@@ -72,18 +76,20 @@ export function DocumentAdminPanel(): React.JSX.Element {
   const auth = useAuth();
   const canManageUsers = auth.session?.claims.roles.includes('admin') ?? false;
   const [documents, setDocuments] = useState<ManagedDocument[]>([]);
+  const [roles, setRoles] = useState<RoleDefinition[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [users, setUsers] = useState<LocalAuthUser[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [form, setForm] = useState({
     filename: 'policy-revenue.txt',
     content_text: '',
     source_url: '',
-    owner_department: 'sales',
-    allowed_departments: 'sales,finance',
-    allowed_roles: 'user,manager',
+    owner_department: '',
+    allowed_departments: [] as string[],
+    allowed_roles: [] as string[],
     visibility: 'restricted',
     classification: 1,
     source_trust: 'internal',
@@ -93,14 +99,25 @@ export function DocumentAdminPanel(): React.JSX.Element {
     username: 'sales.user',
     password: 'demo123!',
     email: 'sales.user@aial.local',
-    department: 'sales',
-    roles: 'user',
+    department: '',
+    roles: [] as string[],
     clearance: 1,
   });
+
+  const roleOptions = useMemo(() => roles.map((role) => role.name), [roles]);
+  const departmentOptions = useMemo(
+    () => departments.map((department) => department.code),
+    [departments],
+  );
 
   async function loadDocuments(): Promise<void> {
     const payload = await apiRequest<DocumentListResponse>('/v1/admin/documents');
     setDocuments(payload.documents);
+  }
+
+  async function loadRoles(): Promise<void> {
+    const payload = await apiRequest<{ roles: RoleDefinition[] }>('/v1/admin/roles');
+    setRoles(payload.roles);
   }
 
   async function loadUsers(): Promise<void> {
@@ -108,15 +125,17 @@ export function DocumentAdminPanel(): React.JSX.Element {
     setUsers(payload.users);
   }
 
+  async function loadDepartments(): Promise<void> {
+    const payload = await apiRequest<{ departments: Department[] }>('/v1/admin/departments');
+    setDepartments(payload.departments);
+  }
+
   useEffect(() => {
     void (async () => {
       try {
-        await loadDocuments();
-        if (canManageUsers) {
-          await loadUsers();
-        }
+        await Promise.all([loadDocuments(), loadRoles(), loadDepartments(), canManageUsers ? loadUsers() : Promise.resolve()]);
       } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : 'Could not load document catalog');
+        setError(loadError instanceof Error ? loadError.message : 'Không tải được danh mục tài liệu');
       } finally {
         setLoading(false);
       }
@@ -133,18 +152,14 @@ export function DocumentAdminPanel(): React.JSX.Element {
         '/v1/admin/documents',
         {
           method: 'POST',
-          body: JSON.stringify({
-            ...form,
-            allowed_departments: form.allowed_departments.split(',').map((value) => value.trim()).filter(Boolean),
-            allowed_roles: form.allowed_roles.split(',').map((value) => value.trim()).filter(Boolean),
-          }),
+          body: JSON.stringify(form),
         },
       );
       setMessage(`${result.message} (${result.chunk_count} chunks)`);
       setForm((current) => ({ ...current, content_text: '' }));
       await loadDocuments();
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : 'Could not upload document');
+      setError(uploadError instanceof Error ? uploadError.message : 'Không thể upload tài liệu');
     } finally {
       setSubmitting(false);
     }
@@ -155,10 +170,10 @@ export function DocumentAdminPanel(): React.JSX.Element {
     setMessage(null);
     try {
       await apiRequest(`/v1/admin/documents/${documentId}`, { method: 'DELETE' });
-      setMessage('Document soft-deleted');
+      setMessage('Tài liệu đã được xóa mềm');
       await loadDocuments();
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : 'Could not delete document');
+      setError(deleteError instanceof Error ? deleteError.message : 'Không thể xóa tài liệu');
     }
   }
 
@@ -169,19 +184,12 @@ export function DocumentAdminPanel(): React.JSX.Element {
     try {
       await apiRequest('/v1/auth/local-users', {
         method: 'POST',
-        body: JSON.stringify({
-          username: userForm.username,
-          password: userForm.password,
-          email: userForm.email,
-          department: userForm.department,
-          roles: userForm.roles.split(',').map((role) => role.trim()).filter(Boolean),
-          clearance: userForm.clearance,
-        }),
+        body: JSON.stringify(userForm),
       });
-      setMessage('Local user created');
+      setMessage('Đã tạo local user');
       await loadUsers();
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : 'Could not create local user');
+      setError(createError instanceof Error ? createError.message : 'Không thể tạo local user');
     }
   }
 
@@ -189,14 +197,13 @@ export function DocumentAdminPanel(): React.JSX.Element {
     <section id="document-admin" style={cardStyle}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Document Admin</h2>
+          <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Quản trị tài liệu - Document Admin</h2>
           <p style={{ margin: '0.35rem 0 0', color: 'var(--color-neutral-600)', lineHeight: 1.6 }}>
-            Upload text documents for RAG, define the departments and roles they apply to, and persist the catalog in
-            PostgreSQL while indexing chunks in Weaviate.
+            Upload tài liệu text cho RAG, chọn phòng ban và vai trò được phép truy cập. Metadata lưu PostgreSQL, chunk và vector lưu Weaviate.
           </p>
         </div>
         <button type="button" style={ghostButtonStyle} onClick={() => void loadDocuments()}>
-          Refresh
+          Làm mới
         </button>
       </div>
 
@@ -221,89 +228,97 @@ export function DocumentAdminPanel(): React.JSX.Element {
             value={form.filename}
             onChange={(event) => setForm((current) => ({ ...current, filename: event.target.value }))}
             style={inputStyle}
-            placeholder="Filename"
+            placeholder="Tên file (filename)"
           />
           <input
             value={form.source_url}
             onChange={(event) => setForm((current) => ({ ...current, source_url: event.target.value }))}
             style={inputStyle}
-            placeholder="Source URL"
+            placeholder="Nguồn tài liệu (source URL)"
           />
         </div>
         <div style={{ display: 'grid', gap: '0.8rem', gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
-          <input
+          <select
             value={form.owner_department}
             onChange={(event) => setForm((current) => ({ ...current, owner_department: event.target.value }))}
             style={inputStyle}
-            placeholder="Owner department"
-          />
-          <input
-            value={form.allowed_departments}
-            onChange={(event) => setForm((current) => ({ ...current, allowed_departments: event.target.value }))}
-            style={inputStyle}
-            placeholder="Allowed departments"
-          />
-          <input
-            value={form.allowed_roles}
-            onChange={(event) => setForm((current) => ({ ...current, allowed_roles: event.target.value }))}
-            style={inputStyle}
-            placeholder="Allowed roles"
-          />
+            aria-label="Phòng ban sở hữu"
+          >
+            <option value="">Chọn phòng ban sở hữu</option>
+            {departmentOptions.map((department) => <option key={department} value={department}>{department}</option>)}
+          </select>
           <select
             value={form.visibility}
             onChange={(event) => setForm((current) => ({ ...current, visibility: event.target.value }))}
             style={inputStyle}
-            aria-label="Visibility"
+            aria-label="Phạm vi hiển thị"
           >
-            <option value="restricted">RESTRICTED</option>
-            <option value="company-wide">COMPANY-WIDE</option>
+            <option value="restricted">Hạn chế - Restricted</option>
+            <option value="company-wide">Toàn công ty - Company-wide</option>
           </select>
-        </div>
-        <div style={{ display: 'grid', gap: '0.8rem', gridTemplateColumns: '1fr 1fr 1fr' }}>
           <select
             value={form.classification}
             onChange={(event) => setForm((current) => ({ ...current, classification: Number(event.target.value) }))}
             style={inputStyle}
-            aria-label="Classification"
+            aria-label="Phân loại bảo mật"
           >
-            <option value={0}>PUBLIC</option>
-            <option value={1}>INTERNAL</option>
-            <option value={2}>CONFIDENTIAL</option>
-            <option value={3}>SECRET</option>
+            <option value={0}>PUBLIC - Công khai</option>
+            <option value={1}>INTERNAL - Nội bộ</option>
+            <option value={2}>CONFIDENTIAL - Mật</option>
+            <option value={3}>SECRET - Tối mật</option>
           </select>
           <input
             value={form.source_trust}
             onChange={(event) => setForm((current) => ({ ...current, source_trust: event.target.value }))}
             style={inputStyle}
-            placeholder="Source trust"
+            placeholder="Độ tin cậy nguồn (source trust)"
+          />
+        </div>
+        <div style={{ display: 'grid', gap: '0.8rem', gridTemplateColumns: '1fr 1fr 1fr' }}>
+          <MultiSelectField
+            label="Phòng ban được phép"
+            note="Có thể chọn nhiều phòng ban."
+            options={departmentOptions}
+            value={form.allowed_departments}
+            onChange={(nextDepartments) => setForm((current) => ({ ...current, allowed_departments: nextDepartments }))}
+            emptyText="Chưa có phòng ban. Vào Admin > Người dùng để tạo danh mục phòng ban trước."
+          />
+          <MultiSelectField
+            label="Vai trò được phép"
+            note="Có thể chọn nhiều vai trò từ danh mục Vai trò."
+            options={roleOptions}
+            value={form.allowed_roles}
+            onChange={(nextRoles) => setForm((current) => ({ ...current, allowed_roles: nextRoles }))}
+            emptyText="Chưa có vai trò để chọn."
           />
           <input
             value={form.effective_date}
             onChange={(event) => setForm((current) => ({ ...current, effective_date: event.target.value }))}
             type="date"
             style={inputStyle}
+            aria-label="Ngày hiệu lực"
           />
         </div>
         <textarea
           value={form.content_text}
           onChange={(event) => setForm((current) => ({ ...current, content_text: event.target.value }))}
           style={{ ...inputStyle, minHeight: '10rem', resize: 'vertical' }}
-          placeholder="Document body to chunk and index into Weaviate"
+          placeholder="Nội dung tài liệu để chunk và index vào Weaviate"
         />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
           <button type="submit" style={buttonStyle} disabled={submitting}>
-            {submitting ? 'Uploading...' : 'Upload and Index'}
+            {submitting ? 'Đang upload...' : 'Upload và Index'}
           </button>
           <div style={{ color: 'var(--color-neutral-500)', fontSize: '0.88rem' }}>
-            Catalog metadata persists in Postgres; chunks and vectors live in Weaviate.
+            Metadata lưu trong PostgreSQL; chunk và vector lưu trong Weaviate.
           </div>
         </div>
       </form>
 
       <div style={{ marginTop: '1rem', display: 'grid', gap: '0.8rem' }}>
-        {loading ? <div>Loading document catalog...</div> : null}
+        {loading ? <div>Đang tải danh mục tài liệu...</div> : null}
         {!loading && documents.length === 0 ? (
-          <div style={{ color: 'var(--color-neutral-500)' }}>No documents uploaded yet.</div>
+          <div style={{ color: 'var(--color-neutral-500)' }}>Chưa upload tài liệu.</div>
         ) : null}
         {documents.map((document) => (
           <article
@@ -321,20 +336,19 @@ export function DocumentAdminPanel(): React.JSX.Element {
               <div>
                 <div style={{ fontWeight: 700 }}>{document.filename}</div>
                 <div style={{ color: 'var(--color-neutral-500)', fontSize: '0.88rem' }}>
-                  owner {document.owner_department} · {document.visibility} · classification {document.classification} ·{' '}
-                  {document.status}
+                  Sở hữu: {document.owner_department} · {document.visibility} · phân loại {document.classification} · {document.status}
                 </div>
               </div>
               <button type="button" style={ghostButtonStyle} onClick={() => void handleDelete(document.document_id)}>
-                Soft delete
+                Xóa mềm
               </button>
             </div>
             <div style={{ color: 'var(--color-neutral-600)', fontSize: '0.9rem' }}>
-              chunks: {document.chunk_count} · uploaded_by: {document.uploaded_by}
+              Chunks: {document.chunk_count} · Upload bởi: {document.uploaded_by}
             </div>
             <div style={{ color: 'var(--color-neutral-600)', fontSize: '0.88rem' }}>
-              departments: {document.allowed_departments.join(', ') || 'none'} · roles:{' '}
-              {document.allowed_roles.join(', ') || 'all roles'}
+              Phòng ban: {document.allowed_departments.join(', ') || 'Không có'} · Vai trò:{' '}
+              {document.allowed_roles.join(', ') || 'Tất cả vai trò'}
             </div>
             {document.source_url ? (
               <a href={document.source_url} target="_blank" rel="noreferrer" style={{ color: '#115e59' }}>
@@ -348,13 +362,13 @@ export function DocumentAdminPanel(): React.JSX.Element {
       {canManageUsers ? (
         <div style={{ marginTop: '1.25rem', display: 'grid', gap: '1rem', gridTemplateColumns: '1.1fr 0.9fr' }}>
           <form onSubmit={(event) => void handleCreateUser(event)} style={{ display: 'grid', gap: '0.8rem' }}>
-            <h3 style={{ margin: 0 }}>Local user management</h3>
+            <h3 style={{ margin: 0 }}>Quản lý local user</h3>
             <div style={{ display: 'grid', gap: '0.8rem', gridTemplateColumns: '1fr 1fr' }}>
               <input
                 value={userForm.username}
                 onChange={(event) => setUserForm((current) => ({ ...current, username: event.target.value }))}
                 style={inputStyle}
-                placeholder="Username"
+                placeholder="Tên đăng nhập (username)"
               />
               <input
                 value={userForm.email}
@@ -369,21 +383,26 @@ export function DocumentAdminPanel(): React.JSX.Element {
                 value={userForm.password}
                 onChange={(event) => setUserForm((current) => ({ ...current, password: event.target.value }))}
                 style={inputStyle}
-                placeholder="Password"
+                placeholder="Mật khẩu"
               />
-              <input
+              <select
                 value={userForm.department}
                 onChange={(event) => setUserForm((current) => ({ ...current, department: event.target.value }))}
                 style={inputStyle}
-                placeholder="Department"
-              />
+                aria-label="Phòng ban"
+              >
+                <option value="">Chọn phòng ban</option>
+                {departmentOptions.map((department) => <option key={department} value={department}>{department}</option>)}
+              </select>
             </div>
             <div style={{ display: 'grid', gap: '0.8rem', gridTemplateColumns: '1fr auto' }}>
-              <input
+              <MultiSelectField
+                label="Vai trò"
+                note="Chọn một hoặc nhiều vai trò đã khai báo."
+                options={roleOptions}
                 value={userForm.roles}
-                onChange={(event) => setUserForm((current) => ({ ...current, roles: event.target.value }))}
-                style={inputStyle}
-                placeholder="Roles, ex: user,data_owner"
+                onChange={(nextRoles) => setUserForm((current) => ({ ...current, roles: nextRoles }))}
+                emptyText="Chưa có vai trò để chọn."
               />
               <input
                 type="number"
@@ -392,13 +411,14 @@ export function DocumentAdminPanel(): React.JSX.Element {
                 value={userForm.clearance}
                 onChange={(event) => setUserForm((current) => ({ ...current, clearance: Number(event.target.value) }))}
                 style={{ ...inputStyle, width: '7rem' }}
+                aria-label="Clearance"
               />
             </div>
-            <button type="submit" style={buttonStyle}>Create local user</button>
+            <button type="submit" style={buttonStyle}>Tạo local user</button>
           </form>
 
           <div style={{ display: 'grid', gap: '0.8rem' }}>
-            <h3 style={{ margin: 0 }}>Existing local users</h3>
+            <h3 style={{ margin: 0 }}>Local users hiện có</h3>
             {users.map((user) => (
               <article
                 key={user.username}
@@ -409,7 +429,7 @@ export function DocumentAdminPanel(): React.JSX.Element {
                   {user.email} · {user.department} · clearance {user.clearance}
                 </div>
                 <div style={{ marginTop: '0.25rem', color: 'var(--color-neutral-600)', fontSize: '0.88rem' }}>
-                  roles: {user.roles.join(', ')}
+                  Vai trò: {user.roles.join(', ')}
                 </div>
               </article>
             ))}
