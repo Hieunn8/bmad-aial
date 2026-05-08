@@ -5,7 +5,7 @@ import { ConfidenceBreakdownCard } from '@aial/ui/confidence-breakdown-card';
 import { ProvenanceDrawer, ProvenanceSection } from '@aial/ui/provenance-drawer';
 import { useSSEStream } from '../../hooks/useSSEStream';
 import { ProgressiveDataTable } from '../streaming/ProgressiveDataTable';
-import { API_BASE, apiRequest } from '../../api/client';
+import { apiDownload, apiRequest } from '../../api/client';
 
 type ExportFormat = 'csv' | 'xlsx' | 'pdf';
 
@@ -302,6 +302,26 @@ export function ChatAssistantConsole(): React.JSX.Element {
     }
   }
 
+  async function handleDownloadExport(): Promise<void> {
+    if (!jobStatus?.download_url) {
+      return;
+    }
+    setError(null);
+    try {
+      const { blob, filename } = await apiDownload(jobStatus.download_url);
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = filename ?? `aial-export-${jobStatus.job_id}.${jobStatus.format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : 'Không thể tải báo cáo');
+    }
+  }
+
   return (
     <section id="chat-assistant" style={cardStyle}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
@@ -399,9 +419,17 @@ export function ChatAssistantConsole(): React.JSX.Element {
                 </button>
               ) : null}
             </div>
-            <p style={{ margin: '0.8rem 0 0', color: 'var(--color-neutral-700)', lineHeight: 1.7, minHeight: '7rem' }}>
-              {answer || 'Cau tra loi se xuat hien khi stream done event ve toi client.'}
-            </p>
+            <div
+              style={{
+                margin: '0.8rem 0 0',
+                color: 'var(--color-neutral-700)',
+                lineHeight: 1.7,
+                minHeight: '7rem',
+                whiteSpace: 'pre-line',
+              }}
+            >
+              {answer || 'Câu trả lời sẽ xuất hiện khi stream done event về tới client.'}
+            </div>
             {cacheState.cacheTimestamp ? (
               <div style={{ marginTop: '0.7rem', color: 'var(--color-neutral-500)', fontSize: '0.84rem' }}>
                 Cached at {cacheState.cacheTimestamp}
@@ -481,12 +509,13 @@ export function ChatAssistantConsole(): React.JSX.Element {
               </button>
             </div>
             {jobStatus?.download_url ? (
-              <a
-                href={`${API_BASE}${jobStatus.download_url}`}
-                style={{ display: 'inline-block', marginTop: '0.8rem', ...ghostButtonStyle, textDecoration: 'none' }}
+              <button
+                type="button"
+                onClick={() => void handleDownloadExport()}
+                style={{ display: 'inline-block', marginTop: '0.8rem', ...ghostButtonStyle }}
               >
                 Download report
-              </a>
+              </button>
             ) : null}
           </div>
 

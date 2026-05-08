@@ -229,7 +229,7 @@ def _format_cache_freshness_indicator(timestamp: str) -> str:
         rendered = parsed.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
     except ValueError:
         rendered = timestamp
-    return f"Káº¿t quáº£ tá»« cache â€” cáº­p nháº­t lÃºc {rendered}"
+    return f"Kết quả từ cache - cập nhật lúc {rendered}"
 
 
 def _resolve_approval_request(
@@ -370,14 +370,14 @@ def _build_semantic_no_data_answer(
     tf_end = time_filter.get("end")
     tf_kind = time_filter.get("kind", "")
     if tf_start and tf_end:
-        filter_parts.append(f"thời gian {tf_start} → {tf_end}")
+        filter_parts.append(f"thời gian {tf_start} -> {tf_end}")
     elif tf_kind and tf_kind not in ("none", "latest_record", ""):
         filter_parts.append(f"bộ lọc thời gian: {tf_kind}")
     else:
         # fallback: parse SQL for DATE literals
         date_bounds = re.findall(r"DATE '(\d{4}-\d{2}-\d{2})'", generated_sql)
         if len(date_bounds) >= 2:
-            filter_parts.append(f"thời gian {date_bounds[0]} → {date_bounds[1]}")
+            filter_parts.append(f"thời gian {date_bounds[0]} -> {date_bounds[1]}")
     # Entity filters (specific values like HCM, ONLINE)
     for col, val in entity_filters.items():
         label = _DIM_LABELS.get(col, col.lower())
@@ -536,22 +536,30 @@ def _build_structured_semantic_answer(
         next(iter(first_row), ""),
     )
     rendered_value = _format_metric_value(first_row.get(value_key), unit=unit)
-    lines = [f"{term}: {rendered_value}."]
+    lines = ["Kết quả", f"{term}: {rendered_value}."]
+
+    scope_lines: list[str] = []
     if formula:
-        lines.append(f"Cách tính: {formula}.")
+        scope_lines.append(f"Cách tính: {formula}.")
     if isinstance(time_filter, dict) and time_filter.get("start") and time_filter.get("end"):
-        lines.append(f"Phạm vi: {time_filter['start']} đến {time_filter['end']}.")
+        scope_lines.append(f"Phạm vi: {time_filter['start']} đến {time_filter['end']}.")
     if isinstance(filters, dict) and filters:
         rendered_filters = ", ".join(f"{_DIM_LABELS.get(str(k), str(k))}: {v}" for k, v in filters.items())
-        lines.append(f"Bộ lọc: {rendered_filters}.")
+        scope_lines.append(f"Bộ lọc: {rendered_filters}.")
     if isinstance(dimensions, list) and dimensions:
         rendered_dimensions = ", ".join(_DIM_LABELS.get(str(item), str(item)) for item in dimensions)
-        lines.append(f"Phân rã theo: {rendered_dimensions}.")
+        scope_lines.append(f"Phân rã theo: {rendered_dimensions}.")
+    if scope_lines:
+        lines.extend(["", "Phạm vi và cách tính", *scope_lines])
+
+    source_lines: list[str] = []
     if source_table or data_source:
         source_suffix = f" từ {source_table}" if data_source and source_table else ""
-        lines.append(f"Nguồn: {data_source or source_table}{source_suffix}.")
+        source_lines.append(f"Nguồn: {data_source or source_table}{source_suffix}.")
     if unit:
-        lines.append(f"Đơn vị: {unit}.")
+        source_lines.append(f"Đơn vị: {unit}.")
+    if source_lines:
+        lines.extend(["", "Nguồn dữ liệu", *source_lines])
     return "\n".join(lines)
 
 

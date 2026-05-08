@@ -27,7 +27,7 @@ function LoginPage(): React.JSX.Element {
     try {
       await auth.loginWithPassword(username, password);
       await router.invalidate();
-      await navigate({ to: '/', replace: true });
+      await navigate({ to: '/chat', replace: true });
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : 'Đăng nhập thất bại');
     } finally {
