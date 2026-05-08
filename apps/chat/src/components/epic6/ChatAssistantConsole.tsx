@@ -160,6 +160,7 @@ export function ChatAssistantConsole(): React.JSX.Element {
     }
     if (event.type === 'done') {
       setAnswer(event.answer ?? '');
+      setStatusMessage(null);
       setCitationState({
         open: false,
         sources: event.sources ?? [],

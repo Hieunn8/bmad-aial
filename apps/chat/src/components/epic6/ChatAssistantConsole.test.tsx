@@ -103,6 +103,7 @@ describe('ChatAssistantConsole', () => {
     render(<ChatAssistantConsole />);
 
     await userEvent.click(screen.getByRole('button', { name: 'Ask AI' }));
+    expect(await screen.findByText(/stream.*truy/i)).toBeInTheDocument();
 
     expect(await screen.findByRole('status', { name: 'Cache freshness' })).toHaveTextContent('Kết quả từ cache');
     expect(screen.getByText(/Độ tương đồng ngữ nghĩa: 91%/i)).toBeInTheDocument();
@@ -160,6 +161,7 @@ describe('ChatAssistantConsole', () => {
     });
 
     expect(await screen.findByText(/FINANCE ghi nhận 5.2B/i)).toBeInTheDocument();
+    expect(screen.queryByText(/stream.*truy/i)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Xem chi tiết nguồn lệch' }));
 

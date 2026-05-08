@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   AuthSession,
   beginLoginRedirect,
@@ -76,7 +77,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       },
       loginWithPassword: async (username: string, password: string) => {
         const nextSession = await loginWithPassword(username, password);
-        setSession(nextSession);
+        flushSync(() => {
+          setSession(nextSession);
+          setIsReady(true);
+        });
         return nextSession;
       },
       logout: () => {
