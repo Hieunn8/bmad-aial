@@ -2,7 +2,10 @@ import { createFileRoute, redirect } from '@tanstack/react-router';
 
 export const Route = createFileRoute('/')({
   beforeLoad: ({ context }) => {
-    if (!context.auth.isAuthenticated && context.auth.isReady) {
+    if (!context.auth.isReady) {
+      return;
+    }
+    if (!context.auth.isAuthenticated) {
       throw redirect({ to: '/login' });
     }
     throw redirect({ to: '/chat' });

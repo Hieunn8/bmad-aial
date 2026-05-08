@@ -17,11 +17,29 @@ $KongConfig = Join-Path $RepoRoot "infra/kong/kong.yml"
 $VenvPython = Join-Path $RepoRoot ".venv\Scripts\python.exe"
 
 $DefaultDevSecrets = @{
-    AIAL_ORACLE_USERNAME = "dev_oracle_user"
-    AIAL_ORACLE_PASSWORD = "dev_oracle_pass"
-    AIAL_ORACLE_DSN = "localhost:1521/FREEPDB1"
+    AIAL_ORACLE_USERNAME = "system"
+    AIAL_ORACLE_PASSWORD = "oracle"
+    AIAL_ORACLE_DSN = "localhost:1521/FREE"
     AIAL_KEYCLOAK_CLIENT_SECRET = "dev-keycloak-secret"
     AIAL_KONG_ADMIN_TOKEN = "dev-kong-token"
+}
+
+$DefaultCubeEnv = @{
+    AIAL_SEMANTIC_RUNTIME = "cube"
+    AIAL_SEED_ORACLE_SAMPLE = "true"
+    AIAL_CUBE_API_URL = "http://localhost:4000/cubejs-api/v1"
+    AIAL_CUBE_MODEL_DIR = "infra/cube/model"
+    AIAL_CUBE_TIMEOUT_SECONDS = "8"
+    CUBEJS_API_SECRET = "aial-cube-dev-secret"
+    CUBEJS_DB_TYPE = "oracle"
+    CUBEJS_DB_HOST = "oracle-free"
+    CUBEJS_DB_PORT = "1521"
+    CUBEJS_DB_NAME = "FREE"
+    CUBEJS_DB_USER = "system"
+    CUBEJS_DB_PASS = "oracle"
+    CUBEJS_PG_SQL_PORT = "15432"
+    CUBEJS_SQL_USER = "cube"
+    CUBEJS_SQL_PASSWORD = "cube"
 }
 
 $DevSecrets = @{}
@@ -40,6 +58,33 @@ function Resolve-DevSecrets {
             $script:DevSecrets[$pair.Key] = $envValue
         }
     }
+}
+
+function Set-DefaultEnv([hashtable]$Defaults) {
+    foreach ($pair in $Defaults.GetEnumerator()) {
+        $envValue = [Environment]::GetEnvironmentVariable($pair.Key)
+        if ([string]::IsNullOrWhiteSpace($envValue)) {
+            [Environment]::SetEnvironmentVariable($pair.Key, $pair.Value)
+        }
+    }
+}
+
+function Test-CubeRuntimeEnabled {
+    $runtime = [Environment]::GetEnvironmentVariable("AIAL_SEMANTIC_RUNTIME")
+    return $runtime -and $runtime.Trim().ToLowerInvariant() -eq "cube"
+}
+
+function Test-OracleSampleSeedEnabled {
+    $value = [Environment]::GetEnvironmentVariable("AIAL_SEED_ORACLE_SAMPLE")
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        return $true
+    }
+    return $value.Trim().ToLowerInvariant() -in @("1", "true", "yes", "on")
+}
+
+function Sync-CubeEnvWithOracle {
+    [Environment]::SetEnvironmentVariable("CUBEJS_DB_USER", $DevSecrets.AIAL_ORACLE_USERNAME)
+    [Environment]::SetEnvironmentVariable("CUBEJS_DB_PASS", $DevSecrets.AIAL_ORACLE_PASSWORD)
 }
 
 function Assert-Command([string]$CommandName) {
@@ -109,13 +154,20 @@ function Seed-DevVault {
 
 function Write-InfraEnvFile {
     Write-Step "Writing .env.infra"
-    @(
+    $lines = @(
         "AIAL_ORACLE_USERNAME=$($DevSecrets.AIAL_ORACLE_USERNAME)"
         "AIAL_ORACLE_PASSWORD=$($DevSecrets.AIAL_ORACLE_PASSWORD)"
         "AIAL_ORACLE_DSN=$($DevSecrets.AIAL_ORACLE_DSN)"
         "AIAL_KEYCLOAK_CLIENT_SECRET=$($DevSecrets.AIAL_KEYCLOAK_CLIENT_SECRET)"
         "AIAL_KONG_ADMIN_TOKEN=$($DevSecrets.AIAL_KONG_ADMIN_TOKEN)"
-    ) | Set-Content -Path $EnvFile -Encoding ASCII
+    )
+    foreach ($key in $DefaultCubeEnv.Keys) {
+        $value = [Environment]::GetEnvironmentVariable($key)
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            $lines += "$key=$value"
+        }
+    }
+    $lines | Set-Content -Path $EnvFile -Encoding ASCII
 }
 
 function New-KongConfig {
@@ -150,10 +202,27 @@ function Import-EnvFile([string]$Path) {
     }
 }
 
+function Seed-OracleSampleData {
+    if (-not (Test-OracleSampleSeedEnabled)) {
+        Write-Step "Skipping Oracle sample seed because AIAL_SEED_ORACLE_SAMPLE is disabled"
+        return
+    }
+    $sampleSql = Join-Path $RepoRoot "docs/sql/oracle-free-system-sample.sql"
+    if (-not (Test-Path $sampleSql)) {
+        throw "Oracle sample SQL not found: $sampleSql"
+    }
+    Write-Step "Seeding Oracle Free sample semantic data"
+    docker cp $sampleSql "aial-oracle-free:/tmp/oracle-free-system-sample.sql" | Out-Host
+    $password = $DevSecrets.AIAL_ORACLE_PASSWORD
+    docker exec aial-oracle-free bash -lc "sqlplus -L system/$password@//localhost:1521/FREE @/tmp/oracle-free-system-sample.sql" | Out-Host
+}
+
 function Start-Infra {
     Assert-Command "docker"
     Import-EnvFile -Path $UserEnvFile
+    Set-DefaultEnv -Defaults $DefaultCubeEnv
     Resolve-DevSecrets
+    Sync-CubeEnvWithOracle
 
     Write-Step "Starting Vault only"
     docker compose -f $ComposeFile up -d vault | Out-Host
@@ -162,14 +231,42 @@ function Start-Infra {
     Seed-DevVault
     Write-InfraEnvFile
 
+    $infraServices = @(
+        "postgres",
+        "redis",
+        "weaviate",
+        "openldap",
+        "keycloak",
+        "cerbos",
+        "tempo",
+        "otel-collector",
+        "prometheus",
+        "grafana"
+    )
+    $composeProfileArgs = @()
+    if (Test-CubeRuntimeEnabled) {
+        Write-Step "Cube semantic runtime enabled; starting Oracle Free and Cube Core"
+        $composeProfileArgs += @("--profile", "oracle-vpd", "--profile", "cube")
+        $infraServices += @("oracle-free", "cube")
+    }
+
     Write-Step "Starting infra except Kong"
-    docker compose --env-file $EnvFile -f $ComposeFile up -d postgres redis weaviate openldap keycloak cerbos tempo otel-collector prometheus grafana | Out-Host
+    & docker compose --env-file $EnvFile -f $ComposeFile @composeProfileArgs up -d @infraServices | Out-Host
 
     Wait-Tcp -Name "postgres" -Address "127.0.0.1" -Port 5432
     Wait-Tcp -Name "redis" -Address "127.0.0.1" -Port 6379
     Wait-Http -Name "weaviate" -Url "http://localhost:8081/v1/.well-known/ready"
     Wait-Http -Name "keycloak" -Url "http://localhost:8080/"
     Wait-Tcp -Name "cerbos" -Address "127.0.0.1" -Port 3592
+    if (Test-CubeRuntimeEnabled) {
+        Wait-Tcp -Name "oracle-free" -Address "127.0.0.1" -Port 1521 -TimeoutSeconds 300
+        Seed-OracleSampleData
+        try {
+            Wait-Http -Name "cube" -Url "http://localhost:4000/readyz" -TimeoutSeconds 90
+        } catch {
+            Write-Warning "Cube Core is not ready yet. Backend/frontend will continue; check 'docker logs aial-cube-core' for details."
+        }
+    }
 
     New-KongConfig
 
@@ -192,7 +289,9 @@ function Start-Backend {
     }
     Import-EnvFile -Path $EnvFile
     Import-EnvFile -Path $UserEnvFile
+    Set-DefaultEnv -Defaults $DefaultCubeEnv
     Resolve-DevSecrets
+    Sync-CubeEnvWithOracle
     [Environment]::SetEnvironmentVariable("DATABASE_URL", "postgresql://aial:aial@localhost:5432/aial")
     [Environment]::SetEnvironmentVariable("REDIS_URL", "redis://localhost:6379")
     [Environment]::SetEnvironmentVariable("WEAVIATE_URL", "http://localhost:8081")
@@ -202,6 +301,11 @@ function Start-Backend {
     [Environment]::SetEnvironmentVariable("KONG_ADMIN_URL", "http://localhost:8001")
     [Environment]::SetEnvironmentVariable("PYTHONPATH", "services;shared/src;infra")
     [Environment]::SetEnvironmentVariable("AIAL_CONFIG_CATALOG_PERSISTENCE", "postgres")
+    foreach ($pair in $DefaultCubeEnv.GetEnumerator()) {
+        if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($pair.Key))) {
+            [Environment]::SetEnvironmentVariable($pair.Key, $pair.Value)
+        }
+    }
     foreach ($pair in $DevSecrets.GetEnumerator()) {
         [Environment]::SetEnvironmentVariable($pair.Key, $pair.Value)
     }

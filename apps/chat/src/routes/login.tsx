@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, redirect, useNavigate, useRouter } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 
@@ -14,6 +14,7 @@ export const Route = createFileRoute('/login')({
 function LoginPage(): React.JSX.Element {
   const auth = useAuth();
   const navigate = useNavigate();
+  const router = useRouter();
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('admin123!');
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +26,8 @@ function LoginPage(): React.JSX.Element {
     setError(null);
     try {
       await auth.loginWithPassword(username, password);
-      void navigate({ to: '/' });
+      await router.invalidate();
+      await navigate({ to: '/', replace: true });
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : 'Đăng nhập thất bại');
     } finally {

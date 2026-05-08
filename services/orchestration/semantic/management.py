@@ -61,6 +61,15 @@ class KpiDefinitionVersion:
     examples: list[str] = field(default_factory=list)
     negative_examples: list[str] = field(default_factory=list)
     security: dict[str, object] | None = None
+    cube_name: str | None = None
+    measure_name: str | None = None
+    time_dimension: str | None = None
+    cube_dimensions: list[str] = field(default_factory=list)
+    primary_key: list[str] = field(default_factory=list)
+    display_format: str | None = None
+    semantic_runtime_status: str | None = None
+    semantic_runtime_errors: list[str] = field(default_factory=list)
+    last_runtime_synced_at: str | None = None
     rollback_reason: str | None = None
 
     @property
@@ -108,6 +117,15 @@ class KpiDefinitionVersion:
             "examples": self.examples,
             "negative_examples": self.negative_examples,
             "security": self.security,
+            "cube_name": self.cube_name,
+            "measure_name": self.measure_name,
+            "time_dimension": self.time_dimension,
+            "cube_dimensions": self.cube_dimensions,
+            "primary_key": self.primary_key,
+            "display_format": self.display_format,
+            "semantic_runtime_status": self.semantic_runtime_status,
+            "semantic_runtime_errors": self.semantic_runtime_errors,
+            "last_runtime_synced_at": self.last_runtime_synced_at,
             "rollback_reason": self.rollback_reason,
             "retrieval_text": self.retrieval_text,
         }
@@ -235,6 +253,15 @@ class SemanticLayerService:
         examples: list[str] | None = None,
         negative_examples: list[str] | None = None,
         security: dict[str, object] | None = None,
+        cube_name: str | None = None,
+        measure_name: str | None = None,
+        time_dimension: str | None = None,
+        cube_dimensions: list[str] | None = None,
+        primary_key: list[str] | None = None,
+        display_format: str | None = None,
+        semantic_runtime_status: str | None = None,
+        semantic_runtime_errors: list[str] | None = None,
+        last_runtime_synced_at: str | None = None,
     ) -> KpiDefinitionVersion:
         normalized = term.strip().casefold()
         previous = self.get_metric(term)
@@ -260,6 +287,15 @@ class SemanticLayerService:
             examples=_normalize_str_list(examples),
             negative_examples=_normalize_str_list(negative_examples),
             security=dict(security) if security else None,
+            cube_name=cube_name.strip() if cube_name else None,
+            measure_name=measure_name.strip() if measure_name else None,
+            time_dimension=time_dimension.strip() if time_dimension else None,
+            cube_dimensions=_normalize_str_list(cube_dimensions),
+            primary_key=_normalize_str_list(primary_key),
+            display_format=display_format.strip() if display_format else None,
+            semantic_runtime_status=semantic_runtime_status.strip() if semantic_runtime_status else None,
+            semantic_runtime_errors=_normalize_str_list(semantic_runtime_errors),
+            last_runtime_synced_at=last_runtime_synced_at,
         )
         self._versions.setdefault(normalized, []).append(version)
         self._active_versions[normalized] = version.version_id
@@ -301,6 +337,15 @@ class SemanticLayerService:
             examples=list(target.examples),
             negative_examples=list(target.negative_examples),
             security=dict(target.security) if target.security else None,
+            cube_name=target.cube_name,
+            measure_name=target.measure_name,
+            time_dimension=target.time_dimension,
+            cube_dimensions=list(target.cube_dimensions),
+            primary_key=list(target.primary_key),
+            display_format=target.display_format,
+            semantic_runtime_status=target.semantic_runtime_status,
+            semantic_runtime_errors=list(target.semantic_runtime_errors),
+            last_runtime_synced_at=target.last_runtime_synced_at,
             rollback_reason=reason.strip() if reason else None,
         )
         normalized = term.strip().casefold()
@@ -336,6 +381,15 @@ class SemanticLayerService:
             examples=list(current.examples),
             negative_examples=list(current.negative_examples),
             security=dict(current.security) if current.security else None,
+            cube_name=current.cube_name,
+            measure_name=current.measure_name,
+            time_dimension=current.time_dimension,
+            cube_dimensions=list(current.cube_dimensions),
+            primary_key=list(current.primary_key),
+            display_format=current.display_format,
+            semantic_runtime_status=current.semantic_runtime_status,
+            semantic_runtime_errors=list(current.semantic_runtime_errors),
+            last_runtime_synced_at=current.last_runtime_synced_at,
             rollback_reason=reason.strip() if reason else None,
         )
         normalized = term.strip().casefold()
@@ -450,6 +504,27 @@ def _version_from_payload(payload: dict[str, object]) -> KpiDefinitionVersion:
             payload.get("negative_examples") if isinstance(payload.get("negative_examples"), list) else None
         ),
         security=dict(payload["security"]) if isinstance(payload.get("security"), dict) else None,
+        cube_name=str(payload["cube_name"]).strip() if payload.get("cube_name") else None,
+        measure_name=str(payload["measure_name"]).strip() if payload.get("measure_name") else None,
+        time_dimension=str(payload["time_dimension"]).strip() if payload.get("time_dimension") else None,
+        cube_dimensions=_normalize_str_list(
+            payload.get("cube_dimensions") if isinstance(payload.get("cube_dimensions"), list) else None
+        ),
+        primary_key=_normalize_str_list(
+            payload.get("primary_key") if isinstance(payload.get("primary_key"), list) else None
+        ),
+        display_format=str(payload["display_format"]).strip() if payload.get("display_format") else None,
+        semantic_runtime_status=(
+            str(payload["semantic_runtime_status"]).strip() if payload.get("semantic_runtime_status") else None
+        ),
+        semantic_runtime_errors=_normalize_str_list(
+            payload.get("semantic_runtime_errors")
+            if isinstance(payload.get("semantic_runtime_errors"), list)
+            else None
+        ),
+        last_runtime_synced_at=(
+            str(payload["last_runtime_synced_at"]) if payload.get("last_runtime_synced_at") else None
+        ),
         rollback_reason=str(payload["rollback_reason"]) if payload.get("rollback_reason") else None,
     )
 

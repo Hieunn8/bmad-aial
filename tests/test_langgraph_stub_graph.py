@@ -109,6 +109,34 @@ class TestQueryGraph:
         assert result["intent_type"] == "stub"
         assert result["should_abort"] is False
 
+    @pytest.mark.anyio
+    async def test_invoke_uses_cube_runtime_when_enabled(self, sample_claims: JWTClaims, monkeypatch) -> None:
+        monkeypatch.setenv("AIAL_SEMANTIC_RUNTIME", "cube")
+        monkeypatch.delenv("AIAL_CUBE_API_URL", raising=False)
+        monkeypatch.delenv("CUBEJS_API_SECRET", raising=False)
+        saver = FakeRedisSaver(fakeredis.FakeRedis(decode_responses=False))
+        graph = create_query_graph(checkpointer=saver)
+
+        result = await invoke_query_graph(
+            graph=graph,
+            query="doanh thu tháng này",
+            session_id=str(uuid4()),
+            principal=sample_claims,
+            trace_id="trace-cube",
+            semantic_context=[
+                {
+                    "term": "doanh thu thuần",
+                    "formula": "SUM(NET_REVENUE)",
+                    "dimensions": ["PERIOD_DATE", "REGION_CODE"],
+                    "source": {"data_source": "oracle-free-system", "schema": "SYSTEM", "table": "AIAL_SALES_DAILY_V"},
+                    "_semantic_plan": {"time_filter": {"start": "2026-05-01", "end": "2026-06-01"}},
+                }
+            ],
+        )
+
+        assert "runtime:cube" in result["final_response"]
+        assert result["generated_sql"].startswith("CUBE_REST_QUERY")
+
     @pytest.mark.requires_redis
     @pytest.mark.anyio
     async def test_real_redis_checkpointer_round_trip_when_redis_available(self, sample_claims: JWTClaims) -> None:

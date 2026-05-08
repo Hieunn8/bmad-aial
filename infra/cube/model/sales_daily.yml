@@ -1,0 +1,46 @@
+cubes:
+  - name: sales_daily
+    sql_table: SYSTEM.AIAL_SALES_DAILY_V
+
+    measures:
+      - name: budget_amount
+        type: sum
+        sql: BUDGET_AMOUNT
+        title: "doanh thu ngân sách"
+        description: "Tổng ngân sách doanh thu theo dữ liệu bán hàng mẫu."
+      - name: net_revenue
+        type: sum
+        sql: NET_REVENUE
+        title: "doanh thu thuần"
+        description: "Tổng doanh thu sau hoàn trả theo dữ liệu bán hàng đã POSTED."
+      - name: gross_margin
+        type: sum
+        sql: GROSS_MARGIN
+        title: "lợi nhuận gộp"
+        description: "Doanh thu thuần trừ chi phí vốn theo từng ngày, khu vực, kênh và sản phẩm."
+      - name: order_count
+        type: sum
+        sql: ORDER_COUNT
+        title: "số đơn hàng"
+        description: "Tổng số đơn hàng hợp lệ trong dữ liệu bán hàng đã POSTED."
+
+    dimensions:
+      - name: row_key
+        sql: "TO_CHAR(PERIOD_DATE, 'YYYY-MM-DD') || '-' || REGION_CODE || '-' || CHANNEL_CODE || '-' || PRODUCT_CODE || '-' || CATEGORY_NAME"
+        type: string
+        primary_key: true
+      - name: period_date
+        sql: PERIOD_DATE
+        type: time
+      - name: region_code
+        sql: REGION_CODE
+        type: string
+      - name: channel_code
+        sql: CHANNEL_CODE
+        type: string
+      - name: product_code
+        sql: PRODUCT_CODE
+        type: string
+      - name: category_name
+        sql: CATEGORY_NAME
+        type: string

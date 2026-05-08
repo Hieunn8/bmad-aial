@@ -17,7 +17,6 @@ _CTX_WITH_PLAN = [
 
 
 def test_reads_time_range_from_semantic_plan() -> None:
-    """Time range should come from _semantic_plan, not SQL parsing."""
     answer = _build_semantic_no_data_answer(
         semantic_context=_CTX_WITH_PLAN,
         generated_sql="SELECT SUM(NET_REVENUE) AS METRIC_VALUE FROM SYSTEM.AIAL_SALES_DAILY_V WHERE 1=1",
@@ -39,7 +38,6 @@ def test_shows_entity_filter_in_message() -> None:
 
 
 def test_shows_max_available_date_hint() -> None:
-    """When Oracle returns the available date range, message should include it."""
     answer = _build_semantic_no_data_answer(
         semantic_context=_CTX_WITH_PLAN,
         generated_sql="",
@@ -48,23 +46,21 @@ def test_shows_max_available_date_hint() -> None:
     )
     assert answer is not None
     assert "2026-01-01 đến 2026-03-31" in answer
-    assert "Dữ liệu có sẵn" in answer
+    assert "dữ liệu hiện có trong kho" in answer
+    assert "không tự đổi sang kỳ khác" in answer
 
 
 def test_suggestion_does_not_repeat_failed_time_range() -> None:
-    """Suggestion should not echo back the exact time that already failed."""
     answer = _build_semantic_no_data_answer(
         semantic_context=_CTX_WITH_PLAN,
         generated_sql="",
         data_source="oracle-free-system",
     )
     assert answer is not None
-    # Should NOT suggest "7 ngày gần đây" when that's exactly what the user asked and failed
     assert "7 ngày gần đây" not in answer
 
 
 def test_fallback_to_sql_parsing_when_no_plan() -> None:
-    """Without _semantic_plan, falls back to parsing DATE literals from SQL."""
     answer = _build_semantic_no_data_answer(
         semantic_context=_CTX_PLAIN,
         generated_sql=(
@@ -76,6 +72,8 @@ def test_fallback_to_sql_parsing_when_no_plan() -> None:
     assert answer is not None
     assert "2026-05-01" in answer
     assert "oracle-free-system" in answer
+    assert "Truy vấn semantic đã chạy" in answer
+    assert "SUM(NET_REVENUE)" in answer
 
 
 def test_null_aggregate_row_is_treated_as_no_data() -> None:

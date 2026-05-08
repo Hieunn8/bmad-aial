@@ -118,7 +118,7 @@ def execute_semantic_sql(plan: SemanticSqlPlan | None) -> SemanticSqlExecution:
                 rows = [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
 
             max_available_date: str | None = None
-            if not rows and _has_time_filter(plan.sql) and plan.qualified_table:
+            if (not rows or not _has_meaningful_values(rows)) and _has_time_filter(plan.sql) and plan.qualified_table:
                 max_available_date = _query_max_available_date(connection, plan)
 
         return SemanticSqlExecution(plan=plan, rows=rows, max_available_date=max_available_date)
@@ -132,6 +132,17 @@ def execute_semantic_sql(plan: SemanticSqlPlan | None) -> SemanticSqlExecution:
 
 def _has_time_filter(sql: str) -> bool:
     return "PERIOD_DATE" in sql and ("DATE '" in sql or ">=" in sql)
+
+
+def _has_meaningful_values(rows: list[dict[str, object]]) -> bool:
+    for row in rows:
+        for value in row.values():
+            if value is None:
+                continue
+            if isinstance(value, str) and not value.strip():
+                continue
+            return True
+    return False
 
 
 def _query_max_available_date(connection: Any, plan: SemanticSqlPlan) -> str | None:

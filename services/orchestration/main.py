@@ -79,6 +79,21 @@ def create_app() -> FastAPI:
     app.include_router(admin_router)
     app.include_router(documents_router)
 
+    @app.on_event("startup")
+    async def _sync_cube_model_on_startup() -> None:
+        if os.getenv("AIAL_SEMANTIC_RUNTIME", "").strip().lower() != "cube":
+            return
+        try:
+            from orchestration.semantic.cube_model import sync_active_semantics_to_cube_model
+
+            result = sync_active_semantics_to_cube_model()
+            if result.errors:
+                logger.warning("Cube model generated with semantic errors: %s", result.errors)
+            else:
+                logger.info("Cube model generated: %s", result.to_dict())
+        except Exception as exc:
+            logger.warning("Cube model startup sync failed: %s", exc)
+
     return app
 
 

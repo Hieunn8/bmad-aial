@@ -12,6 +12,7 @@ Sau khi làm xong hướng dẫn này, bạn sẽ có:
 - Keycloak ở `http://localhost:8080`
 - Grafana ở `http://localhost:3001`
 - Weaviate ở `http://localhost:8081`
+- Cube Core semantic runtime ở `http://localhost:4000` khi bật profile `cube`
 
 ## 2. Yêu cầu cài đặt
 
@@ -100,6 +101,16 @@ Các biến quan trọng:
 - `AIAL_ORACLE_USERNAME`
 - `AIAL_ORACLE_PASSWORD`
 - `AIAL_ORACLE_DSN`
+- `AIAL_SEMANTIC_RUNTIME`
+- `AIAL_CUBE_API_URL`
+- `AIAL_CUBE_MODEL_DIR`
+- `CUBEJS_API_SECRET`
+- `CUBEJS_DB_TYPE`
+- `CUBEJS_DB_HOST`
+- `CUBEJS_DB_PORT`
+- `CUBEJS_DB_NAME`
+- `CUBEJS_DB_USER`
+- `CUBEJS_DB_PASS`
 - `OTEL_EXPORTER_OTLP_ENDPOINT`
 
 Frontend có thể cần thêm:
@@ -160,6 +171,8 @@ Script này sẽ:
 - seed secret dev vào Vault
 - sinh `.env.infra`
 - dựng Postgres, Redis, Weaviate, OpenLDAP, Keycloak, Cerbos, Kong, observability
+- nếu `AIAL_SEMANTIC_RUNTIME=cube` thì dựng thêm Oracle Free và Cube Core
+- nếu `AIAL_SEED_ORACLE_SAMPLE=true` thì seed dữ liệu mẫu `AIAL_SALES_DAILY_V` vào Oracle Free
 - sinh `infra/kong/kong.yml` từ public key của Keycloak
 - start backend `:8090`
 - start frontend `:3000`
@@ -226,6 +239,7 @@ Tức là frontend local đang đi qua Kong, còn Kong forward tiếp tới orch
 - Backend orchestration: `http://localhost:8090`
 - Vault: `http://localhost:8200`
 - Weaviate: `http://localhost:8081`
+- Cube Core: `http://localhost:4000` (`docker compose --profile cube up cube`)
 - Redis: `localhost:6379`
 - Postgres: `localhost:5432`
 - Grafana: `http://localhost:3001`

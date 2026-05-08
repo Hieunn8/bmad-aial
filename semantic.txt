@@ -1,0 +1,217 @@
+# Kế Hoạch Nâng AIAL Lên Smart Semantic Layer Bằng Cube Core
+
+  ## Summary
+
+  Chọn Cube Core làm semantic runtime chính, không chọn MetricFlow cho
+  giai đoạn này. Lý do: AIAL hiện không có dbt project, đang chạy Docker
+  stack riêng, có Oracle sample, Postgres persistence, FastAPI
+  orchestration và UI tự xây. Cube Core phù hợp hơn vì là headless open-
+  source semantic layer chạy Docker, có SQL/REST/GraphQL API, data
+  modeling bằng YAML/JS, hỗ trợ Oracle/Postgres và có measures,
+  dimensions, joins, time dimensions, pre-aggregations. MetricFlow mạnh
+  nếu AIAL đã chuẩn hóa quanh dbt, nhưng hiện tại sẽ kéo thêm dbt
+  project/adapter/lifecycle không cần thiết.
+
+  Nguồn tham chiếu chính:
+
+  - Cube Core là headless open-source semantic layer chạy Docker:
+    https://docs.cube.dev/docs/getting-started
+  - Cube hỗ trợ Oracle/Postgres và nhiều data sources:
+    https://cube.dev/docs/product/configuration/data-sources
+  - Cube dimensions/time dimensions/primary keys giúp tránh fanout:
+    https://docs.cube.dev/docs/data-modeling/dimensions
+  - MetricFlow cần dbt project và dbt adapter:
+    https://github.com/dbt-labs/metricflow
+
+  Nguyên tắc dữ liệu: Postgres hiện tại vẫn là source of truth cho
+  semantic catalog/version/head. Không xóa dữ liệu cũ. Cube model được
+  sinh từ DB và có thể regenerate.
+
+  ## Key Implementation Changes
+
+  ### 1. Thêm Cube Core vào hạ tầng
+
+  - Thêm service cube vào infra/docker-compose.dev.yml, expose:
+      - REST API: 4000
+      - SQL API: 15432
+  - Mount thư mục generated model vào Cube, ví dụ services/cube/model.
+  - Thêm env:
+      - AIAL_SEMANTIC_RUNTIME=cube
+      - CUBEJS_DB_TYPE=oracle
+      - CUBEJS_DB_HOST, CUBEJS_DB_PORT, CUBEJS_DB_NAME, CUBEJS_DB_USER,
+        CUBEJS_DB_PASS
+      - CUBEJS_API_SECRET
+      - CUBEJS_PG_SQL_PORT=15432
+      - CUBEJS_SQL_USER, CUBEJS_SQL_PASSWORD
+  - Local dev dùng Oracle Free hiện có; production mapping lấy từ data
+    source config trong DB.
+
+  ### 2. Giữ DB catalog hiện tại, thêm metadata cho Cube
+
+  - Không bỏ bảng cũ:
+      - semantic_metric_versions
+      - semantic_metric_heads
+      - semantic_metric_embeddings
+  - Mở rộng payload JSONB theo backward-compatible fields:
+      - cube_name
+      - measure_name
+      - time_dimension
+      - cube_dimensions
+      - cube_segments
+      - primary_key
+      - cube_refresh_key
+      - display_format
+      - semantic_runtime_status
+  - Nếu field mới chưa có, importer tự suy luận từ catalog cũ:
+      - term -> Cube measure display label.
+      - formula=SUM(NET_REVENUE) -> Cube measure type: sum, sql:
+        NET_REVENUE.
+      - dimensions -> Cube dimensions.
+      - source.schema/table -> sql_table.
+  - Mọi publish/rollback/delete hiện tại vẫn append version, không
+    update mất lịch sử.
+
+  ### 3. Sinh Cube model từ DB, không nhập tay
+
+  - Tạo module generator đọc active semantic heads từ Postgres và sinh
+    Cube YAML.
+  - Với catalog mẫu hiện tại, tạo tối thiểu một cube:
+      - cube: sales_daily
+      - sql_table: SYSTEM.AIAL_SALES_DAILY_V
+      - primary key composite từ PERIOD_DATE, REGION_CODE, CHANNEL_CODE,
+        PRODUCT_CODE, CATEGORY_NAME
+      - measures:
+          - net_revenue: SUM(NET_REVENUE)
+          - gross_margin: SUM(GROSS_MARGIN)
+          - order_count: SUM(ORDER_COUNT)
+          - budget_revenue: SUM(BUDGET_AMOUNT)
+      - dimensions:
+          - period_date type time
+          - region_code, channel_code, product_code, category_name
+      - segment:
+          - posted_only nếu status không đã enforce trong view.
+  - Generator chạy khi:
+      - backend startup.
+      - admin publish/rollback/delete semantic.
+      - config-catalog import.
+  - Sau khi generate, gọi Cube reload/dev refresh nếu endpoint khả dụng;
+    nếu không, ghi status “pending_runtime_reload”.
+
+  ### 4. Thay build_semantic_sql_plan bằng Cube query adapter
+
+  - Không để AIAL tự build SQL từ formula nữa.
+  - Tạo CubeSemanticRuntimeClient trong orchestration:
+      - Input: structured semantic plan.
+      - Output: SemanticRuntimeExecution gồm rows, runtime_query,
+        data_source, provenance, warning.
+  - Adapter gọi Cube REST API cho query thường:
+      - measures từ selected metric.
+      - dimensions từ planner.
+      - timeDimensions từ time_filter.
+      - filters từ entity filters.
+      - limit từ data source setting.
+  - Chỉ dùng Cube SQL API cho explain/debug nội bộ nếu cần, không expose
+    mặc định.
+  - Giữ execute_semantic_sql cũ sau feature flag
+    AIAL_SEMANTIC_RUNTIME=legacy trong một release để rollback, nhưng
+    default là cube.
+
+  ### 5. Smart NL Planner nhưng semantic runtime là Cube
+
+  - AIAL vẫn làm natural-language understanding, nhưng không còn là
+    semantic engine.
+  - Planner flow:
+      1. Lấy allowed metrics theo role.
+      2. Lấy active Cube-backed semantic metadata từ DB.
+      3. Retrieve candidate theo aliases/examples/embedding.
+      4. LLM structured planner chỉ được chọn trong candidates.
+      5. Planner xuất metric_id, cube_name, measure_name, dimensions,
+         filters, time filter, intent, confidence.
+      6. Cube runtime execute.
+  - Nếu không đủ confidence:
+      - không query Cube.
+      - trả clarification với các semantic chuẩn và ví dụ câu hỏi.
+  - Nếu Cube trả lỗi model/query:
+      - trả lỗi minh bạch, log audit, không fallback sang tự build SQL.
+
+  ### 6. Answer contract minh bạch
+
+  - Thay prompt answer hiện tại bằng structured answer payload.
+  - Mọi câu trả lời số liệu phải có:
+      - semantic metric đã dùng.
+      - công thức business.
+      - Cube measure.
+      - thời gian.
+      - filters.
+      - dimensions/grouping.
+      - nguồn dữ liệu.
+      - đơn vị và rounding.
+      - freshness/cache state nếu có.
+  - Ví dụ format bắt buộc:
+
+  Doanh thu thuần tháng 5/2026 là 12,4 tỷ VND.
+
+  Cách tính: SUM(NET_REVENUE), chỉ gồm dữ liệu POSTED.
+  Phạm vi: 2026-05-01 đến 2026-06-01.
+  Nguồn: Cube sales_daily.net_revenue từ SYSTEM.AIAL_SALES_DAILY_V.
+  Lưu ý: đây là doanh thu sau hoàn trả, chưa phải lợi nhuận.
+
+  ### 7. Semantic Studio nâng cấp
+
+  - UI hiện tại vẫn dùng endpoint admin cũ, nhưng hiển thị thêm:
+      - Cube cube/measure mapping.
+      - runtime sync status.
+      - last generated model timestamp.
+      - validation errors.
+  - Publish flow mới:
+      - validate catalog.
+      - append version vào DB.
+      - generate Cube model.
+      - validate Cube model/query smoke.
+      - mark version active only if runtime sync passes.
+  - Nếu sync fail:
+      - version vẫn lưu trong DB với status failed_runtime_validation.
+      - active head không đổi để tránh phá production.
+  - Unit tests:
+      - catalog cũ import được và sinh đúng Cube metadata.
+      - generator tạo Cube YAML đúng cho measures/dimensions/time
+        dimension.
+      - planner không chọn metric ngoài allowed list.
+      - runtime adapter tạo Cube REST query đúng cho metric value,
+        breakdown, time filter, entity filter.
+  - Integration tests:
+      - Docker Cube + Oracle Free lên được.
+      - Query doanh thu tháng này đi qua Cube, không đi qua
+        build_semantic_sql_plan.
+      - Query doanh thu theo khu vực trả rows group theo REGION_CODE.
+      - Query mơ hồ doanh thu với actual/budget trả clarification.
+      - Unauthorized role không thấy/query metric bị chặn.
+  - Migration/no-loss tests:
+      - Seed DB với semantic versions cũ.
+      - Chạy migration/generator.
+      - Assert mọi version_id, payload, head còn nguyên.
+      - Rollback version cũ vẫn regenerate Cube model đúng.
+  - Answer quality tests:
+      - Câu trả lời có metric, formula, time range, source, unit.
+      - No-data answer nói rõ filter và gợi ý khoảng dữ liệu.
+      - Cube runtime error không hallucinate số.
+  - Regression eval:
+      - Tối thiểu 200 câu tiếng Việt: alias, synonym chưa khai, không
+        dấu, câu lòng vòng, time filter, breakdown, out-of-scope,
+        ambiguous, permission.
+
+  ## Assumptions And Defaults
+
+  - Chọn Cube Core làm semantic runtime chính; MetricFlow không triển
+    khai ở phase này vì repo chưa có dbt.
+  - DB Postgres hiện tại là source of truth; Cube YAML là generated
+    artifact, không phải nguồn dữ liệu gốc.
+  - Không xóa hoặc rewrite semantic catalog cũ; chỉ thêm field JSONB
+    backward-compatible.
+  - Runtime legacy chỉ giữ tạm qua feature flag để rollback kỹ thuật,
+    không dùng làm semantic mặc định.
+  - Oracle Free sample là integration target đầu tiên; sau đó mở rộng
+    data source khác qua cùng Cube runtime.
+  - AIAL vẫn giữ vai trò NL planner, permission, audit, answer composer,
+    memory/RAG orchestration; Cube chịu trách nhiệm semantic modeling/
+    query execution.

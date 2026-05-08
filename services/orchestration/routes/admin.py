@@ -26,6 +26,16 @@ CURRENT_USER_DEP = Depends(get_current_user)
 _ADMIN_ROLES = frozenset({"admin", "data_owner"})
 
 
+def _sync_cube_model_if_enabled() -> dict[str, object] | None:
+    import os
+
+    if os.getenv("AIAL_SEMANTIC_RUNTIME", "").strip().lower() != "cube":
+        return None
+    from orchestration.semantic.cube_model import sync_active_semantics_to_cube_model
+
+    return sync_active_semantics_to_cube_model().to_dict()
+
+
 def _require_admin_or_self(principal: JWTClaims, requested_user_id: str | None) -> str | None:
     """Return the effective user_id filter. Raises 403 if non-admin tries to query other users."""
     is_admin = bool(_ADMIN_ROLES & set(principal.roles))
@@ -147,6 +157,12 @@ class SemanticMetricPublishRequest(BaseModel):
     examples: list[str] = []
     negative_examples: list[str] = []
     security: dict[str, object] | None = None
+    cube_name: str | None = None
+    measure_name: str | None = None
+    time_dimension: str | None = None
+    cube_dimensions: list[str] = []
+    primary_key: list[str] = []
+    display_format: str | None = None
 
 
 class SemanticMetricRollbackRequest(BaseModel):
@@ -188,6 +204,12 @@ class CatalogSemanticMetricRequest(BaseModel):
     examples: list[str] = []
     negative_examples: list[str] = []
     security: dict[str, object] | None = None
+    cube_name: str | None = None
+    measure_name: str | None = None
+    time_dimension: str | None = None
+    cube_dimensions: list[str] = []
+    primary_key: list[str] = []
+    display_format: str | None = None
 
 
 class CatalogRoleMappingRequest(BaseModel):
@@ -730,6 +752,12 @@ async def publish_semantic_metric(
         examples=body.examples,
         negative_examples=body.negative_examples,
         security=body.security,
+        cube_name=body.cube_name,
+        measure_name=body.measure_name,
+        time_dimension=body.time_dimension,
+        cube_dimensions=body.cube_dimensions,
+        primary_key=body.primary_key,
+        display_format=body.display_format,
     )
     _append_admin_audit(
         principal,
@@ -743,7 +771,7 @@ async def publish_semantic_metric(
             "cache_invalidated_at": get_semantic_layer_service().cache_invalidated_at.isoformat(),
         },
     )
-    return {"version": version.to_dict()}
+    return {"version": version.to_dict(), "cube_model_sync": _sync_cube_model_if_enabled()}
 
 
 @router.get("/config-catalog/template")
@@ -788,6 +816,12 @@ async def import_config_catalog(
                 examples=metric.examples,
                 negative_examples=metric.negative_examples,
                 security=metric.security,
+                cube_name=metric.cube_name,
+                measure_name=metric.measure_name,
+                time_dimension=metric.time_dimension,
+                cube_dimensions=metric.cube_dimensions,
+                primary_key=metric.primary_key,
+                display_format=metric.display_format,
             )
             for metric in body.semantic_metrics
         ]
@@ -813,6 +847,7 @@ async def import_config_catalog(
             "data_sources": [source.to_dict() for source in imported_sources],
             "semantic_metrics": [metric.to_dict() for metric in imported_metrics],
         },
+        "cube_model_sync": _sync_cube_model_if_enabled(),
     }
 
 
@@ -862,7 +897,7 @@ async def rollback_semantic_metric(
             "cache_invalidated_at": get_semantic_layer_service().cache_invalidated_at.isoformat(),
         },
     )
-    return {"version": version.to_dict()}
+    return {"version": version.to_dict(), "cube_model_sync": _sync_cube_model_if_enabled()}
 
 
 @router.delete("/semantic-layer/metrics/{term}", status_code=200)
@@ -890,7 +925,7 @@ async def delete_semantic_metric(
             "reason": body.reason if body else None,
         },
     )
-    return {"version": version.to_dict()}
+    return {"version": version.to_dict(), "cube_model_sync": _sync_cube_model_if_enabled()}
 
 
 def _role_to_dict(role: RoleDefinition) -> dict[str, Any]:

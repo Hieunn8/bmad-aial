@@ -387,23 +387,29 @@ def _build_semantic_no_data_answer(
 
     # Availability hint from auto-query
     if max_available_date:
-        availability = f"Dữ liệu có sẵn trong khoảng **{max_available_date}**."
+        availability = (
+            "Hệ thống đã hiểu thời gian bạn hỏi, nhưng dữ liệu hiện có trong kho "
+            f"chỉ nằm trong khoảng **{max_available_date}**."
+        )
         suggestion = (
             f"{availability}\n"
-            "Thử hỏi lại với khoảng thời gian trên, hoặc bỏ bộ lọc thời gian để xem toàn bộ dữ liệu."
+            "Tôi không tự đổi sang kỳ khác để tránh trả sai số. Thử hỏi lại với khoảng thời gian trên, "
+            "ví dụ *quý 1 2026*, *dữ liệu gần nhất*, hoặc bỏ bộ lọc thời gian để xem toàn bộ dữ liệu."
         )
     elif tf_start:
         # Time filter was applied but no auto-query result — generic suggestion with context
         suggestion = (
-            "Khoảng thời gian trên chưa có dữ liệu. "
-            "Thử hỏi: *tháng trước*, *quý 1 2026*, hoặc bỏ bộ lọc thời gian."
+            "Hệ thống đã hiểu mốc thời gian trong câu hỏi, nhưng khoảng thời gian trên chưa có dữ liệu phù hợp. "
+            "Thử hỏi: *dữ liệu gần nhất*, *quý 1 2026*, hoặc bỏ bộ lọc thời gian."
         )
     else:
         suggestion = "Thử hỏi về khoảng thời gian cụ thể hoặc bỏ bộ lọc để xem toàn bộ."
 
+    sql_detail = f"\nTruy vấn semantic đã chạy: `{generated_sql}`" if generated_sql else ""
     return (
         f"Không tìm thấy dữ liệu `{metric_term}` ({filter_str}nguồn: {source_name}).\n"
         f"{suggestion}"
+        f"{sql_detail}"
     )
 
 
@@ -496,6 +502,69 @@ def _has_meaningful_sql_values(rows: list[dict[str, Any]]) -> bool:
                 continue
             return True
     return False
+
+
+def _build_structured_semantic_answer(
+    *,
+    semantic_context: list[dict[str, Any]] | None,
+    rows: list[dict[str, Any]],
+    data_source: str | None,
+) -> str | None:
+    if not semantic_context or not rows:
+        return None
+    metric = semantic_context[0]
+    semantic_plan = metric.get("_semantic_plan") if isinstance(metric.get("_semantic_plan"), dict) else {}
+    term = str(metric.get("term") or "semantic metric")
+    formula = str(metric.get("formula") or "")
+    unit = str(metric.get("unit") or "").strip()
+    source = metric.get("source") if isinstance(metric.get("source"), dict) else {}
+    source_table = ".".join(str(part) for part in (source.get("schema"), source.get("table")) if part)
+    time_filter = semantic_plan.get("time_filter") if isinstance(semantic_plan, dict) else {}
+    filters = semantic_plan.get("entity_filters") if isinstance(semantic_plan, dict) else {}
+    dimensions = semantic_plan.get("dimensions") if isinstance(semantic_plan, dict) else []
+    first_row = rows[0]
+    value_key = next(
+        (
+            key
+            for key in first_row
+            if key.upper().endswith("METRIC_VALUE")
+            or key.casefold().endswith("net_revenue")
+            or key.casefold().endswith("gross_margin")
+            or key.casefold().endswith("order_count")
+            or key.casefold().endswith("budget_amount")
+        ),
+        next(iter(first_row), ""),
+    )
+    rendered_value = _format_metric_value(first_row.get(value_key), unit=unit)
+    lines = [f"{term}: {rendered_value}."]
+    if formula:
+        lines.append(f"Cách tính: {formula}.")
+    if isinstance(time_filter, dict) and time_filter.get("start") and time_filter.get("end"):
+        lines.append(f"Phạm vi: {time_filter['start']} đến {time_filter['end']}.")
+    if isinstance(filters, dict) and filters:
+        rendered_filters = ", ".join(f"{_DIM_LABELS.get(str(k), str(k))}: {v}" for k, v in filters.items())
+        lines.append(f"Bộ lọc: {rendered_filters}.")
+    if isinstance(dimensions, list) and dimensions:
+        rendered_dimensions = ", ".join(_DIM_LABELS.get(str(item), str(item)) for item in dimensions)
+        lines.append(f"Phân rã theo: {rendered_dimensions}.")
+    if source_table or data_source:
+        source_suffix = f" từ {source_table}" if data_source and source_table else ""
+        lines.append(f"Nguồn: {data_source or source_table}{source_suffix}.")
+    if unit:
+        lines.append(f"Đơn vị: {unit}.")
+    return "\n".join(lines)
+
+
+def _format_metric_value(value: Any, *, unit: str) -> str:
+    if isinstance(value, int | float):
+        if unit.casefold() == "vnd" and abs(value) >= 1_000_000_000:
+            return f"{value / 1_000_000_000:,.2f} tỷ VND"
+        if unit.casefold() == "vnd" and abs(value) >= 1_000_000:
+            return f"{value / 1_000_000:,.2f} triệu VND"
+        suffix = f" {unit}" if unit else ""
+        return f"{value:,.0f}{suffix}"
+    suffix = f" {unit}" if unit and value is not None else ""
+    return f"{value}{suffix}"
 
 
 def _record_query_interaction(
@@ -787,6 +856,13 @@ async def _run_graph_and_cache_explanation(
         )
         if llm_answer:
             answer = llm_answer
+        structured_semantic_answer = _build_structured_semantic_answer(
+            semantic_context=semantic_context,
+            rows=secured_rows,
+            data_source=str(result.get("data_source") or ""),
+        )
+        if structured_semantic_answer:
+            answer = structured_semantic_answer
         if result.get("data_source_warning"):
             answer = f"{answer}\n\n[warning] {result['data_source_warning']}"
         if _is_data_inventory_query(query):

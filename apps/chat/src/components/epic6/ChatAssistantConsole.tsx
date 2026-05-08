@@ -235,7 +235,7 @@ export function ChatAssistantConsole(): React.JSX.Element {
 
   async function handleRunQuery(forceRefresh = false): Promise<void> {
     setError(null);
-    setStatusMessage(null);
+    setStatusMessage(forceRefresh ? 'Đang làm mới dữ liệu và mở stream...' : 'Đang gửi câu hỏi và chuẩn bị stream...');
     setPreview(null);
     setShowConfirmation(false);
     setJobHandle(null);

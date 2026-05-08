@@ -22,6 +22,9 @@ class AIALGraphState(TypedDict, total=False):
     intent_type: str
     current_node: str
     sql_result: Any | None
+    generated_sql: str | None
+    data_source: str | None
+    max_available_date: str | None
     rag_result: Any | None
     final_response: str | None
     error: str | None
@@ -65,6 +68,9 @@ def build_initial_state(
         messages=[HumanMessage(content=query)],
         intent_type="pending",
         sql_result=None,
+        generated_sql=None,
+        data_source=None,
+        max_available_date=None,
         rag_result=None,
         final_response=None,
         error=None,
