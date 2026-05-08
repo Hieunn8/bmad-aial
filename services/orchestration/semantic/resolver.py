@@ -32,6 +32,8 @@ class SemanticPlannerOutput:
     needs_clarification: bool
     clarification_question: str | None
     rationale: str
+    # Specific dimension value filters, e.g. {"REGION_CODE": "HCM", "CHANNEL_CODE": "ONLINE"}
+    entity_filters: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -40,6 +42,7 @@ class SemanticPlannerOutput:
             "intent": self.intent,
             "time_filter": self.time_filter,
             "dimensions": list(self.dimensions),
+            "entity_filters": dict(self.entity_filters),
             "confidence": round(self.confidence, 4),
             "needs_clarification": self.needs_clarification,
             "clarification_question": self.clarification_question,
@@ -234,9 +237,16 @@ class SemanticPlanner:
         normalized_query: str,
         candidates: list[SemanticResolveCandidate],
     ) -> SemanticPlannerOutput:
+        # Priority 1: full LLM query analyzer (handles synonyms, long queries, clarification)
+        from orchestration.semantic.query_analyzer import analyze_query
+        full_analysis = analyze_query(query=query, candidates=candidates)
+        if full_analysis is not None:
+            return full_analysis
+        # Priority 2: legacy OpenAI planner (semantic term selection only)
         llm_output = self._plan_with_llm(query=query, candidates=candidates)
         if llm_output is not None:
             return llm_output
+        # Priority 3: deterministic regex + scoring fallback
         return _deterministic_plan(query=query, normalized_query=normalized_query, candidates=candidates)
 
     def _plan_with_llm(
@@ -336,6 +346,7 @@ def _deterministic_plan(
 ) -> SemanticPlannerOutput:
     top = candidates[0]
     dimensions = _extract_dimensions(normalized_query)
+    entity_filters = _extract_entity_filters(normalized_query)
     parsed_time = parse_time_expression(query)
     time_filter = parsed_time.to_dict()
     intent = "definition" if _is_plain_metric_definition_query(normalized_query) else "metric_value"
@@ -358,6 +369,7 @@ def _deterministic_plan(
             intent=intent,
             time_filter=time_filter,
             dimensions=dimensions,
+            entity_filters=entity_filters,
             confidence=top.final_score,
             needs_clarification=True,
             clarification_question=f"Bạn muốn dùng semantic nào: {', '.join(terms)}?",
@@ -370,6 +382,7 @@ def _deterministic_plan(
         intent=intent,
         time_filter=time_filter,
         dimensions=dimensions,
+        entity_filters=entity_filters,
         confidence=confidence,
         needs_clarification=False,
         clarification_question=None,
@@ -388,6 +401,30 @@ def _extract_dimensions(normalized_query: str) -> list[str]:
     if any(token in normalized_query for token in ("nganh hang", "danh muc", "category")):
         dimensions.append("CATEGORY_NAME")
     return dimensions
+
+
+def _extract_entity_filters(normalized_query: str) -> dict[str, str]:
+    """Extract specific dimension value filters (WHERE conditions, not GROUP BY)."""
+    filters: dict[str, str] = {}
+    # Region — checked in priority order (more specific first)
+    if any(t in normalized_query for t in ("ho chi minh", "sai gon", " hcm", "\bhcm\b")):
+        filters["REGION_CODE"] = "HCM"
+    elif re.search(r"\bhcm\b", normalized_query):
+        filters["REGION_CODE"] = "HCM"
+    elif any(t in normalized_query for t in ("ha noi", " hn ", "thu do")):
+        filters["REGION_CODE"] = "HN"
+    elif re.search(r"\bhn\b", normalized_query):
+        filters["REGION_CODE"] = "HN"
+    elif any(t in normalized_query for t in ("da nang", "danang", "mien trung")):
+        filters["REGION_CODE"] = "DANANG"
+    # Channel
+    if any(t in normalized_query for t in ("online", "truc tuyen")):
+        filters["CHANNEL_CODE"] = "ONLINE"
+    elif any(t in normalized_query for t in ("retail", "ban le")):
+        filters["CHANNEL_CODE"] = "RETAIL"
+    elif re.search(r"\bb2b\b", normalized_query):
+        filters["CHANNEL_CODE"] = "B2B"
+    return filters
 
 
 def _extract_time_filter(normalized_query: str) -> dict[str, Any] | None:

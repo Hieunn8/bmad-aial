@@ -59,6 +59,7 @@ async def stub_response_node(state: AIALGraphState) -> dict[str, object]:
             "generated_sql": generated_sql,
             "sql_result": sql_rows,
             "data_source": semantic_execution.plan.data_source if semantic_execution.plan is not None else None,
+            "max_available_date": semantic_execution.max_available_date,
             "error": None,
             "should_abort": False,
             "current_node": "stub_response",

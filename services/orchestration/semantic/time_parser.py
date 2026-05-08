@@ -130,7 +130,7 @@ def _openai_parse(query: str, *, today: date) -> ParsedTimeFilter | None:
         resp = httpx.post(
             f"{base}/chat/completions",
             json={
-                "model": os.getenv("AIAL_TIME_PARSER_MODEL", "gpt-4o-mini"),
+                "model": os.getenv("AIAL_TIME_PARSER_MODEL", os.getenv("OPENAI_MODEL", "gpt-4.1-mini")),
                 "max_tokens": 150,
                 "temperature": 0,
                 "messages": [

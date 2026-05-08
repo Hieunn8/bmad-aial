@@ -21,6 +21,7 @@ class SemanticSqlPlan:
     parameters: dict[str, object]
     data_source: str
     metric_term: str
+    qualified_table: str = ""  # e.g. "SYSTEM.AIAL_SALES_DAILY_V", used for meta-queries
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,7 @@ class SemanticSqlExecution:
     plan: SemanticSqlPlan | None
     rows: list[dict[str, object]]
     warning: str | None = None
+    max_available_date: str | None = None  # set when rows empty due to time filter
 
 
 def build_semantic_sql_plan(
@@ -66,6 +68,14 @@ def build_semantic_sql_plan(
     if "admin" not in principal.roles and principal.department:
         where_parts.append("DEPARTMENT_SCOPE = :department_scope")
         parameters["department_scope"] = principal.department
+    # Entity filters: specific dimension values (e.g. REGION_CODE = 'HCM')
+    raw_entity_filters = plan_payload.get("entity_filters", {}) if plan_payload else {}
+    if isinstance(raw_entity_filters, dict):
+        for col, val in raw_entity_filters.items():
+            if val and _IDENTIFIER_RE.fullmatch(str(col)):
+                param_key = f"{col.lower()}_ef"
+                where_parts.append(f"{col} = :{param_key}")
+                parameters[param_key] = str(val).upper()
     period_filter = _period_filter(query, plan_payload)
     if period_filter is not None:
         where_parts.append(period_filter)
@@ -82,6 +92,7 @@ def build_semantic_sql_plan(
         parameters=parameters,
         data_source=str(source.get("data_source") or table_name),
         metric_term=str(metric.get("term") or "semantic metric"),
+        qualified_table=table_name or "",
     )
 
 
@@ -105,13 +116,55 @@ def execute_semantic_sql(plan: SemanticSqlPlan | None) -> SemanticSqlExecution:
                 cursor.execute(plan.sql, plan.parameters)
                 columns = [str(col[0]) for col in cursor.description or []]
                 rows = [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
-        return SemanticSqlExecution(plan=plan, rows=rows)
+
+            max_available_date: str | None = None
+            if not rows and _has_time_filter(plan.sql) and plan.qualified_table:
+                max_available_date = _query_max_available_date(connection, plan)
+
+        return SemanticSqlExecution(plan=plan, rows=rows, max_available_date=max_available_date)
     except Exception as exc:
         return SemanticSqlExecution(
             plan=plan,
             rows=[],
             warning=f"Không thực thi được SQL trên Oracle thật: {exc}",
         )
+
+
+def _has_time_filter(sql: str) -> bool:
+    return "PERIOD_DATE" in sql and ("DATE '" in sql or ">=" in sql)
+
+
+def _query_max_available_date(connection: Any, plan: SemanticSqlPlan) -> str | None:
+    """Run SELECT MAX/MIN(PERIOD_DATE) with only entity+dept filters (no time filter)."""
+    try:
+        # Build a minimal param dict: keep dept_scope and entity filters, drop time-bound params
+        keep_params = {
+            k: v for k, v in plan.parameters.items()
+            if k not in ("date_start", "date_end")
+        }
+        # Reconstruct a lightweight WHERE from the original — strip PERIOD_DATE conditions
+        where_clauses: list[str] = ["1 = 1"]
+        if "DEPARTMENT_SCOPE = :department_scope" in plan.sql:
+            where_clauses.append("DEPARTMENT_SCOPE = :department_scope")
+        import re as _re
+        for match in _re.finditer(r"(\w+_CODE)\s*=\s*:(\w+)", plan.sql):
+            col, param = match.group(1), match.group(2)
+            if param in keep_params:
+                where_clauses.append(f"{col} = :{param}")
+        meta_sql = (
+            f"SELECT MAX(PERIOD_DATE) AS MAX_DATE, MIN(PERIOD_DATE) AS MIN_DATE "
+            f"FROM {plan.qualified_table} WHERE {' AND '.join(where_clauses)}"
+        )
+        with connection.cursor() as cur:
+            cur.execute(meta_sql, keep_params)
+            row = cur.fetchone()
+        if row and row[0] is not None:
+            max_d = str(row[0])[:10]
+            min_d = str(row[1])[:10] if row[1] else None
+            return f"{min_d} đến {max_d}" if min_d else max_d
+    except Exception:
+        pass
+    return None
 
 
 def build_and_execute_semantic_sql(

@@ -335,11 +335,20 @@ def _apply_query_execution_settings(
         result["data_source_warning"] = execution_settings["warning"]
 
 
+_DIM_LABELS: dict[str, str] = {
+    "REGION_CODE": "khu vực",
+    "CHANNEL_CODE": "kênh",
+    "PRODUCT_CODE": "sản phẩm",
+    "CATEGORY_NAME": "danh mục",
+}
+
+
 def _build_semantic_no_data_answer(
     *,
     semantic_context: list[dict[str, Any]] | None,
     generated_sql: str,
     data_source: str | None,
+    max_available_date: str | None = None,
 ) -> str | None:
     if not semantic_context:
         return None
@@ -349,13 +358,52 @@ def _build_semantic_no_data_answer(
     source_name = data_source or (str(source_value) if source_value else "")
     if not source_name:
         return None
-    period_detail = ""
-    date_bounds = re.findall(r"DATE '(\d{4}-\d{2}-\d{2})'", generated_sql)
-    if len(date_bounds) >= 2:
-        period_detail = f" trong khoảng từ {date_bounds[0]} đến trước {date_bounds[1]}"
+
+    # Read filter context directly from semantic_plan (reliable — no SQL parsing needed)
+    semantic_plan = semantic_context[0].get("_semantic_plan") or {}
+    time_filter = semantic_plan.get("time_filter") or {}
+    entity_filters = semantic_plan.get("entity_filters") or {}
+
+    filter_parts: list[str] = []
+    # Time range
+    tf_start = time_filter.get("start")
+    tf_end = time_filter.get("end")
+    tf_kind = time_filter.get("kind", "")
+    if tf_start and tf_end:
+        filter_parts.append(f"thời gian {tf_start} → {tf_end}")
+    elif tf_kind and tf_kind not in ("none", "latest_record", ""):
+        filter_parts.append(f"bộ lọc thời gian: {tf_kind}")
+    else:
+        # fallback: parse SQL for DATE literals
+        date_bounds = re.findall(r"DATE '(\d{4}-\d{2}-\d{2})'", generated_sql)
+        if len(date_bounds) >= 2:
+            filter_parts.append(f"thời gian {date_bounds[0]} → {date_bounds[1]}")
+    # Entity filters (specific values like HCM, ONLINE)
+    for col, val in entity_filters.items():
+        label = _DIM_LABELS.get(col, col.lower())
+        filter_parts.append(f"{label}: {val}")
+
+    filter_str = ("bộ lọc: " + ", ".join(filter_parts) + " | ") if filter_parts else ""
+
+    # Availability hint from auto-query
+    if max_available_date:
+        availability = f"Dữ liệu có sẵn trong khoảng **{max_available_date}**."
+        suggestion = (
+            f"{availability}\n"
+            "Thử hỏi lại với khoảng thời gian trên, hoặc bỏ bộ lọc thời gian để xem toàn bộ dữ liệu."
+        )
+    elif tf_start:
+        # Time filter was applied but no auto-query result — generic suggestion with context
+        suggestion = (
+            "Khoảng thời gian trên chưa có dữ liệu. "
+            "Thử hỏi: *tháng trước*, *quý 1 2026*, hoặc bỏ bộ lọc thời gian."
+        )
+    else:
+        suggestion = "Thử hỏi về khoảng thời gian cụ thể hoặc bỏ bộ lọc để xem toàn bộ."
+
     return (
-        f"Hệ thống đã nhận diện semantic `{metric_term}` và đã truy vấn {source_name}{period_detail}, "
-        "nhưng không có bản ghi dữ liệu phù hợp. Đây là trường hợp dữ liệu trống, không phải lỗi map semantic."
+        f"Không tìm thấy dữ liệu `{metric_term}` ({filter_str}nguồn: {source_name}).\n"
+        f"{suggestion}"
     )
 
 
@@ -747,6 +795,7 @@ async def _run_graph_and_cache_explanation(
             semantic_context=semantic_context,
             generated_sql=generated_sql,
             data_source=str(result.get("data_source") or ""),
+            max_available_date=result.get("max_available_date"),
         )
         if semantic_no_data_answer and not _has_meaningful_sql_values(secured_rows):
             answer = semantic_no_data_answer
