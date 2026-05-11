@@ -1,15 +1,23 @@
-"""Cube Core runtime adapter for governed semantic queries."""
+"""Cube Core runtime adapter for governed semantic queries.
+
+When metric['_query_plan'] is set (DSL v2), builds Cube query from QueryPlan.
+Falls back to metric['_semantic_plan'] dict (legacy) otherwise.
+"""
 
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Any
+from datetime import date, timedelta
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from aial_shared.auth.keycloak import JWTClaims
 from orchestration.semantic.cube_model import infer_cube_dimension_name, infer_cube_name, infer_measure_name
+
+if TYPE_CHECKING:
+    from orchestration.semantic.dsl import QueryPlan
 
 
 @dataclass(frozen=True)
@@ -82,6 +90,7 @@ class CubeSemanticRuntimeClient:
             response.raise_for_status()
             body = response.json()
             rows = _extract_rows(body)
+            rows = _apply_derived_postprocess(rows, metric)
             return CubeRuntimeExecution(
                 rows=rows,
                 runtime_query=cube_query,
@@ -101,6 +110,146 @@ class CubeSemanticRuntimeClient:
 
 
 def build_cube_query(*, metric: dict[str, Any], row_limit: int | None = None) -> dict[str, Any]:
+    query_plan: QueryPlan | None = metric.get("_query_plan")
+    if query_plan is not None:
+        return _build_cube_query_from_plan(metric=metric, plan=query_plan, row_limit=row_limit)
+    return _build_cube_query_legacy(metric=metric, row_limit=row_limit)
+
+
+# ── DSL v2: build from QueryPlan ──────────────────────────────────────────────
+
+def _build_cube_query_from_plan(
+    *,
+    metric: dict[str, Any],
+    plan: QueryPlan,
+    row_limit: int | None,
+) -> dict[str, Any]:
+    cube_name = infer_cube_name(metric)
+    measures: list[str] = []
+    for mref in plan.metrics:
+        # Resolve measure name via catalog lookup or infer from term
+        measure_name = _infer_measure_for_term(metric, mref.term)
+        measures.append(f"{cube_name}.{measure_name}")
+
+    dimensions = [
+        f"{cube_name}.{infer_cube_dimension_name(col)}"
+        for col in plan.group_by
+        if col
+    ]
+
+    filters = _cube_filters_from_plan(cube_name, plan)
+
+    cube_query: dict[str, Any] = {
+        "measures": measures or [f"{cube_name}.{infer_measure_name(metric)}"],
+        "dimensions": dimensions,
+        "filters": filters,
+    }
+
+    # Time dimension
+    time_dimension_col = str(metric.get("time_dimension") or "PERIOD_DATE")
+    time_payload = _cube_time_dimension_from_plan(cube_name, time_dimension_col, plan)
+    if time_payload:
+        cube_query["timeDimensions"] = [time_payload]
+
+    # Sort
+    if plan.sort:
+        order: dict[str, str] = {}
+        for s in plan.sort:
+            # Resolve sort column to cube member name
+            col = s.column
+            if col in plan.group_by:
+                member = f"{cube_name}.{infer_cube_dimension_name(col)}"
+            else:
+                member = f"{cube_name}.{_infer_measure_for_term(metric, col)}"
+            order[member] = s.direction
+        cube_query["order"] = order
+
+    # Limit — plan.limit takes priority over row_limit arg
+    effective_limit = plan.limit or row_limit
+    if effective_limit and effective_limit > 0:
+        cube_query["limit"] = effective_limit
+
+    return {k: v for k, v in cube_query.items() if v not in (None, [], {})}
+
+
+_TIME_COLS = {"PERIOD_DATE", "PERIOD_MONTH", "PERIOD_WEEK", "PERIOD_QUARTER", "PERIOD_YEAR"}
+
+
+def _cube_filters_from_plan(cube_name: str, plan: QueryPlan) -> list[dict[str, Any]]:
+    filters: list[dict[str, Any]] = []
+    for f in plan.filters:
+        if f.column.upper() in _TIME_COLS:
+            continue  # time ranges go in timeDimensions, not filters
+        member = f"{cube_name}.{infer_cube_dimension_name(f.column)}"
+        if f.op == "eq":
+            filters.append({"member": member, "operator": "equals", "values": [str(v) for v in f.values]})
+        elif f.op == "ne":
+            filters.append({"member": member, "operator": "notEquals", "values": [str(v) for v in f.values]})
+        elif f.op == "in":
+            filters.append({"member": member, "operator": "equals", "values": [str(v) for v in f.values]})
+        elif f.op == "not_in":
+            filters.append({"member": member, "operator": "notEquals", "values": [str(v) for v in f.values]})
+        elif f.op == "between" and len(f.values) == 2:
+            filters.append({"member": member, "operator": "gte", "values": [str(f.values[0])]})
+            filters.append({"member": member, "operator": "lte", "values": [str(f.values[1])]})
+        elif f.op == "like":
+            filters.append({"member": member, "operator": "contains", "values": [str(v) for v in f.values]})
+        elif f.op == "is_null":
+            filters.append({"member": member, "operator": "notSet", "values": []})
+        elif f.op == "not_null":
+            filters.append({"member": member, "operator": "set", "values": []})
+    return filters
+
+
+def _cube_time_dimension_from_plan(
+    cube_name: str,
+    time_dimension: str,
+    plan: QueryPlan,
+) -> dict[str, Any] | None:
+    if not plan.time:
+        return None
+    t = plan.time
+    payload: dict[str, Any] = {
+        "dimension": f"{cube_name}.{infer_cube_dimension_name(time_dimension)}",
+    }
+    if t.start and t.end:
+        # DSL end is EXCLUSIVE; Cube dateRange is INCLUSIVE on both sides.
+        # Subtract 1 day so Cube doesn't pull the next-period boundary date.
+        inclusive_end = _exclusive_to_inclusive_end(t.end)
+        payload["dateRange"] = [t.start, inclusive_end]
+    if t.grain:
+        payload["granularity"] = t.grain
+    if t.compare_to and t.compare_to != "custom":
+        payload["compareDateRange"] = _resolve_compare_date_range(t)
+    return payload if (payload.get("dateRange") or payload.get("granularity")) else None
+
+
+def _exclusive_to_inclusive_end(end_str: str) -> str:
+    """Convert exclusive DSL end date to inclusive Cube end date (subtract 1 day)."""
+    try:
+        end = date.fromisoformat(end_str)
+        return (end - timedelta(days=1)).isoformat()
+    except ValueError:
+        return end_str
+
+
+def _resolve_compare_date_range(t: QueryPlan) -> list[list[str]] | None:
+    if not t.start or not t.end:
+        return None
+    inclusive_end = _exclusive_to_inclusive_end(t.end)
+    return [[t.start, inclusive_end]]
+
+
+def _infer_measure_for_term(metric: dict[str, Any], term: str) -> str:
+    catalog_measure = metric.get("_measure_name")
+    if catalog_measure and metric.get("term") == term:
+        return str(catalog_measure)
+    return infer_measure_name(metric)
+
+
+# ── Legacy: build from _semantic_plan dict ────────────────────────────────────
+
+def _build_cube_query_legacy(*, metric: dict[str, Any], row_limit: int | None) -> dict[str, Any]:
     cube_name = infer_cube_name(metric)
     measure_name = infer_measure_name(metric)
     semantic_plan = metric.get("_semantic_plan") if isinstance(metric.get("_semantic_plan"), dict) else {}
@@ -112,12 +261,12 @@ def build_cube_query(*, metric: dict[str, Any], row_limit: int | None = None) ->
     cube_query: dict[str, Any] = {
         "measures": [f"{cube_name}.{measure_name}"],
         "dimensions": dimensions,
-        "filters": _cube_filters(cube_name, semantic_plan),
+        "filters": _cube_filters_legacy(cube_name, semantic_plan),
     }
     time_dimension = str(metric.get("time_dimension") or "").strip()
     if not time_dimension:
         time_dimension = _infer_time_dimension_from_metric(metric)
-    time_payload = _cube_time_dimension(cube_name, time_dimension, semantic_plan)
+    time_payload = _cube_time_dimension_legacy(cube_name, time_dimension, semantic_plan)
     if time_payload:
         cube_query["timeDimensions"] = [time_payload]
     if row_limit is not None and row_limit > 0:
@@ -125,22 +274,7 @@ def build_cube_query(*, metric: dict[str, Any], row_limit: int | None = None) ->
     return {key: value for key, value in cube_query.items() if value not in (None, [], {})}
 
 
-def execute_cube_semantic_query(
-    *,
-    query: str,
-    semantic_context: list[dict[str, Any]] | None,
-    principal: JWTClaims,
-    row_limit: int | None = None,
-) -> CubeRuntimeExecution:
-    return CubeSemanticRuntimeClient().execute(
-        query=query,
-        semantic_context=semantic_context,
-        principal=principal,
-        row_limit=row_limit,
-    )
-
-
-def _cube_time_dimension(
+def _cube_time_dimension_legacy(
     cube_name: str,
     time_dimension: str,
     semantic_plan: dict[str, Any],
@@ -160,7 +294,7 @@ def _cube_time_dimension(
     return payload
 
 
-def _cube_filters(cube_name: str, semantic_plan: dict[str, Any]) -> list[dict[str, str]]:
+def _cube_filters_legacy(cube_name: str, semantic_plan: dict[str, Any]) -> list[dict[str, str]]:
     entity_filters = semantic_plan.get("entity_filters", {}) if isinstance(semantic_plan, dict) else {}
     filters: list[dict[str, str]] = []
     if isinstance(entity_filters, dict):
@@ -174,6 +308,70 @@ def _cube_filters(cube_name: str, semantic_plan: dict[str, Any]) -> list[dict[st
                     }
                 )
     return filters
+
+
+# ── Derived post-processing (not native to Cube) ──────────────────────────────
+
+def _apply_derived_postprocess(rows: list[dict[str, Any]], metric: dict[str, Any]) -> list[dict[str, Any]]:
+    """Apply DerivedMetric calculations (ratio, share_of_total, etc.) on Python side."""
+    query_plan: QueryPlan | None = metric.get("_query_plan")
+    if not query_plan or not query_plan.derived:
+        return rows
+    result = [dict(row) for row in rows]
+    for derived in query_plan.derived:
+        result = _apply_single_derived(result, derived)
+    return result
+
+
+def _apply_single_derived(rows: list[dict[str, Any]], derived: Any) -> list[dict[str, Any]]:
+    from orchestration.semantic.dsl import DerivedMetric
+    d: DerivedMetric = derived
+    result = [dict(row) for row in rows]
+    if d.expr == "ratio" and len(d.inputs) >= 2:
+        for row in result:
+            num = _to_float(row.get(d.inputs[0]))
+            den = _to_float(row.get(d.inputs[1]))
+            row[d.name] = round(num / den * 100, 4) if den else None
+    elif d.expr == "share_of_total" and d.inputs:
+        total = sum(_to_float(row.get(d.inputs[0])) for row in result)
+        for row in result:
+            val = _to_float(row.get(d.inputs[0]))
+            row[d.name] = round(val / total * 100, 4) if total else None
+    elif d.expr in ("diff", "pct_change") and len(d.inputs) >= 2:
+        for row in result:
+            curr = _to_float(row.get(d.inputs[0]))
+            prev = _to_float(row.get(d.inputs[1]))
+            if d.expr == "diff":
+                row[d.name] = curr - prev
+            else:
+                row[d.name] = round((curr - prev) / prev * 100, 4) if prev else None
+    return result
+
+
+def _to_float(value: Any) -> float:
+    if value is None:
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+# ── Shared helpers ────────────────────────────────────────────────────────────
+
+def execute_cube_semantic_query(
+    *,
+    query: str,
+    semantic_context: list[dict[str, Any]] | None,
+    principal: JWTClaims,
+    row_limit: int | None = None,
+) -> CubeRuntimeExecution:
+    return CubeSemanticRuntimeClient().execute(
+        query=query,
+        semantic_context=semantic_context,
+        principal=principal,
+        row_limit=row_limit,
+    )
 
 
 def _infer_time_dimension_from_metric(metric: dict[str, Any]) -> str:

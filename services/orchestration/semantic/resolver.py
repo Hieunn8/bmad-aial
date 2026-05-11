@@ -8,13 +8,16 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 from embedding.client import DIMS, _hash_embed
 
 from aial_shared.auth.keycloak import JWTClaims
 from orchestration.semantic.time_parser import ParsedTimeFilter, parse_time_expression
+
+if TYPE_CHECKING:
+    from orchestration.semantic.dsl import QueryPlan
 
 _AUTO_SELECT_THRESHOLD = 0.62
 _AMBIGUITY_DELTA = 0.08
@@ -34,6 +37,8 @@ class SemanticPlannerOutput:
     rationale: str
     # Specific dimension value filters, e.g. {"REGION_CODE": "HCM", "CHANNEL_CODE": "ONLINE"}
     entity_filters: dict[str, str] = field(default_factory=dict)
+    # DSL v2: full QueryPlan (set when AIAL_SEMANTIC_DSL_V2=true)
+    query_plan: QueryPlan | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -210,6 +215,8 @@ class SemanticResolver:
             )
         selected_metric = dict(top.metric)
         selected_metric["_semantic_plan"] = planner_output.to_dict()
+        if planner_output.query_plan is not None:
+            selected_metric["_query_plan"] = planner_output.query_plan
         return SemanticResolveDecision(
             status="selected",
             semantic_context=[selected_metric],
@@ -394,6 +401,14 @@ def _extract_dimensions(normalized_query: str) -> list[str]:
     dimensions: list[str] = []
     if any(token in normalized_query for token in ("khu vuc", "vung", "mien", "tinh", "thanh pho", "region")):
         dimensions.append("REGION_CODE")
+    # Auto-detect multi-region comparison: ≥2 region codes mentioned → add GROUP BY REGION_CODE
+    region_hits = sum([
+        1 if (any(t in normalized_query for t in ("ho chi minh", "sai gon", " hcm")) or re.search(r"\bhcm\b", normalized_query)) else 0,
+        1 if (any(t in normalized_query for t in ("ha noi", " hn ", "thu do")) or re.search(r"\bhn\b", normalized_query)) else 0,
+        1 if any(t in normalized_query for t in ("da nang", "danang")) else 0,
+    ])
+    if region_hits >= 2 and "REGION_CODE" not in dimensions:
+        dimensions.append("REGION_CODE")
     if any(token in normalized_query for token in ("kenh", "channel", "online", "retail")):
         dimensions.append("CHANNEL_CODE")
     if any(token in normalized_query for token in ("san pham", "product", "sku")):
@@ -404,19 +419,26 @@ def _extract_dimensions(normalized_query: str) -> list[str]:
 
 
 def _extract_entity_filters(normalized_query: str) -> dict[str, str]:
-    """Extract specific dimension value filters (WHERE conditions, not GROUP BY)."""
+    """Extract specific dimension value filters (WHERE conditions, not GROUP BY).
+
+    Legacy path only — dict[str,str] can hold ONE value per column.
+    When multiple regions detected, returns the first one; DSL v2 handles multi-value via op=in.
+    """
+    regions: list[str] = []
+    if any(t in normalized_query for t in ("ho chi minh", "sai gon", " hcm")) or re.search(r"\bhcm\b", normalized_query):
+        regions.append("HCM")
+    if any(t in normalized_query for t in ("ha noi", " hn ", "thu do")) or re.search(r"\bhn\b", normalized_query):
+        regions.append("HN")
+    if any(t in normalized_query for t in ("da nang", "danang", "mien trung")):
+        regions.append("DANANG")
+
     filters: dict[str, str] = {}
-    # Region — checked in priority order (more specific first)
-    if any(t in normalized_query for t in ("ho chi minh", "sai gon", " hcm", "\bhcm\b")):
-        filters["REGION_CODE"] = "HCM"
-    elif re.search(r"\bhcm\b", normalized_query):
-        filters["REGION_CODE"] = "HCM"
-    elif any(t in normalized_query for t in ("ha noi", " hn ", "thu do")):
-        filters["REGION_CODE"] = "HN"
-    elif re.search(r"\bhn\b", normalized_query):
-        filters["REGION_CODE"] = "HN"
-    elif any(t in normalized_query for t in ("da nang", "danang", "mien trung")):
-        filters["REGION_CODE"] = "DANANG"
+    if len(regions) == 1:
+        # Single region → use as WHERE filter (avoids returning all regions)
+        filters["REGION_CODE"] = regions[0]
+    # If ≥2 regions: do NOT set entity_filters (would wrongly filter to just one);
+    # _extract_dimensions will add REGION_CODE to GROUP BY instead.
+
     # Channel
     if any(t in normalized_query for t in ("online", "truc tuyen")):
         filters["CHANNEL_CODE"] = "ONLINE"

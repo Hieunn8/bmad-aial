@@ -57,6 +57,7 @@ from orchestration.memory.long_term import get_conversation_memory_service
 from orchestration.security.column_masker import ColumnSensitivity, apply_column_security
 from orchestration.security.pii_masker import PiiMasker
 from orchestration.semantic.management import get_semantic_layer_service
+from orchestration.semantic.renderer import render as render_semantic_answer
 from orchestration.semantic.resolver import SemanticResolveDecision
 from orchestration.streaming.events import make_done_event, make_error_event, make_row_event
 from orchestration.streaming.queue import get_stream_queue
@@ -359,7 +360,15 @@ def _build_semantic_no_data_answer(
     if not source_name:
         return None
 
-    # Read filter context directly from semantic_plan (reliable — no SQL parsing needed)
+    # Prefer QueryPlan (DSL v2) for filter context; fall back to legacy _semantic_plan
+    query_plan = semantic_context[0].get("_query_plan")
+    if query_plan is not None:
+        return render_semantic_answer(
+            question="",
+            plan=query_plan,
+            rows=[],
+            metric=semantic_context[0],
+        )
     semantic_plan = semantic_context[0].get("_semantic_plan") or {}
     time_filter = semantic_plan.get("time_filter") or {}
     entity_filters = semantic_plan.get("entity_filters") or {}
@@ -509,10 +518,27 @@ def _build_structured_semantic_answer(
     semantic_context: list[dict[str, Any]] | None,
     rows: list[dict[str, Any]],
     data_source: str | None,
+    question: str = "",
 ) -> str | None:
-    if not semantic_context or not rows:
+    if not semantic_context:
         return None
     metric = semantic_context[0]
+
+    # DSL v2 path: use renderer when QueryPlan is available
+    query_plan = metric.get("_query_plan")
+    if query_plan is not None:
+        if not rows and query_plan.rationale not in ("definition_only", "inventory"):
+            return None  # let _build_semantic_no_data_answer handle empty rows
+        return render_semantic_answer(
+            question=question,
+            plan=query_plan,
+            rows=rows,
+            metric=metric,
+        )
+
+    # Legacy path: deterministic template
+    if not rows:
+        return None
     semantic_plan = metric.get("_semantic_plan") if isinstance(metric.get("_semantic_plan"), dict) else {}
     term = str(metric.get("term") or "semantic metric")
     formula = str(metric.get("formula") or "")
@@ -868,6 +894,7 @@ async def _run_graph_and_cache_explanation(
             semantic_context=semantic_context,
             rows=secured_rows,
             data_source=str(result.get("data_source") or ""),
+            question=query,
         )
         if structured_semantic_answer:
             answer = structured_semantic_answer
